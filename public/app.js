@@ -65,7 +65,7 @@ async function renderLibrary() {
       </header>
 
       <form class="import-panel" data-import-form>
-        <input name="url" required placeholder="Dán URL truyện..." value="https://manhuarock4.site/truyen-tranh/vua-choi-da-co-tai-khoan-vuong-gia.html" />
+        <input name="url" required placeholder="Dán URL truyện..." value="https://truyenqqko.com/truyen-tranh/manh-nhat-lich-su-5968" />
         <select name="maxChapters" aria-label="Số chapter tải trước">
           <option value="1">1 chapter</option>
           <option value="2">2 chapter</option>

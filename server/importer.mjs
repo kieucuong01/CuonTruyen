@@ -3,20 +3,15 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { chapterDir, publicImportPath, upsertSeries } from './catalogStore.mjs';
-import {
-  extractChapterImages,
-  fetchHtml,
-  filenameForImage,
-  parseSeriesPage
-} from './adapters/manhuarock.mjs';
+import { getAdapterForUrl } from './adapters/index.mjs';
 import { slugify } from './utils.mjs';
 
-async function downloadImage(url, destination) {
+async function downloadImage(url, destination, refererUrl) {
   const response = await fetch(url, {
     headers: {
       'user-agent': 'Mozilla/5.0 ComicReaderPrototype/0.1',
       accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-      referer: new URL(url).origin
+      referer: refererUrl || new URL(url).origin
     }
   });
   if (!response.ok) throw new Error(`Image fetch failed ${response.status}`);
@@ -25,10 +20,11 @@ async function downloadImage(url, destination) {
 }
 
 export async function importSeries(seriesUrl, options = {}) {
+  const adapter = getAdapterForUrl(seriesUrl);
   const maxChapters = Number(options.maxChapters || 0);
   const maxPages = Number(options.maxPages || 0);
-  const html = await fetchHtml(seriesUrl);
-  const parsed = parseSeriesPage(html, seriesUrl);
+  const html = await adapter.fetchHtml(seriesUrl);
+  const parsed = adapter.parseSeriesPage(html, seriesUrl);
   if (!parsed.chapters.length) {
     throw new Error('Không tìm thấy danh sách chapter hợp lệ trong trang truyện.');
   }
@@ -37,20 +33,20 @@ export async function importSeries(seriesUrl, options = {}) {
 
   const chapters = [];
   for (const chapter of chaptersToImport) {
-    const chapterHtml = await fetchHtml(chapter.url);
-    const imageUrls = extractChapterImages(chapterHtml, chapter.url);
+    const chapterHtml = await adapter.fetchHtml(chapter.url);
+    const imageUrls = adapter.extractChapterImages(chapterHtml, chapter.url);
     const selectedImages = maxPages > 0 ? imageUrls.slice(0, maxPages) : imageUrls;
     const dir = await chapterDir(id, chapter.id);
     const pages = [];
 
     for (let index = 0; index < selectedImages.length; index += 1) {
       const sourceUrl = selectedImages[index];
-      const filename = filenameForImage(sourceUrl, index);
+      const filename = adapter.filenameForImage(sourceUrl, index);
       const filePath = path.join(dir, filename);
       try {
         await fs.access(filePath);
       } catch {
-        await downloadImage(sourceUrl, filePath);
+        await downloadImage(sourceUrl, filePath, chapter.url);
       }
       pages.push({
         index,
@@ -83,6 +79,7 @@ export async function importSeries(seriesUrl, options = {}) {
     title: parsed.title,
     slug: slugify(parsed.title),
     sourceUrl: seriesUrl,
+    adapter: adapter.name,
     coverUrl: parsed.coverUrl,
     chapters: [...chapters, ...untouchedChapters]
   });

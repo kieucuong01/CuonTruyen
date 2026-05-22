@@ -113,3 +113,12 @@ export async function fetchHtml(url) {
   }
   return html;
 }
+
+export const manhuarockAdapter = {
+  name: 'manhuarock',
+  hostnames: ['manhuarock4.site'],
+  parseSeriesPage,
+  extractChapterImages,
+  filenameForImage,
+  fetchHtml
+};
