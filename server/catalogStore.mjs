@@ -24,12 +24,33 @@ export async function writeCatalog(catalog) {
   await fs.writeFile(CATALOG_PATH, `${JSON.stringify(catalog, null, 2)}\n`);
 }
 
+export function mergeSeries(existing, incoming) {
+  if (!existing) return incoming;
+  const incomingChapterIds = new Set(incoming.chapters.map((chapter) => chapter.id));
+  const existingOnlyChapters = existing.chapters.filter((chapter) => !incomingChapterIds.has(chapter.id));
+  const mergedIncomingChapters = incoming.chapters.map((chapter) => {
+    const previous = existing.chapters.find((item) => item.id === chapter.id);
+    if (chapter.imported || !previous?.imported) return chapter;
+    return previous;
+  });
+
+  return {
+    ...existing,
+    ...incoming,
+    importedAt: existing.importedAt || incoming.importedAt,
+    chapters: [...mergedIncomingChapters, ...existingOnlyChapters]
+      .sort((a, b) => Number(a.sourceOrder ?? 0) - Number(b.sourceOrder ?? 0))
+  };
+}
+
 export async function upsertSeries(series) {
   const catalog = await readCatalog();
   const index = catalog.series.findIndex((item) => item.id === series.id);
+  const existing = index >= 0 ? catalog.series[index] : null;
+  const merged = mergeSeries(existing, series);
   const nextSeries = {
-    ...series,
-    importedAt: series.importedAt || new Date().toISOString(),
+    ...merged,
+    importedAt: merged.importedAt || new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
   if (index >= 0) catalog.series[index] = nextSeries;

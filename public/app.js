@@ -135,7 +135,7 @@ async function handleImport(event) {
   button.textContent = 'Đang import';
 
   try {
-    const { job } = await fetchJson('/api/import', {
+    const { job, reused } = await fetchJson('/api/import', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -144,6 +144,9 @@ async function handleImport(event) {
         maxPages: Number(formData.get('maxPages'))
       })
     });
+    if (reused) {
+      status.textContent = 'Truyện này đang được crawl, tiếp tục theo dõi job hiện tại...';
+    }
     await pollImportJob(job.id, status);
   } catch (error) {
     status.className = 'status-line error';

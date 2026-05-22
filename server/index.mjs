@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { getSeries, IMPORT_ROOT, readCatalog } from './catalogStore.mjs';
-import { createImportJob, getImportJob } from './importJobs.mjs';
+import { createImportJob, getImportJob, getRunningImportJobForUrl } from './importJobs.mjs';
 import { normalizeImportPayload } from './importOptions.mjs';
 import { jsonResponse, mimeFromPath, readJsonBody } from './utils.mjs';
 
@@ -65,7 +65,13 @@ async function handleApi(req, res, url) {
         jsonResponse(res, 400, { error: 'Vui lòng nhập URL truyện hợp lệ.' });
         return true;
       }
-      const job = createImportJob(normalizeImportPayload(body));
+      const payload = normalizeImportPayload(body);
+      const runningJob = getRunningImportJobForUrl(payload.url);
+      if (runningJob) {
+        jsonResponse(res, 200, { job: runningJob, reused: true });
+        return true;
+      }
+      const job = createImportJob(payload);
       job.done.catch(() => {});
       jsonResponse(res, 202, { job: getImportJob(job.id) });
     } catch (error) {

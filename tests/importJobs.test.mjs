@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createImportJob, getImportJob } from '../server/importJobs.mjs';
+import { createImportJob, getImportJob, getRunningImportJobForUrl } from '../server/importJobs.mjs';
 
 test('createImportJob exposes running progress and final completion', async () => {
   const job = createImportJob(
@@ -46,4 +46,23 @@ test('createImportJob records failed imports with a useful message', async () =>
   assert.equal(failed.status, 'failed');
   assert.equal(failed.error, 'Source blocked crawler');
   assert.equal(failed.progress.phase, 'failed');
+});
+
+test('getRunningImportJobForUrl returns an active job for the same series URL only while running', async () => {
+  let finish;
+  const job = createImportJob(
+    { url: 'https://example.test/comic', maxChapters: 1 },
+    () => new Promise((resolve) => {
+      finish = () => resolve({ id: 'series-1', title: 'Series One', chapters: [] });
+    })
+  );
+
+  const running = getRunningImportJobForUrl('https://example.test/comic');
+  assert.equal(running.id, job.id);
+
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  finish();
+  await job.done;
+
+  assert.equal(getRunningImportJobForUrl('https://example.test/comic'), null);
 });

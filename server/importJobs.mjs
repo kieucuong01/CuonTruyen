@@ -97,3 +97,13 @@ export function getImportJob(id) {
   const job = jobs.get(id);
   return job ? publicJob(job) : null;
 }
+
+export function getRunningImportJobForUrl(url) {
+  const normalizedUrl = String(url || '').trim();
+  for (const job of jobs.values()) {
+    if (job.status === 'running' && String(job.payload.url || '').trim() === normalizedUrl) {
+      return publicJob(job);
+    }
+  }
+  return null;
+}
