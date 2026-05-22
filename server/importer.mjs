@@ -19,10 +19,14 @@ async function downloadImage(url, destination, refererUrl) {
   await fs.writeFile(destination, buffer);
 }
 
-export async function importSeries(seriesUrl, options = {}) {
+export async function importSeries(seriesUrl, options = {}, onProgress = () => {}) {
   const adapter = getAdapterForUrl(seriesUrl);
   const maxChapters = Number(options.maxChapters || 0);
   const maxPages = Number(options.maxPages || 0);
+  onProgress({
+    phase: 'fetching-series',
+    message: 'Đang lấy metadata và danh sách chapter...'
+  });
   const html = await adapter.fetchHtml(seriesUrl);
   const parsed = adapter.parseSeriesPage(html, seriesUrl);
   if (!parsed.chapters.length) {
@@ -30,12 +34,37 @@ export async function importSeries(seriesUrl, options = {}) {
   }
   const id = `${parsed.slug}-${Math.abs(hashCode(seriesUrl)).toString(36)}`;
   const chaptersToImport = maxChapters > 0 ? parsed.chapters.slice(0, maxChapters) : parsed.chapters;
+  onProgress({
+    phase: 'fetching-chapters',
+    message: `Tìm thấy ${parsed.chapters.length} chapter, sẽ tải ${chaptersToImport.length} chapter.`,
+    totalChapters: chaptersToImport.length,
+    processedChapters: 0,
+    totalImages: 0,
+    downloadedImages: 0
+  });
 
   const chapters = [];
-  for (const chapter of chaptersToImport) {
+  let totalImages = 0;
+  let downloadedImages = 0;
+  for (let chapterIndex = 0; chapterIndex < chaptersToImport.length; chapterIndex += 1) {
+    const chapter = chaptersToImport[chapterIndex];
+    onProgress({
+      phase: 'fetching-chapter',
+      message: `Đang lấy ${chapter.label} (${chapterIndex + 1}/${chaptersToImport.length})...`,
+      currentChapterLabel: chapter.label,
+      processedChapters: chapterIndex
+    });
     const chapterHtml = await adapter.fetchHtml(chapter.url);
     const imageUrls = adapter.extractChapterImages(chapterHtml, chapter.url);
     const selectedImages = maxPages > 0 ? imageUrls.slice(0, maxPages) : imageUrls;
+    totalImages += selectedImages.length;
+    onProgress({
+      phase: 'downloading-images',
+      message: `${chapter.label}: tìm thấy ${selectedImages.length} ảnh, đang tải...`,
+      currentChapterLabel: chapter.label,
+      totalImages,
+      downloadedImages
+    });
     const dir = await chapterDir(id, chapter.id);
     const pages = [];
 
@@ -48,6 +77,14 @@ export async function importSeries(seriesUrl, options = {}) {
       } catch {
         await downloadImage(sourceUrl, filePath, chapter.url);
       }
+      downloadedImages += 1;
+      onProgress({
+        phase: 'downloading-images',
+        message: `${chapter.label}: đã tải ${index + 1}/${selectedImages.length} ảnh.`,
+        currentChapterLabel: chapter.label,
+        totalImages,
+        downloadedImages
+      });
       pages.push({
         index,
         sourceUrl,
@@ -60,6 +97,14 @@ export async function importSeries(seriesUrl, options = {}) {
       pages,
       pageCount: pages.length,
       imported: pages.length > 0
+    });
+    onProgress({
+      phase: 'chapter-completed',
+      message: `Hoàn tất ${chapter.label}.`,
+      currentChapterLabel: chapter.label,
+      processedChapters: chapterIndex + 1,
+      totalImages,
+      downloadedImages
     });
   }
 

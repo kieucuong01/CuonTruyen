@@ -130,7 +130,7 @@ async function handleImport(event) {
   button.textContent = 'Đang import';
 
   try {
-    const { series } = await fetchJson('/api/import', {
+    const { job } = await fetchJson('/api/import', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -139,8 +139,7 @@ async function handleImport(event) {
         maxPages: 0
       })
     });
-    status.textContent = `Đã import ${series.title}. Mở reader ngay.`;
-    location.hash = `#/read/${encodeURIComponent(series.id)}`;
+    await pollImportJob(job.id, status);
   } catch (error) {
     status.className = 'status-line error';
     status.textContent = error.message;
@@ -148,6 +147,49 @@ async function handleImport(event) {
     button.disabled = false;
     button.textContent = 'Import';
   }
+}
+
+async function pollImportJob(jobId, status) {
+  while (true) {
+    const job = await fetchJson(`/api/import/${encodeURIComponent(jobId)}`);
+    renderImportProgress(status, job);
+    if (job.status === 'completed') {
+      await loadCatalog();
+      await new Promise((resolve) => setTimeout(resolve, 650));
+      location.hash = `#/read/${encodeURIComponent(job.series.id)}`;
+      return job.series;
+    }
+    if (job.status === 'failed') {
+      throw new Error(job.error || job.progress?.message || 'Import thất bại.');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 900));
+  }
+}
+
+function renderImportProgress(status, job) {
+  const progress = job.progress || {};
+  const chapterTotal = Number(progress.totalChapters || 0);
+  const chapterDone = Number(progress.processedChapters || 0);
+  const imageTotal = Number(progress.totalImages || 0);
+  const imageDone = Number(progress.downloadedImages || 0);
+  const chapterPercent = chapterTotal ? chapterDone / chapterTotal : 0;
+  const imagePercent = imageTotal ? imageDone / imageTotal : 0;
+  const percent = Math.round((chapterPercent * 0.45 + imagePercent * 0.55) * 100);
+  status.className = `status-line import-progress ${job.status === 'failed' ? 'error' : ''}`;
+  status.innerHTML = `
+    <div class="progress-copy">
+      <strong>${escapeHtml(progress.message || 'Đang import...')}</strong>
+      <span>${escapeHtml(progress.currentChapterLabel || progress.phase || '')}</span>
+    </div>
+    <div class="crawl-meter" aria-label="Tiến độ crawl">
+      <div style="width:${Math.max(4, Math.min(100, percent))}%"></div>
+    </div>
+    <div class="progress-grid">
+      <span>Chapter: ${chapterDone}/${chapterTotal || '?'}</span>
+      <span>Ảnh: ${imageDone}/${imageTotal || '?'}</span>
+      <span>Trạng thái: ${escapeHtml(job.status)}</span>
+    </div>
+  `;
 }
 
 async function renderReader(seriesId) {

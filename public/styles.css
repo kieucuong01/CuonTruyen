@@ -168,6 +168,53 @@ button {
   color: var(--danger);
 }
 
+.import-progress {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(22, 24, 33, 0.78);
+  color: var(--text);
+}
+
+.progress-copy {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.progress-copy strong {
+  min-width: 0;
+}
+
+.progress-copy span,
+.progress-grid {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.crawl-meter {
+  overflow: hidden;
+  height: 8px;
+  border-radius: 99px;
+  background: #0d0f15;
+}
+
+.crawl-meter div {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width 240ms ease;
+}
+
+.progress-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
 .continue-card,
 .series-card {
   border: 1px solid var(--line);
@@ -426,6 +473,17 @@ button {
 
   .import-panel {
     grid-template-columns: 1fr;
+  }
+
+  .progress-copy,
+  .progress-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .progress-copy {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
   }
 
   .reader-toolbar {

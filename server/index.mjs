@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { getSeries, IMPORT_ROOT, readCatalog } from './catalogStore.mjs';
-import { importSeries } from './importer.mjs';
+import { createImportJob, getImportJob } from './importJobs.mjs';
 import { jsonResponse, mimeFromPath, readJsonBody } from './utils.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -50,6 +50,13 @@ async function handleApi(req, res, url) {
     return true;
   }
 
+  if (req.method === 'GET' && url.pathname.startsWith('/api/import/')) {
+    const id = decodeURIComponent(url.pathname.replace('/api/import/', ''));
+    const job = getImportJob(id);
+    jsonResponse(res, job ? 200 : 404, job || { error: 'Import job not found' });
+    return true;
+  }
+
   if (req.method === 'POST' && url.pathname === '/api/import') {
     try {
       const body = await readJsonBody(req);
@@ -57,11 +64,13 @@ async function handleApi(req, res, url) {
         jsonResponse(res, 400, { error: 'Vui lòng nhập URL truyện hợp lệ.' });
         return true;
       }
-      const series = await importSeries(body.url, {
+      const job = createImportJob({
+        url: body.url,
         maxChapters: body.maxChapters || 2,
         maxPages: body.maxPages || 8
       });
-      jsonResponse(res, 200, { series });
+      job.done.catch(() => {});
+      jsonResponse(res, 202, { job: getImportJob(job.id) });
     } catch (error) {
       const message = error.message?.startsWith('Source returned')
         ? 'Nguồn đang trả trang lỗi hoặc chặn crawler, chưa thể lấy ảnh truyện lúc này.'
