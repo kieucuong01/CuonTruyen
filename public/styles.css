@@ -132,7 +132,7 @@ button {
 
 .import-panel {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 150px 112px;
+  grid-template-columns: minmax(0, 1fr) 150px 150px 112px;
   gap: 10px;
   padding: 14px;
   border: 1px solid var(--line);

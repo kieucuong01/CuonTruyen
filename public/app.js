@@ -73,6 +73,11 @@ async function renderLibrary() {
           <option value="5">5 chapter</option>
           <option value="0">Tất cả chapter</option>
         </select>
+        <select name="maxPages" aria-label="Số ảnh mỗi chapter">
+          <option value="0" selected>Tất cả ảnh</option>
+          <option value="8">8 ảnh/chapter</option>
+          <option value="20">20 ảnh/chapter</option>
+        </select>
         <button class="primary-btn" type="submit">Import</button>
       </form>
       <div class="status-line" data-status></div>
@@ -136,7 +141,7 @@ async function handleImport(event) {
       body: JSON.stringify({
         url: formData.get('url'),
         maxChapters: Number(formData.get('maxChapters')),
-        maxPages: 0
+        maxPages: Number(formData.get('maxPages'))
       })
     });
     await pollImportJob(job.id, status);

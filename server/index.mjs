@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import { getSeries, IMPORT_ROOT, readCatalog } from './catalogStore.mjs';
 import { createImportJob, getImportJob } from './importJobs.mjs';
+import { normalizeImportPayload } from './importOptions.mjs';
 import { jsonResponse, mimeFromPath, readJsonBody } from './utils.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -64,11 +65,7 @@ async function handleApi(req, res, url) {
         jsonResponse(res, 400, { error: 'Vui lòng nhập URL truyện hợp lệ.' });
         return true;
       }
-      const job = createImportJob({
-        url: body.url,
-        maxChapters: body.maxChapters || 2,
-        maxPages: body.maxPages || 8
-      });
+      const job = createImportJob(normalizeImportPayload(body));
       job.done.catch(() => {});
       jsonResponse(res, 202, { job: getImportJob(job.id) });
     } catch (error) {
