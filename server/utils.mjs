@@ -54,9 +54,18 @@ export function mimeFromPath(filePath) {
   }[ext] || 'application/octet-stream';
 }
 
+export function corsHeaders() {
+  return {
+    'access-control-allow-origin': process.env.CORS_ALLOW_ORIGIN || '*',
+    'access-control-allow-methods': 'GET,POST,PATCH,OPTIONS',
+    'access-control-allow-headers': 'content-type, authorization'
+  };
+}
+
 export function jsonResponse(res, status, body) {
   const payload = JSON.stringify(body, null, 2);
   res.writeHead(status, {
+    ...corsHeaders(),
     'content-type': 'application/json; charset=utf-8',
     'cache-control': 'no-store'
   });

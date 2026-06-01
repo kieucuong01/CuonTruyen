@@ -6,7 +6,23 @@
   "scripts": {
     "dev": "node server/index.mjs",
     "test": "node --test tests",
-    "smoke:import": "node server/importer.mjs --url \"https://truyenqqko.com/truyen-tranh/manh-nhat-lich-su-5968\" --max-chapters 1 --max-pages 2"
+    "db:migrate:catalog": "node scripts/migrate-catalog-to-postgres.mjs",
+    "worker:crawl": "node server/crawlWorker.mjs",
+    "worker:crawl:once": "node -e \"import('./server/crawlWorker.mjs').then((m)=>m.runWorkerOnce({ enqueueSchedules: true }))\"",
+    "smoke:import": "node server/importer.mjs --url \"https://truyenqqko.com/truyen-tranh/manh-nhat-lich-su-5968\" --max-chapters 1 --max-pages 2",
+    "optimize:images:dry-run": "node scripts/optimize-import-images.mjs",
+    "optimize:images:dry-run:all": "node scripts/optimize-import-images.mjs --all",
+    "optimize:images:apply": "node scripts/optimize-import-images.mjs --apply",
+    "optimize:images:catalog": "node scripts/optimize-import-images.mjs --catalog-only",
+    "optimize:images:catalog:apply": "node scripts/optimize-import-images.mjs --catalog-only --apply",
+    "optimize:images:catalog:apply:cleanup": "node scripts/optimize-import-images.mjs --catalog-only --apply --cleanup-originals",
+    "covers:dry-run": "node scripts/backfill-cover-thumbnails.mjs",
+    "covers:apply": "node scripts/backfill-cover-thumbnails.mjs --apply",
+    "check:encoding": "node scripts/check-encoding.mjs"
+  },
+  "dependencies": {
+    "pg": "^8.13.1",
+    "sharp": "^0.32.6"
   },
   "engines": {
     "node": ">=18"

@@ -1,30 +1,49 @@
 import fs from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { getSeries, IMPORT_ROOT, readCatalog } from './catalogStore.mjs';
+import { IMPORT_ROOT } from './catalogStore.mjs';
+import { createBoundedCache } from './cacheStore.mjs';
+import { ensureStorageSchema, getSeries, readCatalog, usesPostgresStorage } from './dataStore.mjs';
 import { appendAnalyticsEvent } from './analyticsStore.mjs';
+import { adminConfigStatus, createAdminSession, isAdminAuthorized, isAdminPath } from './adminAuth.mjs';
 import {
+  buildReaderChapterPayload,
   buildHomeCollections,
   buildTagPage,
   findChapterBySlug,
   findSeriesBySlug,
+  publicSeriesDetail,
+  readAdminCatalog,
   readPublicCatalog,
   recordStoredEvent,
   searchCatalog,
   setStoredCrawlSchedule,
+  updateStoredChapter,
   updateStoredSeries
 } from './contentStore.mjs';
-import { createImportJob, getImportJob, getRunningImportJobForUrl } from './importJobs.mjs';
-import { normalizeImportPayload } from './importOptions.mjs';
-import { jsonResponse, mimeFromPath, readJsonBody } from './utils.mjs';
+import {
+  createImportJob,
+  createImportJobs,
+  ensureCrawlQueueStorage,
+  getImportJob,
+  listImportJobs
+} from './importJobs.mjs';
+import { runWorkerOnce } from './crawlWorker.mjs';
+import { normalizeImportBatchPayload, normalizeImportPayload } from './importOptions.mjs';
+import { createUpdateChaptersPayload, sourceUrlForSeries } from './crawlQueue.mjs';
+import { checkApiRateLimit } from './rateLimit.mjs';
+import { corsHeaders, jsonResponse, mimeFromPath, readJsonBody } from './utils.mjs';
 import {
   absoluteUrl,
   buildRobotsTxt,
   buildSiteMapFromCatalog,
   chapterJsonLd,
+  renderNotFoundShell,
   renderHtmlShell,
+  renderStaticPageShell,
   seriesJsonLd
 } from './seo.mjs';
 
@@ -32,6 +51,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const PUBLIC_DIR = path.join(ROOT, 'public');
 const PORT = Number(process.env.PORT || 4173);
+const API_CACHE_TTL_MS = 15_000;
+const apiResponseCache = createBoundedCache({ maxEntries: Number(process.env.API_CACHE_MAX_ENTRIES || 250) });
+const SPA_ROUTE_PATHS = new Set(['/admin']);
+const EMBEDDED_CRAWL_WORKER_ENABLED = process.env.CRAWL_EMBEDDED_WORKER !== 'false';
+const EMBEDDED_CRAWL_WORKER_ID = `server-crawl-worker-${process.pid}`;
+const EMBEDDED_CRAWL_DRAIN_LIMIT = Math.max(1, Number(process.env.CRAWL_EMBEDDED_DRAIN_LIMIT || 50));
+let embeddedCrawlDrainPromise = null;
+let embeddedCrawlDrainRequested = false;
 
 function cleanRelativePath(urlPath, prefix = '') {
   const decoded = decodeURIComponent(urlPath.replace(prefix, ''));
@@ -41,12 +68,20 @@ function cleanRelativePath(urlPath, prefix = '') {
 
 async function sendFile(res, filePath) {
   try {
-    const data = await fs.readFile(filePath);
+    const stat = await fs.stat(filePath);
     res.writeHead(200, {
+      ...corsHeaders(),
       'content-type': mimeFromPath(filePath),
-      'cache-control': filePath.includes(`${path.sep}imports${path.sep}`) ? 'public, max-age=31536000' : 'no-cache'
+      'content-length': stat.size,
+      'cache-control': filePath.includes(`${path.sep}imports${path.sep}`) ? 'public, max-age=31536000, immutable' : 'no-cache'
     });
-    res.end(data);
+    const stream = createReadStream(filePath);
+    stream.on('error', (error) => {
+      console.error(error);
+      if (!res.headersSent) res.writeHead(500);
+      res.end();
+    });
+    stream.pipe(res);
   } catch (error) {
     if (error.code === 'ENOENT') {
       res.writeHead(404);
@@ -59,10 +94,77 @@ async function sendFile(res, filePath) {
 
 function textResponse(res, status, body, contentType) {
   res.writeHead(status, {
+    ...corsHeaders(),
     'content-type': contentType,
     'cache-control': 'no-cache'
   });
   res.end(body);
+}
+
+async function cachedJsonResponse(req, res, key, producer, ttlMs = API_CACHE_TTL_MS) {
+  const now = Date.now();
+  const cached = apiResponseCache.get(key);
+  if (cached && cached.expiresAt > now) {
+    res.writeHead(cached.status, {
+      ...corsHeaders(),
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': 'no-store',
+      'x-local-cache': 'hit'
+    });
+    res.end(cached.payload);
+    return;
+  }
+  const { status = 200, body } = await producer();
+  const payload = JSON.stringify(body, null, 2);
+  apiResponseCache.set(key, {
+    status,
+    payload,
+    expiresAt: now + ttlMs
+  });
+  res.writeHead(status, {
+    ...corsHeaders(),
+    'content-type': 'application/json; charset=utf-8',
+    'cache-control': 'no-store',
+    'x-local-cache': 'miss'
+  });
+  res.end(payload);
+}
+
+function clearApiCache() {
+  apiResponseCache.clear();
+}
+
+function isSpaRoutePath(pathname) {
+  return SPA_ROUTE_PATHS.has(pathname) || pathname.startsWith('/admin/series/');
+}
+
+function kickEmbeddedCrawlWorker(reason = 'manual') {
+  if (!EMBEDDED_CRAWL_WORKER_ENABLED) return;
+  embeddedCrawlDrainRequested = true;
+  if (embeddedCrawlDrainPromise) return;
+  embeddedCrawlDrainPromise = drainEmbeddedCrawlQueue(reason)
+    .catch((error) => {
+      console.error(`[crawl-worker] embedded runner failed: ${error.message}`);
+    })
+    .finally(() => {
+      embeddedCrawlDrainPromise = null;
+      if (embeddedCrawlDrainRequested) kickEmbeddedCrawlWorker('queued-during-run');
+    });
+}
+
+async function drainEmbeddedCrawlQueue(reason) {
+  console.log(`[crawl-worker] embedded drain requested: ${reason}`);
+  while (embeddedCrawlDrainRequested) {
+    embeddedCrawlDrainRequested = false;
+    for (let index = 0; index < EMBEDDED_CRAWL_DRAIN_LIMIT; index += 1) {
+      const result = await runWorkerOnce({
+        workerId: EMBEDDED_CRAWL_WORKER_ID,
+        enqueueSchedules: false
+      });
+      if (!result.claimed) break;
+      clearApiCache();
+    }
+  }
 }
 
 function getBaseUrl(req) {
@@ -71,12 +173,33 @@ function getBaseUrl(req) {
   return (process.env.PUBLIC_SITE_URL || `${proto}://${host}`).replace(/\/$/, '');
 }
 
-function startImportJob(payload) {
-  const runningJob = getRunningImportJobForUrl(payload.url);
-  if (runningJob) return { job: runningJob, reused: true, status: 200 };
-  const job = createImportJob(payload);
-  job.done.catch(() => {});
-  return { job: getImportJob(job.id), reused: false, status: 202 };
+async function startImportJob(payload) {
+  const result = await createImportJob(payload);
+  kickEmbeddedCrawlWorker(result.reused ? 'reuse-import-job' : 'new-import-job');
+  return {
+    job: result.job,
+    reused: result.reused,
+    status: result.reused ? 200 : 202
+  };
+}
+
+async function startImportJobs(payloads) {
+  const results = await createImportJobs(payloads);
+  kickEmbeddedCrawlWorker('batch-import-jobs');
+  return results.map((result) => ({
+    job: result.job,
+    reused: result.reused,
+    status: result.reused ? 200 : 202
+  }));
+}
+
+async function readerCatalogForSeries(seriesSlug) {
+  if (!usesPostgresStorage()) return readCatalog();
+  const series = await getSeries(decodeURIComponent(seriesSlug), {
+    includePages: true,
+    includeDraft: false
+  });
+  return { series: series ? [series] : [] };
 }
 
 function importErrorPayload(error) {
@@ -90,47 +213,112 @@ function importErrorPayload(error) {
 }
 
 async function handleApi(req, res, url) {
-  if (req.method === 'GET' && url.pathname === '/api/series') {
-    jsonResponse(res, 200, await readPublicCatalog());
+  const rateLimit = checkApiRateLimit(req, url.pathname);
+  if (!rateLimit.allowed) {
+    jsonResponse(res, 429, {
+      error: 'Too many requests. Please slow down.',
+      retryAfterSeconds: rateLimit.retryAfterSeconds
+    });
     return true;
   }
 
-  if (req.method === 'GET' && url.pathname === '/api/public/home') {
-    jsonResponse(res, 200, buildHomeCollections(await readCatalog()));
+  if (req.method === 'POST' && url.pathname === '/api/admin/login') {
+    const config = adminConfigStatus();
+    if (!config.configured) {
+      jsonResponse(res, 503, {
+        error: `Admin environment is not configured. Missing: ${config.missing.join(', ')}.`
+      });
+      return true;
+    }
+    const session = createAdminSession(await readJsonBody(req));
+    jsonResponse(res, session ? 200 : 401, session || { error: 'Email hoặc mật khẩu admin không đúng.' });
+    return true;
+  }
+
+  if (isAdminPath(url.pathname) && !adminConfigStatus().configured) {
+    jsonResponse(res, 503, { error: 'Admin environment is not configured.' });
+    return true;
+  }
+
+  if (isAdminPath(url.pathname) && !isAdminAuthorized(req.headers)) {
+    jsonResponse(res, 401, { error: 'Admin token is required.' });
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/series') {
+    await cachedJsonResponse(req, res, url.pathname, async () => ({ body: await readPublicCatalog() }));
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/admin/series') {
+    jsonResponse(res, 200, await readAdminCatalog());
+    return true;
+  }
+
+  if (req.method === 'GET' && (url.pathname === '/api/home' || url.pathname === '/api/public/home')) {
+    await cachedJsonResponse(req, res, url.pathname, async () => ({ body: buildHomeCollections(await readCatalog({ includePages: false })) }));
     return true;
   }
 
   if (req.method === 'GET' && url.pathname === '/api/search') {
-    jsonResponse(res, 200, { series: searchCatalog(await readCatalog(), url.searchParams.get('q') || '') });
+    await cachedJsonResponse(req, res, url.pathname + url.search, async () => ({ body: { series: searchCatalog(await readCatalog({ includePages: false }), url.searchParams.get('q') || '') } }));
     return true;
   }
 
   if (req.method === 'GET' && url.pathname.startsWith('/api/tags/')) {
     const tagSlug = decodeURIComponent(url.pathname.replace('/api/tags/', ''));
-    const page = buildTagPage(await readCatalog(), tagSlug);
-    jsonResponse(res, page ? 200 : 404, page || { error: 'Tag not found' });
+    await cachedJsonResponse(req, res, url.pathname, async () => {
+      const page = buildTagPage(await readCatalog({ includePages: false }), tagSlug);
+      return { status: page ? 200 : 404, body: page || { error: 'Tag not found' } };
+    });
     return true;
   }
 
   if (req.method === 'GET' && url.pathname.match(/^\/api\/series\/[^/]+\/chapters\/[^/]+$/)) {
     const [, , , seriesSlug, , chapterSlug] = url.pathname.split('/');
-    const series = findSeriesBySlug(await readCatalog(), decodeURIComponent(seriesSlug));
-    const chapter = findChapterBySlug(series, decodeURIComponent(chapterSlug));
-    jsonResponse(res, series && chapter ? 200 : 404, series && chapter ? { series, chapter } : { error: 'Chapter not found' });
+    await cachedJsonResponse(req, res, url.pathname + url.search, async () => {
+      const payload = buildReaderChapterPayload(await readerCatalogForSeries(seriesSlug), decodeURIComponent(seriesSlug), decodeURIComponent(chapterSlug), {
+        window: Number(url.searchParams.get('window') || 0)
+      });
+      return { status: payload ? 200 : 404, body: payload || { error: 'Chapter not found' } };
+    });
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname.match(/^\/api\/series\/[^/]+\/chapters\/[^/]+\/next$/)) {
+    const [, , , seriesSlug, , chapterSlug] = url.pathname.split('/');
+    await cachedJsonResponse(req, res, url.pathname + url.search, async () => {
+      const payload = buildReaderChapterPayload(await readerCatalogForSeries(seriesSlug), decodeURIComponent(seriesSlug), decodeURIComponent(chapterSlug), {
+        window: Number(url.searchParams.get('window') || 0),
+        start: 'next'
+      });
+      return { status: payload ? 200 : 404, body: payload || { error: 'Next chapter not found' } };
+    });
     return true;
   }
 
   if (req.method === 'GET' && url.pathname.startsWith('/api/series/')) {
     const id = decodeURIComponent(url.pathname.replace('/api/series/', ''));
-    const catalog = await readCatalog();
-    const series = findSeriesBySlug(catalog, id) || await getSeries(id);
-    jsonResponse(res, series ? 200 : 404, series || { error: 'Series not found' });
+    await cachedJsonResponse(req, res, url.pathname, async () => {
+      const catalog = await readCatalog({ includePages: false });
+      const series = findSeriesBySlug(catalog, id) || await getSeries(id, { includePages: false });
+      return { status: series ? 200 : 404, body: series ? publicSeriesDetail(series) : { error: 'Series not found' } };
+    });
+    return true;
+  }
+
+  if (req.method === 'PATCH' && url.pathname.match(/^\/api\/admin\/series\/[^/]+\/chapters\/[^/]+$/)) {
+    const [, , , seriesId, , chapterId] = url.pathname.split('/');
+    const result = await updateStoredChapter(decodeURIComponent(seriesId), decodeURIComponent(chapterId), await readJsonBody(req));
+    clearApiCache();
+    jsonResponse(res, result.chapter ? 200 : 404, result.chapter || { error: 'Chapter not found' });
     return true;
   }
 
   if (req.method === 'PATCH' && url.pathname.startsWith('/api/admin/series/')) {
     const id = decodeURIComponent(url.pathname.replace('/api/admin/series/', ''));
     const result = await updateStoredSeries(id, await readJsonBody(req));
+    clearApiCache();
     jsonResponse(res, result.series ? 200 : 404, result.series || { error: 'Series not found' });
     return true;
   }
@@ -138,20 +326,50 @@ async function handleApi(req, res, url) {
   if (req.method === 'POST' && url.pathname.match(/^\/api\/admin\/series\/[^/]+\/crawl-schedule$/)) {
     const id = decodeURIComponent(url.pathname.split('/')[4]);
     const result = await setStoredCrawlSchedule(id, await readJsonBody(req));
+    clearApiCache();
     jsonResponse(res, result.series ? 200 : 404, result.series || { error: 'Series not found' });
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname.match(/^\/api\/admin\/series\/[^/]+\/update-chapters$/)) {
+    const id = decodeURIComponent(url.pathname.split('/')[4]);
+    const catalog = await readCatalog({ includePages: false });
+    const series = findSeriesBySlug(catalog, id, { includeDraft: true }) || await getSeries(id, { includePages: false, includeDraft: true });
+    if (!series) {
+      jsonResponse(res, 404, { error: 'Series not found' });
+      return true;
+    }
+    if (!sourceUrlForSeries(series)) {
+      jsonResponse(res, 400, { error: 'Truyện này chưa có source URL để cập nhật chapter mới.' });
+      return true;
+    }
+    const body = await readJsonBody(req);
+    const result = await startImportJob(createUpdateChaptersPayload(series, {
+      ...body,
+      publishNewChapters: true
+    }));
+    clearApiCache();
+    jsonResponse(res, result.status, { job: result.job, reused: result.reused });
     return true;
   }
 
   if (req.method === 'GET' && url.pathname.startsWith('/api/import/')) {
     const id = decodeURIComponent(url.pathname.replace('/api/import/', ''));
-    const job = getImportJob(id);
+    const job = await getImportJob(id);
+    if (job?.status === 'completed') clearApiCache();
     jsonResponse(res, job ? 200 : 404, job || { error: 'Import job not found' });
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/admin/import-jobs') {
+    jsonResponse(res, 200, { jobs: await listImportJobs({ limit: Number(url.searchParams.get('limit') || 50) }) });
     return true;
   }
 
   if (req.method === 'GET' && url.pathname.startsWith('/api/admin/import-jobs/')) {
     const id = decodeURIComponent(url.pathname.replace('/api/admin/import-jobs/', ''));
-    const job = getImportJob(id);
+    const job = await getImportJob(id);
+    if (job?.status === 'completed') clearApiCache();
     jsonResponse(res, job ? 200 : 404, job || { error: 'Import job not found' });
     return true;
   }
@@ -163,7 +381,8 @@ async function handleApi(req, res, url) {
         jsonResponse(res, 400, { error: 'Vui lòng nhập URL truyện hợp lệ.' });
         return true;
       }
-      const result = startImportJob(normalizeImportPayload(body));
+      const result = await startImportJob(normalizeImportPayload(body));
+      clearApiCache();
       jsonResponse(res, result.status, { job: result.job, reused: result.reused });
     } catch (error) {
       jsonResponse(res, 500, importErrorPayload(error));
@@ -174,12 +393,19 @@ async function handleApi(req, res, url) {
   if (req.method === 'POST' && url.pathname === '/api/admin/import-jobs') {
     try {
       const body = await readJsonBody(req);
-      if (!body.url || !/^https?:\/\//i.test(body.url)) {
-        jsonResponse(res, 400, { error: 'Vui lòng nhập URL truyện hợp lệ.' });
+      const payloads = normalizeImportBatchPayload(body);
+      if (!payloads.length || payloads.some((payload) => !/^https?:\/\//i.test(payload.url))) {
+        jsonResponse(res, 400, { error: 'Vui lòng nhập mỗi URL truyện hợp lệ trên một dòng.' });
         return true;
       }
-      const result = startImportJob(normalizeImportPayload(body));
-      jsonResponse(res, result.status, { job: result.job, reused: result.reused });
+      const results = await startImportJobs(payloads);
+      clearApiCache();
+      const status = results.some((result) => result.status === 202) ? 202 : 200;
+      if (results.length === 1) {
+        jsonResponse(res, status, { job: results[0].job, reused: results[0].reused, jobs: results });
+        return true;
+      }
+      jsonResponse(res, status, { jobs: results, count: results.length });
     } catch (error) {
       jsonResponse(res, 500, importErrorPayload(error));
     }
@@ -198,22 +424,31 @@ async function handleApi(req, res, url) {
 
 async function handleSeoRoute(req, res, url) {
   const baseUrl = getBaseUrl(req);
+  const staticPage = renderStaticPageShell(url.pathname, baseUrl);
+  if (staticPage) {
+    textResponse(res, 200, staticPage, 'text/html; charset=utf-8');
+    return true;
+  }
+
   if (url.pathname === '/robots.txt') {
     textResponse(res, 200, buildRobotsTxt(baseUrl), 'text/plain; charset=utf-8');
     return true;
   }
   if (url.pathname === '/sitemap.xml') {
-    textResponse(res, 200, buildSiteMapFromCatalog(await readCatalog(), baseUrl), 'application/xml; charset=utf-8');
+    textResponse(res, 200, buildSiteMapFromCatalog(await readCatalog({ includePages: false }), baseUrl), 'application/xml; charset=utf-8');
     return true;
   }
 
   const seriesMatch = url.pathname.match(/^\/truyen\/([^/]+)$/);
   if (seriesMatch) {
-    const series = findSeriesBySlug(await readCatalog(), decodeURIComponent(seriesMatch[1]));
-    if (!series) return false;
+    const series = findSeriesBySlug(await readCatalog({ includePages: false }), decodeURIComponent(seriesMatch[1]));
+    if (!series) {
+      textResponse(res, 404, renderNotFoundShell(url.pathname, baseUrl), 'text/html; charset=utf-8');
+      return true;
+    }
     textResponse(res, 200, renderHtmlShell({
-      title: `${series.title} - đọc truyện tranh`,
-      description: series.description || `Đọc ${series.title} liên tục, mượt và lưu vị trí đọc.`,
+      title: `${series.title} - Đọc truyện tranh tại Cuộn Truyện`,
+      description: series.description || `Đọc ${series.title} liền mạch tại Cuộn Truyện, tự lưu vị trí và mở lại đúng chương đang đọc.`,
       canonicalUrl: `${baseUrl}/truyen/${series.slug}`,
       imageUrl: absoluteUrl(series.coverUrl, baseUrl),
       jsonLd: seriesJsonLd(series, baseUrl)
@@ -225,10 +460,13 @@ async function handleSeoRoute(req, res, url) {
   if (chapterMatch) {
     const series = findSeriesBySlug(await readCatalog(), decodeURIComponent(chapterMatch[1]));
     const chapter = findChapterBySlug(series, decodeURIComponent(chapterMatch[2]));
-    if (!series || !chapter) return false;
+    if (!series || !chapter) {
+      textResponse(res, 404, renderNotFoundShell(url.pathname, baseUrl), 'text/html; charset=utf-8');
+      return true;
+    }
     textResponse(res, 200, renderHtmlShell({
-      title: `${series.title} - ${chapter.title}`,
-      description: `Đọc ${series.title} ${chapter.title} với reader nối chapter và lưu vị trí.`,
+      title: `${series.title} - ${chapter.title} | Cuộn Truyện`,
+      description: `Đọc ${series.title} ${chapter.title} online tại Cuộn Truyện với reader nối chapter liền mạch và lưu vị trí đọc.`,
       canonicalUrl: `${baseUrl}/truyen/${series.slug}/${chapter.slug}`,
       imageUrl: absoluteUrl(chapter.pages?.[0]?.imageUrl || series.coverUrl, baseUrl),
       jsonLd: chapterJsonLd(series, chapter, baseUrl)
@@ -238,11 +476,14 @@ async function handleSeoRoute(req, res, url) {
 
   const tagMatch = url.pathname.match(/^\/the-loai\/([^/]+)$/);
   if (tagMatch) {
-    const page = buildTagPage(await readCatalog(), decodeURIComponent(tagMatch[1]));
-    if (!page) return false;
+    const page = buildTagPage(await readCatalog({ includePages: false }), decodeURIComponent(tagMatch[1]));
+    if (!page) {
+      textResponse(res, 404, renderNotFoundShell(url.pathname, baseUrl), 'text/html; charset=utf-8');
+      return true;
+    }
     textResponse(res, 200, renderHtmlShell({
-      title: `Truyện ${page.tag.name}`,
-      description: `Danh sách truyện tranh thể loại ${page.tag.name}, cập nhật mới và đọc liên tục.`,
+      title: `Truyện ${page.tag.name} - Cuộn Truyện`,
+      description: `Danh sách truyện tranh thể loại ${page.tag.name} trên Cuộn Truyện, cập nhật mới và đọc liền mạch.`,
       canonicalUrl: `${baseUrl}/the-loai/${page.tag.slug}`
     }), 'text/html; charset=utf-8');
     return true;
@@ -254,6 +495,11 @@ async function handleSeoRoute(req, res, url) {
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204, corsHeaders());
+      res.end();
+      return;
+    }
     if (await handleApi(req, res, url)) return;
     if (await handleSeoRoute(req, res, url)) return;
 
@@ -263,7 +509,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    const rel = cleanRelativePath(url.pathname === '/' ? '/index.html' : url.pathname);
+    const rel = cleanRelativePath(url.pathname === '/' || isSpaRoutePath(url.pathname) ? '/index.html' : url.pathname);
     const filePath = path.join(PUBLIC_DIR, rel);
     if (!filePath.startsWith(PUBLIC_DIR)) {
       res.writeHead(403);
@@ -277,6 +523,14 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+await ensureStorageSchema();
+await ensureCrawlQueueStorage();
+kickEmbeddedCrawlWorker('startup');
+
 server.listen(PORT, () => {
-  console.log(`Comic reader running at http://localhost:${PORT}`);
+  const storageMode = usesPostgresStorage() ? 'PostgreSQL' : 'local JSON';
+  console.log(`Comic reader running at http://localhost:${PORT} (${storageMode} catalog)`);
+  if (EMBEDDED_CRAWL_WORKER_ENABLED) {
+    console.log('Embedded crawl worker is enabled. Set CRAWL_EMBEDDED_WORKER=false to use a separate worker only.');
+  }
 });

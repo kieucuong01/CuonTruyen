@@ -1,5 +1,11 @@
 .superpowers/
 node_modules/
 dist/
+.runtime/
+logs/
+.tmp-edge-admin-smoke/
+dev-server*.log
 data/imports/
 .env
+.env.local
+.env.*.local

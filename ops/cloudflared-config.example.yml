@@ -1,0 +1,7 @@
+tunnel: <TUNNEL_ID>
+credentials-file: C:\Users\ASUS\.cloudflared\<TUNNEL_ID>.json
+
+ingress:
+  - hostname: api.example.com
+    service: http://localhost:54533
+  - service: http_status:404

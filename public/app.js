@@ -1,57 +1,287 @@
 import {
+  canSaveReaderProgress,
   createProgressSnapshot,
+  createResumeLoadPlan,
+  findCurrentChapterFromLayout,
   loadLastSeriesId,
   loadProgress,
+  loadReadingHistory,
   saveProgress
 } from './readingProgress.mjs';
+import { hasReadableChapter } from './chapterState.mjs';
+import { apiUrl, createApiClient } from './apiClient.mjs';
+import { sendAnalyticsEvent } from './analyticsClient.mjs';
+import { escapeAttr, escapeHtml, throttle } from './domUtils.mjs';
+import { STATIC_INFO_PAGES, createHomeRoute } from './routes/home.mjs';
+import { createAdminRoute, loadAdminToken } from './routes/admin.mjs';
+import {
+  chapterHrefSegment as routeChapterHrefSegment,
+  getChapterIndex,
+  getCurrentReaderChapter,
+  getNextSummaryAfterLastLoaded,
+  getReadableChapters,
+  resolveReaderRoute
+} from './routes/reader.mjs';
+import {
+  resolveSavedScrollTop as resolveRestoreScrollTop,
+  shouldRestoreProgress
+} from './readerRestore.mjs';
+import {
+  countReaderPages,
+  findNewReaderChapters,
+  mergeReaderChapters,
+  releaseReaderImageElement,
+  resolveReaderToolbarVisibility,
+  restoreReaderImageElement,
+  resolveReaderCurrentChapterId
+} from './readerWindow.mjs';
+import { applySeriesFilters, buildTagOptions } from './seriesFilters.mjs';
+import {
+  clearUserSession,
+  isFollowingSeries,
+  loadFollowedSeriesIds,
+  loadUserSession,
+  loginOrRegisterUser,
+  toggleFollowSeries
+} from './userState.mjs';
+import {
+  normalizeMonetizationConfig,
+  shouldShowAds
+} from './monetization.mjs';
+
+function getMonetizationConfig() {
+  const rootConfig = globalThis.COMIC_READER_CONFIG || {};
+  return normalizeMonetizationConfig(rootConfig.monetization || rootConfig);
+}
+
+function currentRouteKey() {
+  return globalThis.location ? `${location.pathname || '/'}${location.hash || ''}` : '/';
+}
+
+function adsAreVisible() {
+  return shouldShowAds({ route: currentRouteKey(), config: getMonetizationConfig() });
+}
+
+function getDonateUrl() {
+  return getMonetizationConfig().donateUrl || '#/support';
+}
 
 const app = document.querySelector('#app');
+const BRAND_NAME = 'Cuộn Truyện';
+const BRAND_TAGLINE = 'Đọc liền mạch, lưu đúng chương';
+const BRAND_LOGO = '/favicon.svg?v=3';
 const state = {
   catalog: { series: [] },
   home: { hot: [], updated: [], tags: [] },
   series: null,
+  readerChapters: [],
   loadedChapterCount: 0,
   currentChapterId: '',
   drawerOpen: false,
   saving: false,
-  searchQuery: ''
+  restoringProgress: false,
+  readerRestoreSnapshot: null,
+  readerRestoreTimer: null,
+  readerRestoreAttempts: 0,
+  loadingNextChapter: false,
+  readerScrollTimer: null,
+  readerScrollHandler: null,
+  readerToolbarTimer: null,
+  readerLastScrollY: 0,
+  readerToolbarRevealUntil: 0,
+  readerInteractionHandler: null,
+  readerObservers: [],
+  searchQuery: '',
+  filters: {
+    query: '',
+    tag: 'all',
+    status: 'all',
+    sort: 'updated'
+  }
 };
+
+const apiClient = createApiClient({
+  adminTokenProvider: () => loadAdminToken()
+});
+
+
+const navigation = {
+  token: 0,
+  timer: null,
+  activeElement: null
+};
+const READER_EAGER_IMAGE_COUNT = 12;
+const READER_PRELOAD_AHEAD_COUNT = 28;
+const READER_PRELOAD_ROOT_MARGIN = '6500px 0px';
+const READER_IMAGE_RELEASE_BEHIND_PX = 28000;
+const READER_BLANK_IMAGE = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+const preloadedImageUrls = new Set();
 
 const icon = {
   back: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  chevronLeft: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  chevronRight: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   menu: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
   close: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
   search: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m21 21-4.3-4.3M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
   settings: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" stroke="currentColor" stroke-width="2"/><path d="M19.4 15a1.8 1.8 0 0 0 .4 2l.1.1a2.1 2.1 0 0 1-3 3l-.1-.1a1.8 1.8 0 0 0-2-.4 1.8 1.8 0 0 0-1.1 1.7V21a2.1 2.1 0 0 1-4.2 0v-.2a1.8 1.8 0 0 0-1.2-1.7 1.8 1.8 0 0 0-2 .4l-.1.1a2.1 2.1 0 1 1-3-3l.1-.1a1.8 1.8 0 0 0 .4-2 1.8 1.8 0 0 0-1.7-1.1H2a2.1 2.1 0 0 1 0-4.2h.2a1.8 1.8 0 0 0 1.7-1.2 1.8 1.8 0 0 0-.4-2l-.1-.1a2.1 2.1 0 1 1 3-3l.1.1a1.8 1.8 0 0 0 2 .4h.1a1.8 1.8 0 0 0 1-1.7V2a2.1 2.1 0 0 1 4.2 0v.2a1.8 1.8 0 0 0 1.1 1.7 1.8 1.8 0 0 0 2-.4l.1-.1a2.1 2.1 0 1 1 3 3l-.1.1a1.8 1.8 0 0 0-.4 2v.1a1.8 1.8 0 0 0 1.7 1h.2a2.1 2.1 0 0 1 0 4.2h-.2a1.8 1.8 0 0 0-1.8 1.2Z" stroke="currentColor" stroke-width="2"/></svg>'
 };
 
+const adminRoute = createAdminRoute({
+  adminHeaders,
+  app,
+  chapterHrefSegment,
+  escapeAttr,
+  escapeHtml,
+  fetchJson,
+  invalidateContentCache,
+  loadCatalog,
+  renderTopbar,
+  route,
+  clearControlPending,
+  setControlPending,
+  splitList,
+  stopReaderRuntime
+});
+const renderAdmin = adminRoute.renderAdmin;
+const renderAdminSeriesDetail = adminRoute.renderAdminSeriesDetail;
+
+const homeRoute = createHomeRoute({
+  app,
+  state,
+  bindContinueSlider,
+  bindReadButtons,
+  escapeAttr,
+  escapeHtml,
+  fetchJson,
+  icon,
+  loadHome,
+  loadLastSeriesId,
+  loadProgress,
+  loadReadingHistory,
+  renderContinueShelf,
+  renderMonetizationPanel,
+  renderPopularSidebar,
+  renderRail,
+  renderTopbar,
+  renderTrendingSection,
+  renderUpdatedSection,
+  reportVisibleAdSlots,
+  route,
+  sendEvent,
+  stopReaderRuntime,
+  throttle,
+  uniqueSeriesById
+});
+const renderHome = homeRoute.renderHome;
+const renderStaticInfoPage = homeRoute.renderStaticInfoPage;
+
 window.addEventListener('hashchange', route);
 window.addEventListener('popstate', route);
 
 document.addEventListener('click', (event) => {
+  const userLogout = event.target.closest('[data-user-logout]');
+  if (userLogout) {
+    event.preventDefault();
+    clearUserSession();
+    history.pushState({}, '', '/');
+    route();
+    return;
+  }
+
+  const followButton = event.target.closest('[data-follow-series]');
+  if (followButton) {
+    event.preventDefault();
+    handleFollowToggle(followButton);
+    return;
+  }
+
+  const donateControl = event.target.closest('[data-donate-click]');
+  if (donateControl) {
+    sendEvent('donate_click', {
+      placement: donateControl.dataset.donateClick || '',
+      seriesSlug: state.series?.slug,
+      chapterId: state.currentChapterId
+    });
+  }
+
   const link = event.target.closest('[data-link]');
   if (!link) return;
   event.preventDefault();
+  flushReaderProgress();
+  setControlPending(link);
   history.pushState({}, '', link.getAttribute('href'));
   route();
+});
+
+document.addEventListener('pointerover', (event) => {
+  prefetchTarget(event.target.closest('[data-link], [data-read]'));
+}, { passive: true });
+
+document.addEventListener('focusin', (event) => {
+  prefetchTarget(event.target.closest('[data-link], [data-read]'));
 });
 
 route();
 
 async function route() {
-  const readMatch = location.hash.match(/^#\/read\/([^/]+)/);
-  if (readMatch) {
-    await renderReader(decodeURIComponent(readMatch[1]));
+  const token = startNavigation('Đang tải trang...');
+  try {
+    await routeCore();
+  } catch (error) {
+    app.innerHTML = `
+      <main class="site-shell">
+        ${renderTopbar()}
+        <section class="empty-state">Không thể tải trang: ${escapeHtml(error.message)}</section>
+      </main>
+    `;
+  } finally {
+    stopNavigation(token);
+  }
+}
+
+async function routeCore() {
+  flushReaderProgress();
+  if (location.hash === '#/admin') {
+    history.replaceState({}, '', '/admin');
+  }
+  const readerRoute = resolveReaderRoute(location);
+  if (readerRoute?.kind === 'hash-reader') {
+    await renderReader(readerRoute.seriesId);
     return;
   }
-  if (location.hash === '#/admin') {
+  if (location.pathname === '/admin') {
     await renderAdmin();
     return;
   }
+  const adminSeriesMatch = location.pathname.match(/^\/admin\/series\/([^/]+)$/);
+  if (adminSeriesMatch) {
+    await renderAdminSeriesDetail(decodeURIComponent(adminSeriesMatch[1]));
+    return;
+  }
+  if (location.hash === '#/login' || location.hash === '#/register') {
+    renderUserAuth();
+    return;
+  }
+  if (location.hash === '#/following') {
+    await renderFollowingPage();
+    return;
+  }
+  if (location.hash === '#/history') {
+    await renderHistoryPage();
+    return;
+  }
+  if (location.hash === '#/search') {
+    await renderExplorePage({ mode: 'search' });
+    return;
+  }
+  if (location.hash === '#/genres') {
+    await renderExplorePage({ mode: 'genres' });
+    return;
+  }
 
-  const chapterMatch = location.pathname.match(/^\/truyen\/([^/]+)\/([^/]+)$/);
-  if (chapterMatch) {
-    await renderReaderFromSlug(decodeURIComponent(chapterMatch[1]), decodeURIComponent(chapterMatch[2]));
+  if (readerRoute?.kind === 'chapter-reader') {
+    await renderReaderFromSlug(readerRoute.seriesSlug, readerRoute.chapterSlug);
     return;
   }
 
@@ -63,18 +293,28 @@ async function route() {
 
   const tagMatch = location.pathname.match(/^\/the-loai\/([^/]+)$/);
   if (tagMatch) {
-    await renderTagPage(decodeURIComponent(tagMatch[1]));
+    await renderExplorePage({ mode: 'genres', tagSlug: decodeURIComponent(tagMatch[1]) });
+    return;
+  }
+
+  if (STATIC_INFO_PAGES[location.pathname]) {
+    renderStaticInfoPage(location.pathname);
     return;
   }
 
   await renderHome();
 }
 
-async function fetchJson(url, options) {
-  const response = await fetch(url, options);
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || 'Request failed');
-  return data;
+function fetchJson(...args) {
+  return apiClient.fetchJson(...args);
+}
+
+function invalidateContentCache() {
+  return apiClient.invalidateContentCache();
+}
+
+function adminHeaders(extra = {}) {
+  return apiClient.adminHeaders(extra);
 }
 
 async function loadCatalog() {
@@ -83,77 +323,266 @@ async function loadCatalog() {
 }
 
 async function loadHome() {
-  state.home = await fetchJson('/api/public/home');
+  state.home = await fetchJson('/api/home');
   return state.home;
 }
 
-async function renderHome() {
-  const [catalog, home] = await Promise.all([loadCatalog(), loadHome()]);
-  const lastSeriesId = loadLastSeriesId();
-  const lastSeries = catalog.series.find((series) => series.id === lastSeriesId);
-  const lastProgress = lastSeries ? loadProgress(lastSeries.id) : null;
-  const results = state.searchQuery
-    ? await fetchJson(`/api/search?q=${encodeURIComponent(state.searchQuery)}`).then((data) => data.series)
-    : [];
 
-  app.innerHTML = `
-    <main class="site-shell">
-      ${renderTopbar()}
-      <section class="discovery-band">
-        <div class="search-box">
-          ${icon.search}
-          <input data-search-input placeholder="Tìm truyện, alias hoặc tag..." value="${escapeAttr(state.searchQuery)}" />
-        </div>
-        ${lastSeries ? `
-          <section class="continue-card">
-            <div>
-              <strong>Đọc tiếp: ${escapeHtml(lastSeries.title)}</strong>
-              <span>${lastProgress ? `${lastProgress.progressPercent}% - ${escapeHtml(lastProgress.chapterId)}` : 'Có truyện đã import gần đây'}</span>
-            </div>
-            <button class="primary-btn" data-read="${lastSeries.id}">Đọc tiếp</button>
-          </section>
-        ` : ''}
-      </section>
 
-      ${state.searchQuery ? renderRail(`Kết quả tìm kiếm`, results) : ''}
-      ${renderRail('Truyện hot', home.hot)}
-      ${renderRail('Mới cập nhật', home.updated)}
-      <section class="tag-cloud">
-        <h2 class="section-title">Tag nổi bật</h2>
-        <div>${home.tags.length ? home.tags.map((tag) => `<a data-link href="/the-loai/${tag.slug}">${escapeHtml(tag.name)} <small>${tag.seriesCount}</small></a>`).join('') : '<span class="muted">Chưa có tag.</span>'}</div>
-      </section>
-      <section class="ad-slot" data-ad-slot="home">AdSense responsive slot</section>
-    </main>
+
+function renderMonetizationPanel(placement = 'home') {
+  const adSlot = adsAreVisible()
+    ? '<section class="ad-slot home-ad" data-ad-slot="home-top">Quảng cáo nhẹ, không chen vào lúc đọc.</section>'
+    : '';
+
+  return `
+    ${adSlot}
+    <section class="monetization-panel" aria-label="Ung ho Cuon Truyen">
+      <div>
+        <p class="eyebrow">Ủng hộ dự án</p>
+        <h2>Đọc miễn phí, ủng hộ bằng donate và click quảng cáo</h2>
+        <p class="support-note">Cuộn Truyện không bán gói trả phí nữa. Nếu thấy hữu ích, bạn có thể donate hoặc để quảng cáo nhẹ hỗ trợ chi phí vận hành.</p>
+      </div>
+      <div class="support-actions">
+        <a class="primary-action" href="${escapeAttr(getDonateUrl())}" target="_blank" rel="noopener" data-donate-click="${escapeAttr(placement)}">Donate</a>
+      </div>
+    </section>
   `;
+}
 
-  app.querySelector('[data-search-input]').addEventListener('input', throttle((event) => {
-    state.searchQuery = event.target.value.trim();
-    renderHome();
-  }, 350));
-  bindReadButtons();
-  sendEvent('pageview', {});
+function renderReaderAdBreak(index) {
+  if (index <= 0) return '';
+  if (!adsAreVisible()) return '<section class="reader-break">Nghỉ mắt một chút rồi đọc tiếp</section>';
+  return '<section class="ad-slot reader-ad" data-ad-slot="chapter-break">Quảng cáo nhẹ - giúp Cuộn Truyện tiếp tục vận hành</section>';
+}
+
+function reportVisibleAdSlots() {
+  document.querySelectorAll('[data-ad-slot]').forEach((slot) => {
+    if (slot.dataset.reported === 'true') return;
+    slot.dataset.reported = 'true';
+    sendEvent('ad_impression', {
+      placement: slot.dataset.adSlot || '',
+      seriesSlug: state.series?.slug,
+      chapterId: state.currentChapterId
+    });
+  });
 }
 
 function renderTopbar() {
+  const user = loadUserSession();
   return `
     <header class="topbar">
       <a class="brand" data-link href="/">
-        <div class="brand-mark">KS</div>
-        <div>
-          <h1>K-Scroll Reader</h1>
-          <p>Manhua, manhwa tiếng Việt, đọc liên tục và lưu vị trí.</p>
-        </div>
+        ${renderBrandLogo()}
       </a>
+      <nav class="main-nav" aria-label="Điều hướng chính">
+        <a data-link href="/">Trang chủ</a>
+        <a data-link href="#/following">Theo dõi</a>
+        <a data-link href="#/history">Lịch sử</a>
+        <a data-link href="#/search">Tìm kiếm</a>
+        <a data-link href="#/genres">Thể loại</a>
+      </nav>
       <div class="top-actions">
-        <a class="ghost-btn" href="#/admin">${icon.settings}<span>Admin</span></a>
+        ${user ? `
+          <span class="user-chip">${escapeHtml(user.displayName || 'Reader')}</span>
+          <button class="login-btn muted-btn" type="button" data-user-logout>Thoát</button>
+        ` : '<a class="login-btn" data-link href="#/login">Đăng nhập</a>'}
       </div>
     </header>
   `;
 }
 
-function renderRail(title, seriesList) {
+function renderBrandLogo({ compact = false } = {}) {
   return `
-    <section class="content-rail">
+    <span class="brand-logo ${compact ? 'compact' : ''}" aria-label="${BRAND_NAME}">
+      <img src="${BRAND_LOGO}" alt="${BRAND_NAME}" width="${compact ? 152 : 214}" height="${compact ? 46 : 64}" />
+      <span class="brand-logo-fallback">
+        <strong>${BRAND_NAME}</strong>
+        ${compact ? '' : `<small>${BRAND_TAGLINE}</small>`}
+      </span>
+    </span>
+  `;
+}
+
+function renderContinueShelf(items, lastSeries) {
+  const fallback = lastSeries ? [{ series: lastSeries, progress: loadProgress(lastSeries.id) }] : [];
+  const rows = items.length ? items : fallback;
+  return `
+    <section class="continue-section" id="continue-section">
+      <div class="section-head">
+        <div>
+          <h2>Đọc tiếp</h2>
+          <p>Những truyện đang đọc được lưu trên trình duyệt này.</p>
+        </div>
+        ${rows.length ? `
+          <div class="shelf-controls" aria-label="Điều hướng danh sách đọc tiếp">
+            <button class="icon-btn shelf-btn" type="button" data-continue-prev aria-label="Lùi danh sách đọc tiếp">${icon.chevronLeft}</button>
+            <button class="icon-btn shelf-btn" type="button" data-continue-next aria-label="Tiến danh sách đọc tiếp">${icon.chevronRight}</button>
+          </div>
+        ` : ''}
+      </div>
+      <div class="continue-list" data-continue-list>
+        ${rows.length ? rows.map(({ series, progress }) => renderContinueItem(series, progress)).join('') : '<div class="empty-state">Chưa có lịch sử đọc. Mở một truyện và scroll một chút để lưu vị trí.</div>'}
+      </div>
+    </section>
+  `;
+}
+
+function renderContinueItem(series, progress) {
+  const { chapter, completed, total, percent } = resolveContinueChapterProgress(series, progress);
+  const chapterLabel = chapter?.label || chapter?.title || 'Chapter đầu';
+  return `
+    <article class="continue-card" data-read="${series.id}">
+      <div class="mini-cover">${renderCoverImage(series, 'CT')}</div>
+      <div class="continue-copy">
+        <strong title="${escapeAttr(series.title)}">${escapeHtml(series.title)}</strong>
+        <span class="continue-chapter">Đang đọc: ${escapeHtml(chapterLabel)}</span>
+        <span class="continue-progress">${percent}% đã đọc (${completed}/${total || 0} chương)</span>
+        <div class="mini-meter"><div style="width:${Math.max(4, Math.min(100, percent || 4))}%"></div></div>
+        <span class="continue-cta">Đọc tiếp</span>
+      </div>
+    </article>
+  `;
+}
+
+function coverImageUrl(series = {}) {
+  return series.thumbnailUrl || series.coverThumbnailUrl || series.coverUrl || series.imageUrl || '';
+}
+
+function renderCoverImage(series = {}, fallback = 'No cover', attributes = 'loading="lazy" decoding="async"') {
+  const coverUrl = coverImageUrl(series);
+  return coverUrl
+    ? `<img ${attributes} src="${escapeAttr(coverUrl)}" alt="${escapeAttr(series.title || 'Truyen')}">`
+    : `<span>${escapeHtml(fallback)}</span>`;
+}
+
+function resolveContinueChapterProgress(series, progress) {
+  const readable = (series.chapters || []).filter(hasReadableChapter);
+  if (!readable.length) {
+    return {
+      chapter: null,
+      completed: 0,
+      total: 0,
+      percent: 0
+    };
+  }
+  const targetId = String(progress?.chapterId || '').trim();
+  const chapterIndex = targetId
+    ? readable.findIndex((item) => {
+      const candidates = [item.id, item.slug, chapterHrefSegment(item)].filter(Boolean).map(String);
+      return candidates.includes(targetId);
+    })
+    : 0;
+  const safeIndex = chapterIndex >= 0 ? chapterIndex : 0;
+  const completed = Math.max(0, safeIndex);
+  const total = readable.length;
+  return {
+    chapter: readable[safeIndex] || readable[0],
+    completed,
+    total,
+    percent: Math.round((completed / total) * 100)
+  };
+}
+
+function renderTrendingSection(seriesList) {
+  return `
+    <section class="panel-section trending-section">
+      <div class="section-head">
+        <h2>Truyện tranh đang thịnh hành</h2>
+      </div>
+      <div class="trending-grid">
+        ${seriesList.length ? seriesList.map(renderTrendingCard).join('') : '<div class="empty-state">Chưa có truyện thịnh hành.</div>'}
+      </div>
+    </section>
+  `;
+}
+
+function renderTrendingCard(series) {
+  const imported = series.importedChapterCount || series.chapters.filter(hasReadableChapter).length;
+  const firstChapter = series.chapters.find(hasReadableChapter);
+  return `
+    <article class="trending-card">
+      <a class="trending-cover" data-link href="/truyen/${series.slug}">
+        ${renderCoverImage(series, 'No cover')}
+        <small>${series.sourceMappings?.[0]?.adapter || 'Manhua'}</small>
+      </a>
+      <h3><a data-link href="/truyen/${series.slug}">${escapeHtml(series.title)}</a></h3>
+      <p>${escapeHtml(firstChapter?.label || `${imported} chapter`)}</p>
+      <div class="rating">★★★★★ <span>${Number(series.stats?.views || 5) ? '5' : '4.9'}</span></div>
+    </article>
+  `;
+}
+
+function renderUpdatedSection(seriesList) {
+  return `
+    <section class="panel-section updated-section">
+      <div class="section-head">
+        <h2>Mới cập nhật</h2>
+        <button class="small-orange" type="button">Xem tất cả</button>
+      </div>
+      <div class="updated-grid">
+        ${seriesList.length ? seriesList.slice(0, 8).map(renderUpdatedItem).join('') : '<div class="empty-state">Chưa có truyện mới.</div>'}
+      </div>
+    </section>
+  `;
+}
+
+function renderUpdatedItem(series) {
+  const chapters = (series.chapters || []).filter(hasReadableChapter).slice(0, 3);
+  return `
+    <article class="updated-item">
+      <a class="update-cover" data-link href="/truyen/${series.slug}">
+        ${renderCoverImage(series, 'CT')}
+      </a>
+      <div>
+        <h3><a data-link href="/truyen/${series.slug}">${escapeHtml(series.title)}</a></h3>
+        <div class="chapter-mini-list">
+          ${chapters.length ? chapters.map((chapter, index) => `
+            <a data-link href="/truyen/${series.slug}/${chapterHrefSegment(chapter)}">
+              <span>${escapeHtml(chapter.label || chapter.title)}</span>
+              <small>${index + 4} giờ trước</small>
+            </a>
+          `).join('') : '<span class="muted">Chưa có chapter cache</span>'}
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function renderPopularSidebar(seriesList) {
+  return `
+    <section class="popular-panel">
+      <div class="section-head">
+        <h2>Truyện phổ biến</h2>
+      </div>
+      <div class="rank-tabs"><button>Tuần</button><button>Tháng</button><button>Tất cả</button></div>
+      <ol class="rank-list">
+        ${seriesList.length ? seriesList.map((series, index) => renderRankItem(series, index)).join('') : '<li class="empty-state">Chưa có xếp hạng.</li>'}
+      </ol>
+    </section>
+  `;
+}
+
+function renderRankItem(series, index) {
+  const firstChapter = series.chapters.find(hasReadableChapter);
+  return `
+    <li>
+      <span class="rank-number">${index + 1}</span>
+      <a class="rank-cover" data-link href="/truyen/${series.slug}">
+        ${renderCoverImage(series, 'CT')}
+      </a>
+      <div>
+        <strong><a data-link href="/truyen/${series.slug}">${escapeHtml(series.title)}</a></strong>
+        <small>${escapeHtml(firstChapter?.label || 'Đang cập nhật')}</small>
+        <div class="rating">★★★★★ <span>4.${9 - (index % 5)}</span></div>
+      </div>
+    </li>
+  `;
+}
+
+function renderRail(title, seriesList, variant = '') {
+  return `
+    <section class="content-rail ${variant}">
       <h2 class="section-title">${escapeHtml(title)}</h2>
       <div class="series-grid">
         ${seriesList.length ? seriesList.map(renderSeriesCard).join('') : '<div class="empty-state">Chưa có truyện phù hợp.</div>'}
@@ -163,12 +592,12 @@ function renderRail(title, seriesList) {
 }
 
 function renderSeriesCard(series) {
-  const imported = series.chapters.filter((chapter) => chapter.pages?.length || chapter.imported).length;
-  const pages = series.chapters.reduce((sum, chapter) => sum + Number(chapter.pageCount || chapter.pages?.length || 0), 0);
+  const imported = series.importedChapterCount || series.chapters.filter(hasReadableChapter).length;
+  const pages = series.pageCount || series.chapters.reduce((sum, chapter) => sum + Number(chapter.pageCount || chapter.pages?.length || 0), 0);
   return `
     <article class="series-card">
       <a class="series-cover" data-link href="/truyen/${series.slug}">
-        ${series.coverUrl ? `<img loading="lazy" src="${escapeAttr(series.coverUrl)}" alt="${escapeAttr(series.title)}">` : '<span>No cover</span>'}
+        ${renderCoverImage(series, 'No cover')}
       </a>
       <div class="series-card-copy">
         <h3><a data-link href="/truyen/${series.slug}">${escapeHtml(series.title)}</a></h3>
@@ -183,15 +612,18 @@ function renderSeriesCard(series) {
   `;
 }
 
-async function renderSeriesDetail(slug) {
+async function renderSeriesDetailLegacy(slug) {
+  stopReaderRuntime();
   const series = await fetchJson(`/api/series/${encodeURIComponent(slug)}`);
   sendEvent('pageview', { seriesSlug: series.slug });
-  const imported = series.chapters.filter((chapter) => chapter.pages?.length || chapter.imported);
+  const imported = series.chapters.filter(hasReadableChapter);
+  const user = loadUserSession();
+  const following = user ? isFollowingSeries(series.id, { user }) : false;
   app.innerHTML = `
     <main class="site-shell">
       ${renderTopbar()}
       <section class="series-detail">
-        <div class="detail-cover">${series.coverUrl ? `<img src="${escapeAttr(series.coverUrl)}" alt="${escapeAttr(series.title)}">` : '<span>No cover</span>'}</div>
+        <div class="detail-cover">${renderCoverImage(series, 'No cover', 'decoding="async"')}</div>
         <div class="detail-copy">
           <div class="tag-row">${(series.tags || []).map((tag) => `<a data-link href="/the-loai/${tag.slug}">${escapeHtml(tag.name)}</a>`).join('')}</div>
           <h2>${escapeHtml(series.title)}</h2>
@@ -203,19 +635,57 @@ async function renderSeriesDetail(slug) {
           </div>
           <div class="detail-actions">
             <button class="primary-btn" data-read="${series.id}">Đọc ngay</button>
-            ${imported[0] ? `<a class="ghost-btn" data-link href="/truyen/${series.slug}/${imported[0].slug}">Chapter đầu</a>` : ''}
+            ${imported[0] ? `<a class="ghost-btn" data-link href="/truyen/${series.slug}/${chapterHrefSegment(imported[0])}">Chapter đầu</a>` : ''}
           </div>
         </div>
       </section>
+      ${renderSeriesContinueCard(series)}
       <section class="chapter-panel">
         <h2 class="section-title">Danh sách chapter</h2>
         <div class="chapter-list-inline">
-          ${series.chapters.map((chapter) => `
-            <a data-link href="/truyen/${series.slug}/${chapter.slug}" class="${chapter.pages?.length ? '' : 'disabled'}">
-              <span>${escapeHtml(chapter.title || chapter.label)}</span>
-              <small>${chapter.pageCount || chapter.pages?.length || 0} ảnh</small>
-            </a>
-          `).join('')}
+          ${series.chapters.map((chapter) => renderChapterListItem(series, chapter)).join('')}
+        </div>
+      </section>
+    </main>
+  `;
+  bindReadButtons();
+}
+
+async function renderSeriesDetail(slug) {
+  stopReaderRuntime();
+  const series = await fetchJson(`/api/series/${encodeURIComponent(slug)}`);
+  sendEvent('pageview', { seriesSlug: series.slug });
+  const imported = series.chapters.filter(hasReadableChapter);
+  const user = loadUserSession();
+  const following = user ? isFollowingSeries(series.id, { user }) : false;
+  app.innerHTML = `
+    <main class="site-shell">
+      ${renderTopbar()}
+      <section class="series-detail">
+        <div class="detail-cover">${renderCoverImage(series, 'No cover', 'decoding="async"')}</div>
+        <div class="detail-copy">
+          <div class="tag-row">${(series.tags || []).map((tag) => `<a data-link href="/the-loai/${tag.slug}">${escapeHtml(tag.name)}</a>`).join('')}</div>
+          <h2>${escapeHtml(series.title)}</h2>
+          <p>${escapeHtml(series.description || 'Truyện đã cache về máy, sẵn sàng đọc liên tục và lưu vị trí trên trình duyệt.')}</p>
+          <div class="metric-strip">
+            <span>${series.stats?.views || 0} views</span>
+            <span>${imported.length}/${series.chapters.length} chapter public</span>
+            <span>${series.stats?.readDepth || 0}% read depth</span>
+          </div>
+          <div class="detail-actions">
+            <button class="primary-btn" data-read="${series.id}">Đọc ngay</button>
+            ${imported[0] ? `<a class="ghost-btn" data-link href="/truyen/${series.slug}/${chapterHrefSegment(imported[0])}">Chapter đầu</a>` : ''}
+            ${user
+              ? `<button class="ghost-btn follow-btn ${following ? 'active' : ''}" type="button" data-follow-series="${escapeAttr(series.id)}">${following ? 'Bỏ theo dõi' : 'Theo dõi'}</button>`
+              : '<a class="ghost-btn" data-link href="#/login">Đăng nhập để theo dõi</a>'}
+          </div>
+        </div>
+      </section>
+      ${renderSeriesContinueCard(series)}
+      <section class="chapter-panel">
+        <h2 class="section-title">Danh sách chapter</h2>
+        <div class="chapter-list-inline">
+          ${series.chapters.map((chapter) => renderChapterListItem(series, chapter)).join('')}
         </div>
       </section>
     </main>
@@ -224,6 +694,7 @@ async function renderSeriesDetail(slug) {
 }
 
 async function renderTagPage(tagSlug) {
+  stopReaderRuntime();
   const page = await fetchJson(`/api/tags/${encodeURIComponent(tagSlug)}`);
   app.innerHTML = `
     <main class="site-shell">
@@ -239,178 +710,246 @@ async function renderTagPage(tagSlug) {
   sendEvent('pageview', {});
 }
 
-async function renderAdmin() {
-  const catalog = await loadCatalog();
+function renderUserAuth() {
+  stopReaderRuntime();
+  const user = loadUserSession();
   app.innerHTML = `
-    <main class="site-shell admin-shell">
+    <main class="site-shell">
       ${renderTopbar()}
-      <section class="admin-grid">
-        <form class="import-panel admin-panel" data-import-form>
-          <h2>Crawl truyện</h2>
-          <input name="url" required placeholder="Dán URL truyện..." value="https://truyenqqko.com/truyen-tranh/manh-nhat-lich-su-5968" />
-          <select name="maxChapters" aria-label="Số chapter tải trước">
-            <option value="1">1 chapter</option>
-            <option value="2">2 chapter</option>
-            <option value="3" selected>3 chapter</option>
-            <option value="5">5 chapter</option>
-            <option value="0">Tất cả chapter</option>
-          </select>
-          <select name="maxPages" aria-label="Số ảnh mỗi chapter">
-            <option value="0" selected>Tất cả ảnh</option>
-            <option value="8">8 ảnh/chapter</option>
-            <option value="20">20 ảnh/chapter</option>
-          </select>
-          <button class="primary-btn" type="submit">Crawl</button>
+      <section class="auth-card">
+        <form class="auth-panel" data-user-login-form>
+          <h2>${user ? 'Đổi tài khoản đọc' : 'Đăng nhập / đăng ký nhanh'}</h2>
+          <p>Nhập tên hoặc email một lần để lưu danh sách theo dõi trên trình duyệt này.</p>
+          <input name="identifier" required placeholder="Tên hoặc email" value="${escapeAttr(user?.identifier || '')}" autocomplete="username" />
+          <button class="primary-btn" type="submit">Tiếp tục đọc truyện</button>
+          <span class="status-line" data-status></span>
         </form>
-        <div class="status-line" data-status></div>
-      </section>
-      <section class="admin-list">
-        <h2 class="section-title">CMS truyện</h2>
-        ${catalog.series.length ? catalog.series.map(renderAdminSeriesForm).join('') : '<div class="empty-state">Chưa có truyện để quản lý.</div>'}
       </section>
     </main>
   `;
-  app.querySelector('[data-import-form]').addEventListener('submit', handleImport);
-  app.querySelectorAll('[data-admin-series]').forEach((form) => form.addEventListener('submit', handleAdminSave));
+  app.querySelector('[data-user-login-form]').addEventListener('submit', handleUserLogin);
 }
 
-function renderAdminSeriesForm(series) {
-  return `
-    <form class="admin-series-card" data-admin-series="${series.id}">
-      <div>
-        <strong>${escapeHtml(series.title)}</strong>
-        <span>${escapeHtml(series.sourceMappings?.[0]?.sourceUrl || series.sourceUrl || '')}</span>
-      </div>
-      <input name="title" value="${escapeAttr(series.title)}" aria-label="Tên truyện" />
-      <input name="slug" value="${escapeAttr(series.slug)}" aria-label="Slug" />
-      <input name="aliases" value="${escapeAttr((series.aliases || []).join(', '))}" aria-label="Alias" placeholder="Alias, cách nhau bằng dấu phẩy" />
-      <input name="tags" value="${escapeAttr((series.tags || []).map((tag) => tag.name || tag).join(', '))}" aria-label="Tags" placeholder="Tags" />
-      <textarea name="description" aria-label="Mô tả" placeholder="Mô tả SEO">${escapeHtml(series.description || '')}</textarea>
-      <select name="status" aria-label="Trạng thái">
-        <option value="public" ${series.status === 'public' ? 'selected' : ''}>Public</option>
-        <option value="draft" ${series.status === 'draft' ? 'selected' : ''}>Draft</option>
-      </select>
-      <label class="toggle-row"><input type="checkbox" name="scheduleEnabled" ${series.crawlSchedule?.enabled ? 'checked' : ''}> Crawl định kỳ</label>
-      <input name="intervalHours" type="number" min="1" value="${escapeAttr(series.crawlSchedule?.intervalHours || 24)}" aria-label="Chu kỳ giờ" />
-      <button class="primary-btn" type="submit">Lưu CMS</button>
-    </form>
-  `;
-}
-
-async function handleAdminSave(event) {
+async function handleUserLogin(event) {
   event.preventDefault();
   const form = event.currentTarget;
-  const formData = new FormData(form);
-  const payload = {
-    title: formData.get('title'),
-    slug: formData.get('slug'),
-    aliases: splitList(formData.get('aliases')),
-    tags: splitList(formData.get('tags')),
-    description: formData.get('description'),
-    status: formData.get('status'),
-    crawlSchedule: {
-      enabled: formData.get('scheduleEnabled') === 'on',
-      intervalHours: Number(formData.get('intervalHours') || 24)
-    }
-  };
-  await fetchJson(`/api/admin/series/${encodeURIComponent(form.dataset.adminSeries)}`, {
-    method: 'PATCH',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  const status = app.querySelector('[data-status]');
-  if (status) status.textContent = 'Đã lưu CMS và lịch crawl.';
-  await renderAdmin();
-}
-
-async function handleImport(event) {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const status = app.querySelector('[data-status]');
   const button = form.querySelector('button[type="submit"]');
+  const status = form.querySelector('[data-status]');
   const formData = new FormData(form);
-  status.className = 'status-line';
-  status.textContent = 'Đang tạo job crawl...';
-  button.disabled = true;
-  button.textContent = 'Đang crawl';
-
+  setControlPending(button);
+  if (status) status.textContent = 'Đang lưu tài khoản...';
   try {
-    const { job, reused } = await fetchJson('/api/admin/import-jobs', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        url: formData.get('url'),
-        maxChapters: Number(formData.get('maxChapters')),
-        maxPages: Number(formData.get('maxPages'))
-      })
-    });
-    if (reused) status.textContent = 'URL này đang có job chạy, đang theo dõi job cũ...';
-    await pollImportJob(job.id, status);
+    loginOrRegisterUser(formData.get('identifier'));
+    history.pushState({}, '', '/');
+    await route();
   } catch (error) {
-    status.className = 'status-line error';
-    status.textContent = error.message;
-  } finally {
-    button.disabled = false;
-    button.textContent = 'Crawl';
-  }
-}
-
-async function pollImportJob(jobId, status) {
-  while (true) {
-    const job = await fetchJson(`/api/admin/import-jobs/${encodeURIComponent(jobId)}`);
-    renderImportProgress(status, job);
-    if (job.status === 'completed') {
-      await loadCatalog();
-      await new Promise((resolve) => setTimeout(resolve, 650));
-      location.hash = `#/read/${encodeURIComponent(job.series.id)}`;
-      return job.series;
+    if (status) {
+      status.className = 'status-line error';
+      status.textContent = error.message;
     }
-    if (job.status === 'failed') throw new Error(job.error || job.progress?.message || 'Import thất bại.');
-    await new Promise((resolve) => setTimeout(resolve, 900));
+  } finally {
+    clearControlPending();
   }
 }
 
-function renderImportProgress(status, job) {
-  const progress = job.progress || {};
-  const chapterTotal = Number(progress.totalChapters || 0);
-  const chapterDone = Number(progress.processedChapters || 0);
-  const imageTotal = Number(progress.totalImages || 0);
-  const imageDone = Number(progress.downloadedImages || 0);
-  const chapterPercent = chapterTotal ? chapterDone / chapterTotal : 0;
-  const imagePercent = imageTotal ? imageDone / imageTotal : 0;
-  const percent = Math.round((chapterPercent * 0.45 + imagePercent * 0.55) * 100);
-  status.className = `status-line import-progress ${job.status === 'failed' ? 'error' : ''}`;
-  status.innerHTML = `
-    <div class="progress-copy">
-      <strong>${escapeHtml(progress.message || 'Đang import...')}</strong>
-      <span>${escapeHtml(progress.currentChapterLabel || progress.phase || '')}</span>
-    </div>
-    <div class="crawl-meter" aria-label="Tiến độ crawl">
-      <div style="width:${Math.max(4, Math.min(100, percent))}%"></div>
-    </div>
-    <div class="progress-grid">
-      <span>Phase: ${escapeHtml(progress.phase || job.status)}</span>
-      <span>Chapter: ${chapterDone}/${chapterTotal || '?'}</span>
-      <span>Ảnh: ${imageDone}/${imageTotal || '?'}</span>
-      <span>Trạng thái: ${escapeHtml(job.status)}</span>
-    </div>
+async function renderFollowingPage() {
+  stopReaderRuntime();
+  const user = loadUserSession();
+  if (!user) {
+    app.innerHTML = `
+      <main class="site-shell">
+        ${renderTopbar()}
+        <section class="page-heading">
+          <h2>Theo dõi</h2>
+          <p>Đăng nhập để lưu truyện theo dõi.</p>
+          <a class="primary-btn inline-action" data-link href="#/login">Đăng nhập để theo dõi</a>
+        </section>
+      </main>
+    `;
+    return;
+  }
+
+  const catalog = await loadCatalog();
+  const ids = loadFollowedSeriesIds({ user });
+  const lookup = new Map((catalog.series || []).map((series) => [series.id, series]));
+  const followed = ids.map((id) => lookup.get(id)).filter(Boolean);
+  app.innerHTML = `
+    <main class="site-shell">
+      ${renderTopbar()}
+      <section class="page-heading">
+        <h2>Truyện đang theo dõi</h2>
+        <p>${followed.length} bộ truyện đã lưu cho ${escapeHtml(user.displayName)}.</p>
+      </section>
+      ${renderRail('Danh sách theo dõi', followed)}
+    </main>
   `;
+  bindReadButtons();
+  sendEvent('pageview', { page: 'following' });
+}
+
+async function renderHistoryPage() {
+  stopReaderRuntime();
+  const catalog = await loadCatalog();
+  const ids = loadReadingHistory();
+  const lookup = new Map((catalog.series || []).map((series) => [series.id, series]));
+  const rows = ids
+    .map((id) => lookup.get(id))
+    .filter(Boolean)
+    .map((series) => ({ series, progress: loadProgress(series.id) }));
+
+  app.innerHTML = `
+    <main class="site-shell">
+      ${renderTopbar()}
+      <section class="page-heading">
+        <h2>Lịch sử đọc</h2>
+        <p>Mở lại đúng chapter và vị trí đọc gần nhất trên máy này.</p>
+      </section>
+      ${renderContinueShelf(rows, null)}
+    </main>
+  `;
+  bindReadButtons();
+  bindContinueSlider();
+  sendEvent('pageview', { page: 'history' });
+}
+
+async function renderExplorePage({ mode = 'search', tagSlug = '' } = {}) {
+  stopReaderRuntime();
+  const catalog = await loadCatalog();
+  if (mode === 'search' && state.searchQuery && !state.filters.query) state.filters.query = state.searchQuery;
+  if (tagSlug) state.filters.tag = tagSlug;
+  const seriesList = catalog.series || [];
+  const tags = buildTagOptions(seriesList);
+  const filters = {
+    ...state.filters,
+    query: mode === 'search' ? state.filters.query : state.filters.query,
+    tag: state.filters.tag || 'all'
+  };
+  const results = applySeriesFilters(seriesList, filters);
+  const title = mode === 'genres' ? 'Thể loại' : 'Tìm kiếm truyện';
+  const subtitle = mode === 'genres'
+    ? 'Lọc theo thể loại, trạng thái cache và số chapter để tìm bộ đọc liền mạch.'
+    : 'Tìm theo tên, slug, alias hoặc tag; kết quả được lọc trực tiếp từ thư viện.';
+
+  app.innerHTML = `
+    <main class="site-shell">
+      ${renderTopbar()}
+      <section class="page-heading">
+        <h2>${title}</h2>
+        <p>${subtitle}</p>
+      </section>
+      ${renderFilterPanel(filters, tags)}
+      <section class="tab-summary">
+        <strong>${results.length}</strong>
+        <span>kết quả phù hợp</span>
+      </section>
+      ${renderRail('Danh sách truyện', results)}
+    </main>
+  `;
+  bindExploreFilters(mode);
+  bindReadButtons();
+  sendEvent('pageview', { page: mode });
+}
+
+function renderFilterPanel(filters, tags) {
+  return `
+    <section class="filter-panel">
+      <label>
+        <span>Từ khóa</span>
+        <input data-filter-field="query" value="${escapeAttr(filters.query || '')}" placeholder="Nhập tên truyện..." />
+      </label>
+      <label>
+        <span>Thể loại</span>
+        <select data-filter-field="tag">
+          <option value="all">Tất cả thể loại</option>
+          ${tags.map((tag) => `<option value="${escapeAttr(tag.slug)}" ${filters.tag === tag.slug ? 'selected' : ''}>${escapeHtml(tag.name)} (${tag.count})</option>`).join('')}
+        </select>
+      </label>
+      <label>
+        <span>Trạng thái</span>
+        <select data-filter-field="status">
+          <option value="all" ${filters.status === 'all' ? 'selected' : ''}>Tất cả</option>
+          <option value="readable" ${filters.status === 'readable' ? 'selected' : ''}>Đã có ảnh đọc</option>
+          <option value="complete" ${filters.status === 'complete' ? 'selected' : ''}>Đủ chapter cache</option>
+          <option value="unreadable" ${filters.status === 'unreadable' ? 'selected' : ''}>Chưa có ảnh</option>
+        </select>
+      </label>
+      <label>
+        <span>Sắp xếp</span>
+        <select data-filter-field="sort">
+          <option value="updated" ${filters.sort === 'updated' ? 'selected' : ''}>Mới cập nhật</option>
+          <option value="popular" ${filters.sort === 'popular' ? 'selected' : ''}>Phổ biến</option>
+          <option value="chapters" ${filters.sort === 'chapters' ? 'selected' : ''}>Nhiều chapter</option>
+          <option value="title" ${filters.sort === 'title' ? 'selected' : ''}>Tên A-Z</option>
+        </select>
+      </label>
+      <button class="ghost-btn" type="button" data-filter-reset>Đặt lại</button>
+    </section>
+  `;
+}
+
+function bindExploreFilters(mode) {
+  app.querySelectorAll('[data-filter-field]').forEach((field) => {
+    const update = throttle(() => {
+      state.filters[field.dataset.filterField] = field.value.trim();
+      renderExplorePage({ mode });
+    }, field.tagName === 'INPUT' ? 300 : 0);
+    field.addEventListener(field.tagName === 'INPUT' ? 'input' : 'change', update);
+  });
+  app.querySelector('[data-filter-reset]')?.addEventListener('click', () => {
+    state.filters = { query: '', tag: 'all', status: 'all', sort: 'updated' };
+    renderExplorePage({ mode });
+  });
+}
+
+function handleFollowToggle(button) {
+  const user = loadUserSession();
+  if (!user) {
+    history.pushState({}, '', '#/login');
+    route();
+    return;
+  }
+  try {
+    const result = toggleFollowSeries(button.dataset.followSeries, { user });
+    button.classList.toggle('active', result.following);
+    button.textContent = result.following ? 'Bỏ theo dõi' : 'Theo dõi';
+  } catch (error) {
+    button.textContent = error.message;
+  }
+}
+
+function renderStatusSelect(name, value) {
+  const options = [
+    ['public', 'Public'],
+    ['draft', 'Draft'],
+    ['removed', 'Removed']
+  ];
+  return `<select name="${name}">${options.map(([key, label]) => `<option value="${key}" ${value === key ? 'selected' : ''}>${label}</option>`).join('')}</select>`;
 }
 
 async function renderReader(seriesId) {
-  state.series = await fetchJson(`/api/series/${encodeURIComponent(seriesId)}`);
-  prepareReader(loadProgress(state.series.id));
+  const series = await fetchJson(`/api/series/${encodeURIComponent(seriesId)}`);
+  const saved = loadProgress(series.id);
+  const plan = createResumeLoadPlan(readableChapters(series), saved);
+  const target = readableChapters(series).find((chapter) => chapter.id === plan.currentChapterId) || readableChapters(series)[0];
+  state.series = series;
+  if (target) {
+    applyReaderPayload(await loadReaderChapter(series.slug, chapterHrefSegment(target)), { reset: true, currentChapterId: target.id });
+  } else {
+    state.readerChapters = [];
+  }
+  prepareReader({ chapterId: target?.id || saved?.chapterId });
   drawReader();
+  state.restoringProgress = shouldRestoreProgress(saved);
   attachReaderObservers();
-  restoreScroll(loadProgress(state.series.id));
+  restoreScroll(saved);
   sendEvent('pageview', { seriesSlug: state.series.slug });
 }
 
 async function renderReaderFromSlug(seriesSlug, chapterSlug) {
-  const { series, chapter } = await fetchJson(`/api/series/${encodeURIComponent(seriesSlug)}/chapters/${encodeURIComponent(chapterSlug)}`);
-  state.series = series;
+  const payload = await loadReaderChapter(seriesSlug, chapterSlug);
+  const { series, chapter } = payload;
+  applyReaderPayload(payload, { reset: true, currentChapterId: chapter.id });
   prepareReader({ chapterId: chapter.id });
-  ensureChapterLoaded(chapter.id);
   drawReader();
   attachReaderObservers();
   requestAnimationFrame(() => {
@@ -419,31 +958,121 @@ async function renderReaderFromSlug(seriesSlug, chapterSlug) {
   sendEvent('pageview', { seriesSlug: state.series.slug, chapterSlug: chapter.slug });
 }
 
+async function loadReaderChapter(seriesSlug, chapterSlug) {
+  try {
+    return await fetchJson(`/api/series/${encodeURIComponent(seriesSlug)}/chapters/${encodeURIComponent(chapterSlug)}?window=1`);
+  } catch (error) {
+    const series = await fetchJson(`/api/series/${encodeURIComponent(seriesSlug)}`);
+    const chapter = findChapterByRoute(series.chapters, chapterSlug);
+    if (chapter && hasReadableChapter(chapter)) {
+      return await fetchJson(`/api/series/${encodeURIComponent(series.slug)}/chapters/${chapterHrefSegment(chapter)}?window=1`);
+    }
+    const fallback = nearestReadableChapter(series.chapters, chapter);
+    if (fallback) {
+      history.replaceState({}, '', `/truyen/${series.slug}/${chapterHrefSegment(fallback)}`);
+      return await fetchJson(`/api/series/${encodeURIComponent(series.slug)}/chapters/${chapterHrefSegment(fallback)}?window=1`);
+    }
+    throw error;
+  }
+}
+
+function applyReaderPayload(payload, { reset = false, currentChapterId = '' } = {}) {
+  state.series = payload.series;
+  const incoming = (payload.chapters?.length ? payload.chapters : [payload.chapter]).filter(Boolean);
+  const added = reset ? incoming : findNewReaderChapters(state.readerChapters, incoming);
+  state.readerChapters = reset ? incoming : mergeChapters(state.readerChapters, incoming);
+  state.currentChapterId = resolveReaderCurrentChapterId({
+    requestedId: currentChapterId,
+    currentId: state.currentChapterId,
+    payloadChapterId: payload.chapter?.id,
+    firstLoadedId: state.readerChapters[0]?.id
+  });
+  state.loadedChapterCount = state.readerChapters.length;
+  return { incoming, added };
+}
+
+function mergeChapters(existing = [], incoming = []) {
+  return mergeReaderChapters(existing, incoming, readableChapters());
+}
+
+function findChapterByRoute(chapters = [], chapterSlug = '') {
+  const target = String(chapterSlug || '').trim();
+  const normalizedTarget = normalizeSearchText(target);
+  return chapters.find((chapter) => {
+    const candidates = [
+      chapter.id,
+      chapter.slug,
+      chapter.label,
+      chapter.title
+    ].filter(Boolean);
+    return candidates.some((candidate) => (
+      String(candidate) === target || normalizeSearchText(candidate) === normalizedTarget
+    ));
+  }) || null;
+}
+
+function nearestReadableChapter(chapters = [], chapter = null) {
+  const readable = chapters.filter(hasReadableChapter);
+  if (!readable.length) return null;
+  if (!chapter) return readable[0];
+  const sourceOrder = Number(chapter.sourceOrder);
+  if (!Number.isFinite(sourceOrder)) return readable[0];
+  return [...readable].reverse().find((item) => Number(item.sourceOrder) <= sourceOrder) || readable[0];
+}
+
+function renderSeriesContinueCard(series) {
+  const progress = loadProgress(series.id);
+  if (!progress?.chapterId) return '';
+  const { chapter, percent } = resolveContinueChapterProgress(series, progress);
+  if (!chapter) return '';
+  return `
+    <section class="series-continue-card">
+      <div>
+        <strong>Đang đọc dở</strong>
+        <span>${escapeHtml(chapter.label || chapter.title || 'Chapter')} - ${percent}% đã đọc</span>
+      </div>
+      <button class="primary-btn" type="button" data-read="${escapeAttr(series.id)}">Đọc tiếp</button>
+    </section>
+  `;
+}
+
+function renderChapterListItem(series, chapter) {
+  const count = chapter.pageCount || chapter.pages?.length || 0;
+  const label = `
+    <span>${escapeHtml(chapter.title || chapter.label)}</span>
+    <small>${count ? `${count} ảnh` : 'Chưa cache'}</small>
+  `;
+  if (!hasReadableChapter(chapter)) {
+    return `<span class="chapter-list-item disabled" aria-disabled="true">${label}</span>`;
+  }
+  return `<a class="chapter-list-item" data-link href="/truyen/${series.slug}/${chapterHrefSegment(chapter)}">${label}</a>`;
+}
+
 function prepareReader(saved) {
-  state.loadedChapterCount = Math.min(2, importedChapters().length || 1);
-  state.currentChapterId = importedChapters()[0]?.id || state.series.chapters[0]?.id || '';
+  const plan = createResumeLoadPlan(readableChapters(), saved);
+  state.loadedChapterCount = state.readerChapters.length || plan.loadedChapterCount;
+  state.currentChapterId = plan.currentChapterId || state.series.chapters[0]?.id || '';
   state.drawerOpen = false;
-  if (saved?.chapterId) state.currentChapterId = saved.chapterId;
 }
 
 function drawReader() {
-  const chapters = importedChapters();
-  const visibleChapters = chapters.slice(0, state.loadedChapterCount);
+  const visibleChapters = state.readerChapters;
+  const hasNext = Boolean(nextSummaryAfterLastLoaded());
   app.innerHTML = `
-    <main class="reader">
-      <div class="progress-bar"></div>
+    <main class="reader" data-reader-page-count="${countReaderPages(visibleChapters)}">
       <header class="reader-toolbar">
+        <a class="reader-logo" data-link href="/" title="Về trang chủ">${renderBrandLogo({ compact: true })}</a>
         <button class="icon-btn" title="Quay lại" data-back>${icon.back}</button>
         <div class="reader-title">
           <strong>${escapeHtml(state.series.title)}</strong>
           <span data-current-label>${escapeHtml(currentChapter()?.label || 'Chưa có chapter')}</span>
         </div>
-        <button class="ghost-btn" data-continue>Đọc tiếp</button>
-        <button class="icon-btn" title="Danh sách chapter" data-open-drawer>${icon.menu}</button>
+        <button class="reader-continue-btn" data-continue>Đọc tiếp</button>
+        <button class="icon-btn reader-menu-btn" title="Danh sách chapter" data-open-drawer>${icon.menu}</button>
       </header>
       <section class="chapter-stream">
         ${visibleChapters.map(renderChapter).join('')}
-        <div class="loader-row" data-load-more>${state.loadedChapterCount < chapters.length ? 'Đang nối chapter tiếp theo...' : 'Đã hết phần đã import'}</div>
+        <div class="loader-row" data-load-more>${hasNext ? 'Đang nối chapter tiếp theo...' : 'Đã hết phần đã import'}</div>
       </section>
       <div data-drawer-root></div>
     </main>
@@ -455,26 +1084,84 @@ function drawReader() {
     route();
   });
   app.querySelector('[data-open-drawer]').addEventListener('click', () => {
+    showReaderToolbar({ persist: true });
     state.drawerOpen = true;
     renderDrawer();
   });
   app.querySelector('[data-continue]').addEventListener('click', () => {
+    showReaderToolbar();
     const progress = loadProgress(state.series.id);
-    window.scrollTo({ top: progress?.scrollY || 0, behavior: 'smooth' });
+    window.scrollTo({ top: resolveSavedScrollTop(progress), behavior: 'smooth' });
   });
   renderDrawer();
 }
 
+function appendReaderChapters(chapters = []) {
+  const stream = app.querySelector('.chapter-stream');
+  const loader = app.querySelector('[data-load-more]');
+  if (!stream || !loader || !chapters.length) {
+    updateLoadMoreLabel();
+    return;
+  }
+
+  const previousScrollY = window.scrollY;
+  const html = chapters
+    .map((chapter) => renderChapter(chapter, state.readerChapters.findIndex((item) => item.id === chapter.id)))
+    .join('');
+  loader.insertAdjacentHTML('beforebegin', html);
+  app.querySelector('.reader')?.setAttribute('data-reader-page-count', String(countReaderPages(state.readerChapters)));
+  updateLoadMoreLabel();
+  attachReaderObservers();
+  window.scrollTo({ top: previousScrollY, behavior: 'instant' });
+}
+
+function updateLoadMoreLabel() {
+  const loader = app.querySelector('[data-load-more]');
+  if (!loader) return;
+  loader.textContent = nextSummaryAfterLastLoaded()
+    ? 'Đang nối chapter tiếp theo...'
+    : 'Đã hết phần đã import';
+}
+
+function renderReaderChapterFooter(chapter) {
+  const chapters = readableChapters();
+  const index = chapters.findIndex((item) => item.id === chapter.id);
+  const next = index >= 0 ? chapters[index + 1] : null;
+  return `
+    <footer class="reader-chapter-actions">
+      <a class="ghost-btn" data-link href="/truyen/${state.series.slug}">Chi tiết truyện</a>
+      <a class="ghost-btn" data-link href="#/history">Lịch sử</a>
+      <a class="ghost-btn" href="${escapeAttr(getDonateUrl())}" target="_blank" rel="noopener" data-donate-click="reader">Donate</a>
+      ${next ? `<a class="primary-btn" data-link href="/truyen/${state.series.slug}/${chapterHrefSegment(next)}">Chapter tiếp</a>` : '<span>Đã tới chapter mới nhất đã publish.</span>'}
+    </footer>
+  `;
+}
+
 function renderChapter(chapter, index) {
+  const pages = chapter.pages || [];
   return `
     <article class="chapter-block" data-chapter-id="${chapter.id}">
-      ${index > 0 ? '<section class="ad-slot reader-ad" data-ad-slot="chapter-break">AdSense chapter break</section>' : ''}
+      ${renderReaderAdBreak(index)}
       <div class="chapter-heading">${escapeHtml(chapter.label)}</div>
-      ${chapter.pages.length ? chapter.pages.map((page) => `
-        <img class="page-image" loading="lazy" decoding="async" data-page-index="${page.order}" src="${page.imageUrl}" alt="${escapeHtml(chapter.label)} trang ${Number(page.order) + 1}" />
-      `).join('') : '<div class="page-missing">Chapter này chưa có ảnh trong cache. Crawl thêm để đọc tiếp.</div>'}
+      ${pages.length ? pages.map((page, pagePosition) => {
+        const imageIndex = readerImageIndex(index, pagePosition);
+        const eager = imageIndex < READER_EAGER_IMAGE_COUNT;
+        const width = Number(page.width || 900);
+        const height = Number(page.height || 1300);
+        return `
+        <img class="page-image" loading="${eager ? 'eager' : 'lazy'}" fetchpriority="${imageIndex < 4 ? 'high' : 'auto'}" decoding="async" data-reader-image data-reader-src="${escapeAttr(page.imageUrl)}" data-reader-image-index="${imageIndex}" data-page-index="${page.order}" src="${escapeAttr(page.imageUrl)}" width="${width}" height="${height}" alt="${escapeHtml(chapter.label)} trang ${Number(page.order) + 1}" />
+      `;
+      }).join('') : '<div class=\"page-missing\">Chapter này chưa có ảnh trong cache. Crawl thêm để đọc tiếp.</div>'}
     </article>
   `;
+}
+
+function readerImageIndex(chapterPosition, pagePosition) {
+  let index = pagePosition;
+  for (let i = 0; i < chapterPosition; i += 1) {
+    index += state.readerChapters[i]?.pages?.length || 0;
+  }
+  return index;
 }
 
 function renderDrawer() {
@@ -484,7 +1171,7 @@ function renderDrawer() {
     root.innerHTML = '';
     return;
   }
-  const chapters = importedChapters();
+  const chapters = readableChapters();
   const progress = loadProgress(state.series.id);
   root.innerHTML = `
     <div class="drawer-backdrop" data-close-drawer></div>
@@ -510,75 +1197,379 @@ function renderDrawer() {
     node.addEventListener('click', () => {
       state.drawerOpen = false;
       renderDrawer();
+      scheduleReaderToolbarHide();
     });
   });
   root.querySelectorAll('[data-jump]').forEach((button) => {
     button.addEventListener('click', () => {
-      ensureChapterLoaded(button.dataset.jump);
+      const chapter = readableChapters().find((item) => item.id === button.dataset.jump);
       state.drawerOpen = false;
-      drawReader();
-      requestAnimationFrame(() => {
-        document.querySelector(`[data-chapter-id="${CSS.escape(button.dataset.jump)}"]`)?.scrollIntoView({ behavior: 'smooth' });
-      });
+      if (!chapter) return;
+      history.pushState({}, '', `/truyen/${state.series.slug}/${chapterHrefSegment(chapter)}`);
+      route();
     });
   });
 }
 
 function attachReaderObservers() {
-  const chapters = importedChapters();
+  stopReaderRuntime();
   const chapterObserver = new IntersectionObserver((entries) => {
     const visible = entries
       .filter((entry) => entry.isIntersecting)
       .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
     if (!visible) return;
     state.currentChapterId = visible.target.dataset.chapterId;
-    const label = app.querySelector('[data-current-label]');
-    if (label) label.textContent = currentChapter()?.label || '';
-    renderDrawer();
+    syncCurrentChapterLabel();
   }, { threshold: [0.25, 0.55] });
 
   document.querySelectorAll('[data-chapter-id]').forEach((chapter) => chapterObserver.observe(chapter));
+  state.readerObservers.push(chapterObserver);
 
   const loader = document.querySelector('[data-load-more]');
-  const loadObserver = new IntersectionObserver((entries) => {
+  const loadObserver = new IntersectionObserver(async (entries) => {
     if (!entries.some((entry) => entry.isIntersecting)) return;
-    if (state.loadedChapterCount >= chapters.length) return;
-    state.loadedChapterCount = Math.min(state.loadedChapterCount + 1, chapters.length);
-    drawReader();
-    attachReaderObservers();
+    await loadNextReaderChapter();
   }, { rootMargin: '900px 0px' });
   if (loader) loadObserver.observe(loader);
+  state.readerObservers.push(loadObserver);
 
   const adObserver = new IntersectionObserver((entries) => {
     entries.filter((entry) => entry.isIntersecting).forEach((entry) => {
       if (entry.target.dataset.reported) return;
       entry.target.dataset.reported = 'true';
-      sendEvent('ad_view', { seriesSlug: state.series.slug, chapterId: state.currentChapterId });
+      sendEvent('ad_impression', { placement: entry.target.dataset.adSlot || 'reader', seriesSlug: state.series.slug, chapterId: state.currentChapterId });
     });
   }, { threshold: 0.5 });
   document.querySelectorAll('[data-ad-slot]').forEach((slot) => adObserver.observe(slot));
+  state.readerObservers.push(adObserver);
 
-  window.addEventListener('scroll', throttle(saveReaderProgress, 400), { passive: true });
+  const imageObserver = new IntersectionObserver((entries) => {
+    entries
+      .filter((entry) => entry.isIntersecting)
+      .forEach((entry) => warmReaderImage(entry.target));
+  }, { rootMargin: READER_PRELOAD_ROOT_MARGIN, threshold: 0 });
+  document.querySelectorAll('[data-reader-image]').forEach((image) => imageObserver.observe(image));
+  document.querySelectorAll('[data-reader-image]').forEach((image) => {
+    image.addEventListener('load', stabilizeReaderAfterImageLoad, { once: true });
+  });
+  state.readerObservers.push(imageObserver);
+
+  state.readerScrollHandler = throttle(() => {
+    updateReaderToolbarFromScroll();
+    warmReaderImagesAroundViewport();
+    releaseFarBehindReaderImages();
+    saveReaderProgress();
+  }, 260);
+  window.addEventListener('scroll', state.readerScrollHandler, { passive: true });
+  startReaderToolbarControls();
+  startReaderScrollSync();
+  warmReaderImagesAroundViewport({ initial: true });
+  releaseFarBehindReaderImages();
   saveReaderProgress();
+}
+
+function startReaderToolbarControls() {
+  showReaderToolbar({ persist: true });
+  state.readerLastScrollY = window.scrollY;
+  state.readerInteractionHandler = () => showReaderToolbar({ holdMs: 1600 });
+  ['mousedown', 'click', 'keydown'].forEach((eventName) => {
+    window.addEventListener(eventName, state.readerInteractionHandler, { passive: true });
+  });
+  scheduleReaderToolbarHide(2600);
+}
+
+function showReaderToolbar({ persist = false, holdMs = 0 } = {}) {
+  const reader = document.querySelector('.reader');
+  if (!reader) return;
+  if (holdMs > 0) state.readerToolbarRevealUntil = Math.max(state.readerToolbarRevealUntil, Date.now() + holdMs);
+  reader.classList.remove('is-toolbar-hidden');
+  reader.classList.add('is-toolbar-visible');
+  if (!persist) scheduleReaderToolbarHide(Math.max(1800, holdMs + 400));
+}
+
+function hideReaderToolbar() {
+  if (Date.now() < state.readerToolbarRevealUntil) return;
+  if (state.drawerOpen || window.scrollY <= 120) return;
+  const reader = document.querySelector('.reader');
+  if (!reader) return;
+  reader.classList.add('is-toolbar-hidden');
+  reader.classList.remove('is-toolbar-visible');
+}
+
+function scheduleReaderToolbarHide(delay = 1800) {
+  window.clearTimeout(state.readerToolbarTimer);
+  state.readerToolbarTimer = window.setTimeout(() => {
+    hideReaderToolbar();
+  }, delay);
+}
+
+function updateReaderToolbarFromScroll() {
+  const reader = document.querySelector('.reader');
+  if (!reader) return;
+  const scrollY = window.scrollY;
+  const visible = resolveReaderToolbarVisibility({
+    scrollY,
+    lastScrollY: state.readerLastScrollY,
+    currentVisible: !reader.classList.contains('is-toolbar-hidden'),
+    forceShow: Date.now() < state.readerToolbarRevealUntil,
+    drawerOpen: state.drawerOpen
+  });
+  state.readerLastScrollY = scrollY;
+  if (visible) showReaderToolbar({ holdMs: scrollY > 120 ? 2200 : 0 });
+  else hideReaderToolbar();
+}
+
+function warmReaderImagesAroundViewport({ initial = false } = {}) {
+  const images = [...document.querySelectorAll('[data-reader-image]')];
+  if (!images.length) return;
+
+  const firstAheadIndex = images.findIndex((image) => image.getBoundingClientRect().bottom >= -window.innerHeight);
+  const startIndex = Math.max(0, firstAheadIndex < 0 ? 0 : firstAheadIndex);
+  const warmCount = initial
+    ? Math.max(READER_EAGER_IMAGE_COUNT, READER_PRELOAD_AHEAD_COUNT)
+    : READER_PRELOAD_AHEAD_COUNT;
+
+  images
+    .slice(startIndex, startIndex + warmCount)
+    .forEach((image, index) => warmReaderImage(image, { highPriority: initial && index < 8 }));
+}
+
+function warmReaderImage(image, { highPriority = false } = {}) {
+  if (!image) return;
+  const source = image.dataset.readerSrc || image.currentSrc || image.src;
+  if (!source) return;
+  restoreReaderImageElement(image, source, READER_BLANK_IMAGE);
+  image.loading = 'eager';
+  if ('fetchPriority' in image) image.fetchPriority = highPriority ? 'high' : 'auto';
+  preloadImageUrl(source);
+}
+
+function preloadImageUrl(src) {
+  if (!src || preloadedImageUrls.has(src)) return;
+  preloadedImageUrls.add(src);
+  const image = new Image();
+  image.decoding = 'async';
+  image.src = src;
+}
+
+function releaseFarBehindReaderImages() {
+  document.querySelectorAll('[data-reader-image]').forEach((image) => {
+    const rect = image.getBoundingClientRect();
+    if (rect.bottom >= -READER_IMAGE_RELEASE_BEHIND_PX) return;
+    releaseReaderImageElement(image, READER_BLANK_IMAGE);
+  });
 }
 
 function saveReaderProgress() {
   if (!state.series || state.saving) return;
   const doc = document.documentElement;
   const progressPercent = (window.scrollY / Math.max(1, doc.scrollHeight - window.innerHeight)) * 100;
+  updateCurrentChapterFromScroll();
   const current = currentChapter();
-  if (!current) return;
+  if (!canSaveReaderProgress({
+    isRestoring: state.restoringProgress,
+    hasSeries: Boolean(state.series),
+    hasChapter: Boolean(current),
+    hasReader: Boolean(document.querySelector('.reader'))
+  })) return;
   const currentImage = document.elementFromPoint(window.innerWidth / 2, Math.min(window.innerHeight - 120, 360));
   const pageIndex = Number(currentImage?.dataset?.pageIndex || 0);
+  const chapterNode = document.querySelector(`[data-chapter-id="${CSS.escape(current.id)}"]`);
+  const chapterTop = chapterNode ? window.scrollY + chapterNode.getBoundingClientRect().top : 0;
+  const chapterScrollY = Math.max(0, Math.round(window.scrollY - chapterTop));
   saveProgress(createProgressSnapshot({
     seriesId: state.series.id,
     chapterId: current.id,
     pageIndex,
     scrollY: Math.round(window.scrollY),
+    chapterScrollY,
     progressPercent
   }));
+  if (progressPercent >= 70) prefetchNextReaderChapter();
   sendReadDepth(progressPercent);
-  document.documentElement.style.setProperty('--reader-progress', `${Math.max(2, Math.round(progressPercent))}%`);
+}
+
+function updateCurrentChapterFromScroll() {
+  const viewportElement = document
+    .elementFromPoint(window.innerWidth / 2, Math.min(window.innerHeight * 0.42, 360))
+    ?.closest?.('[data-chapter-id]');
+  if (viewportElement?.dataset?.chapterId && viewportElement.dataset.chapterId !== state.currentChapterId) {
+    state.currentChapterId = viewportElement.dataset.chapterId;
+    syncCurrentChapterLabel();
+    return;
+  }
+
+  const chapterLayouts = [...document.querySelectorAll('[data-chapter-id]')].map((node) => {
+    const rect = node.getBoundingClientRect();
+    return {
+      id: node.dataset.chapterId,
+      top: window.scrollY + rect.top,
+      bottom: window.scrollY + rect.bottom
+    };
+  });
+  const viewportY = window.scrollY + Math.min(window.innerHeight * 0.42, 360);
+  const nextChapterId = findCurrentChapterFromLayout(chapterLayouts, viewportY, state.currentChapterId);
+  if (nextChapterId && nextChapterId !== state.currentChapterId) {
+    state.currentChapterId = nextChapterId;
+    syncCurrentChapterLabel();
+  }
+}
+
+function syncCurrentChapterLabel() {
+  const label = app.querySelector('[data-current-label]');
+  if (label) label.textContent = currentChapter()?.label || '';
+  renderDrawer();
+}
+
+function startReaderScrollSync() {
+  stopReaderScrollTimer();
+  state.readerScrollTimer = window.setInterval(() => {
+    if (!document.querySelector('.reader')) {
+      stopReaderRuntime();
+      return;
+    }
+    updateCurrentChapterFromScroll();
+  }, 180);
+}
+
+function stopReaderScrollTimer() {
+  if (!state.readerScrollTimer) return;
+  window.clearInterval(state.readerScrollTimer);
+  state.readerScrollTimer = null;
+}
+
+function stopReaderRuntime() {
+  stopReaderScrollTimer();
+  window.clearTimeout(state.readerToolbarTimer);
+  window.clearTimeout(state.readerRestoreTimer);
+  state.readerToolbarTimer = null;
+  state.readerRestoreTimer = null;
+  state.readerRestoreSnapshot = null;
+  state.readerRestoreAttempts = 0;
+  state.readerToolbarRevealUntil = 0;
+  if (state.readerInteractionHandler) {
+    ['mousedown', 'click', 'keydown'].forEach((eventName) => {
+      window.removeEventListener(eventName, state.readerInteractionHandler);
+    });
+    state.readerInteractionHandler = null;
+  }
+  if (state.readerScrollHandler) {
+    window.removeEventListener('scroll', state.readerScrollHandler);
+    state.readerScrollHandler = null;
+  }
+  state.readerObservers.forEach((observer) => observer.disconnect());
+  state.readerObservers = [];
+}
+
+function flushReaderProgress() {
+  if (!document.querySelector('.reader')) return;
+  saveReaderProgress();
+}
+
+function startNavigation(label = 'Đang tải...') {
+  const token = ++navigation.token;
+  window.clearTimeout(navigation.timer);
+  navigation.timer = window.setTimeout(() => {
+    document.body.classList.add('app-loading');
+    getGlobalLoader().querySelector('[data-loading-label]').textContent = label;
+  }, 80);
+  return token;
+}
+
+function stopNavigation(token) {
+  if (token !== navigation.token) return;
+  window.clearTimeout(navigation.timer);
+  navigation.timer = null;
+  document.body.classList.remove('app-loading');
+  clearControlPending();
+}
+
+function getGlobalLoader() {
+  let loader = document.querySelector('[data-global-loading]');
+  if (loader) return loader;
+  loader = document.createElement('div');
+  loader.className = 'global-loading';
+  loader.setAttribute('data-global-loading', '');
+  loader.setAttribute('role', 'status');
+  loader.setAttribute('aria-live', 'polite');
+  loader.innerHTML = '<span class="loader-dot"></span><span data-loading-label>Đang tải...</span>';
+  document.body.append(loader);
+  return loader;
+}
+
+function setControlPending(element) {
+  clearControlPending();
+  if (!element) return;
+  navigation.activeElement = element;
+  element.classList.add('is-pending');
+  element.setAttribute('aria-busy', 'true');
+  if ('disabled' in element) element.disabled = true;
+}
+
+function clearControlPending() {
+  const element = navigation.activeElement;
+  if (!element) return;
+  element.classList.remove('is-pending');
+  element.removeAttribute('aria-busy');
+  if ('disabled' in element) element.disabled = false;
+  navigation.activeElement = null;
+}
+
+function prefetchTarget(element) {
+  if (!element) return;
+  if (element.dataset.read) {
+    fetchJson(`/api/series/${encodeURIComponent(element.dataset.read)}`).catch(() => {});
+    return;
+  }
+  const href = element.getAttribute('href') || '';
+  const chapterMatch = href.match(/^\/truyen\/([^/]+)\/([^/]+)$/);
+  if (chapterMatch) {
+    fetchJson(`/api/series/${encodeURIComponent(chapterMatch[1])}/chapters/${encodeURIComponent(chapterMatch[2])}?window=1`).catch(() => {});
+    return;
+  }
+  const seriesMatch = href.match(/^\/truyen\/([^/]+)$/);
+  if (seriesMatch) {
+    fetchJson(`/api/series/${encodeURIComponent(seriesMatch[1])}`).catch(() => {});
+    return;
+  }
+  const tagMatch = href.match(/^\/the-loai\/([^/]+)$/);
+  if (tagMatch) {
+    fetchJson(`/api/tags/${encodeURIComponent(tagMatch[1])}`).catch(() => {});
+    return;
+  }
+  if (href === '/' || href === '') {
+    loadHome().catch(() => {});
+  }
+}
+
+function uniqueSeriesById(seriesList) {
+  const seen = new Set();
+  return seriesList.filter((series) => {
+    if (!series?.id || seen.has(series.id)) return false;
+    seen.add(series.id);
+    return true;
+  });
+}
+
+function normalizeSearchText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function searchLocalCatalog(seriesList, query) {
+  const needle = normalizeSearchText(query);
+  if (!needle) return [];
+  return seriesList.filter((series) => {
+    const haystack = normalizeSearchText([
+      series.title,
+      series.slug,
+      ...(series.aliases || []),
+      ...(series.tags || []).map((tag) => tag.name || tag.slug || tag)
+    ].join(' '));
+    return haystack.includes(needle);
+  });
 }
 
 const sendReadDepth = throttle((progressPercent) => {
@@ -589,45 +1580,150 @@ const sendReadDepth = throttle((progressPercent) => {
   });
 }, 5000);
 
-function restoreScroll(saved) {
-  if (saved?.scrollY) {
-    setTimeout(() => window.scrollTo({ top: saved.scrollY, behavior: 'instant' }), 120);
+const saveProgressAfterImageLoad = throttle(() => {
+  if (!document.querySelector('.reader') || state.restoringProgress) return;
+  saveReaderProgress();
+}, 900);
+
+function resolveSavedScrollTop(saved) {
+  return resolveRestoreScrollTop(saved, {
+    scrollY: window.scrollY,
+    findChapterNode: (chapterId) => document.querySelector(`[data-chapter-id="${CSS.escape(chapterId)}"]`)
+  });
+}
+
+function applySavedScrollPosition(saved) {
+  window.scrollTo({ top: resolveSavedScrollTop(saved), behavior: 'instant' });
+}
+
+function scheduleReaderRestore(delay = 120) {
+  window.clearTimeout(state.readerRestoreTimer);
+  state.readerRestoreTimer = window.setTimeout(() => {
+    const saved = state.readerRestoreSnapshot;
+    if (!saved) {
+      state.restoringProgress = false;
+      return;
+    }
+    applySavedScrollPosition(saved);
+    state.readerRestoreAttempts += 1;
+    if (state.readerRestoreAttempts < 5) {
+      scheduleReaderRestore(Math.min(720, 120 + (state.readerRestoreAttempts * 160)));
+      return;
+    }
+    state.restoringProgress = false;
+    state.readerRestoreSnapshot = null;
+    saveReaderProgress();
+  }, delay);
+}
+
+function stabilizeReaderAfterImageLoad() {
+  if (state.restoringProgress && state.readerRestoreSnapshot) {
+    scheduleReaderRestore(80);
+    return;
   }
+  saveProgressAfterImageLoad();
+}
+
+function restoreScroll(saved) {
+  if (saved?.chapterScrollY || saved?.scrollY) {
+    state.readerRestoreSnapshot = saved;
+    state.readerRestoreAttempts = 0;
+    scheduleReaderRestore(120);
+    return;
+  }
+  state.restoringProgress = false;
 }
 
 function bindReadButtons() {
   app.querySelectorAll('[data-read]').forEach((button) => {
     button.addEventListener('click', () => {
+      setControlPending(button);
       location.hash = `#/read/${encodeURIComponent(button.dataset.read)}`;
     });
   });
 }
 
-function ensureChapterLoaded(chapterId) {
-  const index = importedChapters().findIndex((chapter) => chapter.id === chapterId);
-  if (index >= 0) state.loadedChapterCount = Math.max(state.loadedChapterCount, index + 1);
+function bindContinueSlider() {
+  const list = app.querySelector('[data-continue-list]');
+  if (!list) return;
+  const scrollByPage = (direction) => {
+    const amount = Math.max(280, Math.round(list.clientWidth * 0.9));
+    const maxScroll = Math.max(0, list.scrollWidth - list.clientWidth);
+    const targetLeft = Math.max(0, Math.min(maxScroll, list.scrollLeft + direction * amount));
+    list.scrollTo({ left: targetLeft, behavior: 'smooth' });
+  };
+  app.querySelector('[data-continue-prev]')?.addEventListener('click', (event) => {
+    event.preventDefault();
+    scrollByPage(-1);
+  });
+  app.querySelector('[data-continue-next]')?.addEventListener('click', (event) => {
+    event.preventDefault();
+    scrollByPage(1);
+  });
+}
+
+async function loadNextReaderChapter() {
+  if (state.loadingNextChapter) return;
+  const lastLoaded = state.readerChapters[state.readerChapters.length - 1];
+  const next = nextSummaryAfterLastLoaded();
+  if (!lastLoaded || !next) return;
+
+  state.loadingNextChapter = true;
+  try {
+    const payload = await fetchJson(`/api/series/${encodeURIComponent(state.series.slug)}/chapters/${chapterHrefSegment(lastLoaded)}/next?window=0`);
+    const { added } = applyReaderPayload(payload);
+    appendReaderChapters(added);
+    releaseFarBehindReaderImages();
+    prefetchNextReaderChapter();
+  } finally {
+    state.loadingNextChapter = false;
+  }
 }
 
 function importedChapters() {
-  return (state.series?.chapters || []).filter((chapter) => chapter.pages?.length || chapter.imported);
+  return readableChapters();
+}
+
+function readableChapters(series = state.series) {
+  return getReadableChapters(series);
+}
+
+function nextSummaryAfterLastLoaded() {
+  return getNextSummaryAfterLastLoaded({
+    readerChapters: state.readerChapters,
+    series: state.series
+  });
+}
+
+function chapterIndex(chapterId) {
+  return getChapterIndex(state.series, chapterId);
+}
+
+function prefetchNextReaderChapter() {
+  const lastLoaded = state.readerChapters[state.readerChapters.length - 1];
+  if (!lastLoaded || !nextSummaryAfterLastLoaded()) return;
+  fetchJson(`/api/series/${encodeURIComponent(state.series.slug)}/chapters/${chapterHrefSegment(lastLoaded)}/next?window=0`).catch(() => {});
 }
 
 function currentChapter() {
-  return (state.series?.chapters || []).find((chapter) => chapter.id === state.currentChapterId) || importedChapters()[0];
+  return getCurrentReaderChapter({
+    readerChapters: state.readerChapters,
+    currentChapterId: state.currentChapterId,
+    series: state.series
+  });
+}
+
+function chapterHrefSegment(chapter = {}) {
+  return routeChapterHrefSegment(chapter);
 }
 
 function sendEvent(type, payload = {}) {
-  const body = {
+  sendAnalyticsEvent({
+    apiUrl,
     type,
-    url: location.href,
-    at: new Date().toISOString(),
-    ...payload
-  };
-  fetch('/api/events', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body)
-  }).catch(() => {});
+    payload,
+    href: location.href
+  });
 }
 
 function splitList(value) {
@@ -637,36 +1733,3 @@ function splitList(value) {
     .filter(Boolean);
 }
 
-function throttle(fn, wait) {
-  let last = 0;
-  let timeout = null;
-  return (...args) => {
-    const now = Date.now();
-    const remaining = wait - (now - last);
-    if (remaining <= 0) {
-      clearTimeout(timeout);
-      timeout = null;
-      last = now;
-      fn(...args);
-    } else if (!timeout) {
-      timeout = setTimeout(() => {
-        last = Date.now();
-        timeout = null;
-        fn(...args);
-      }, remaining);
-    }
-  };
-}
-
-function escapeHtml(value = '') {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function escapeAttr(value = '') {
-  return escapeHtml(value);
-}
