@@ -1070,6 +1070,12 @@ function drawReader() {
         <button class="reader-continue-btn" data-continue>Đọc tiếp</button>
         <button class="icon-btn reader-menu-btn" title="Danh sách chapter" data-open-drawer>${icon.menu}</button>
       </header>
+      <nav class="reader-bottom-bar" aria-label="Điều hướng đọc truyện">
+        <button class="reader-bottom-action" type="button" data-continue><span>Đọc tiếp</span></button>
+        <button class="reader-bottom-action" type="button" data-open-drawer><span>Chapter</span></button>
+        <a class="reader-bottom-action" data-link href="/truyen/${state.series.slug}"><span>Truyện</span></a>
+        <a class="reader-bottom-action" href="${escapeAttr(getDonateUrl())}" target="_blank" rel="noopener" data-donate-click="reader-menu"><span>Ủng hộ</span></a>
+      </nav>
       <section class="chapter-stream">
         ${visibleChapters.map(renderChapter).join('')}
         <div class="loader-row" data-load-more>${hasNext ? 'Đang nối chapter tiếp theo...' : 'Đã hết phần đã import'}</div>
@@ -1083,16 +1089,16 @@ function drawReader() {
     location.hash = '';
     route();
   });
-  app.querySelector('[data-open-drawer]').addEventListener('click', () => {
+  app.querySelectorAll('[data-open-drawer]').forEach((button) => button.addEventListener('click', () => {
     showReaderToolbar({ persist: true });
     state.drawerOpen = true;
     renderDrawer();
-  });
-  app.querySelector('[data-continue]').addEventListener('click', () => {
+  }));
+  app.querySelectorAll('[data-continue]').forEach((button) => button.addEventListener('click', () => {
     showReaderToolbar();
     const progress = loadProgress(state.series.id);
     window.scrollTo({ top: resolveSavedScrollTop(progress), behavior: 'smooth' });
-  });
+  }));
   renderDrawer();
 }
 
@@ -1271,11 +1277,29 @@ function attachReaderObservers() {
 function startReaderToolbarControls() {
   showReaderToolbar({ persist: true });
   state.readerLastScrollY = window.scrollY;
-  state.readerInteractionHandler = () => showReaderToolbar({ holdMs: 1600 });
-  ['mousedown', 'click', 'keydown'].forEach((eventName) => {
+  state.readerInteractionHandler = (event) => {
+    if (event.type === 'click' && event.target?.closest?.('.chapter-stream')) return;
+    showReaderToolbar({ holdMs: 1800 });
+  };
+  ['click', 'keydown'].forEach((eventName) => {
     window.addEventListener(eventName, state.readerInteractionHandler, { passive: true });
   });
+  state.readerTapHandler = (event) => {
+    if (event.target?.closest?.('a, button, input, select, textarea, [data-ad-slot]')) return;
+    toggleReaderToolbarFromTap();
+  };
+  document.querySelector('.chapter-stream')?.addEventListener('click', state.readerTapHandler, { passive: true });
   scheduleReaderToolbarHide(2600);
+}
+
+function toggleReaderToolbarFromTap() {
+  const reader = document.querySelector('.reader');
+  if (!reader) return;
+  if (reader.classList.contains('is-toolbar-hidden')) {
+    showReaderToolbar({ holdMs: 2600 });
+    return;
+  }
+  if (window.scrollY > 120 && !state.drawerOpen) hideReaderToolbar();
 }
 
 function showReaderToolbar({ persist = false, holdMs = 0 } = {}) {
@@ -1453,6 +1477,16 @@ function stopReaderRuntime() {
     });
     state.readerInteractionHandler = null;
   }
+  if (state.readerTapHandler) {
+    document.querySelector('.chapter-stream')?.removeEventListener('click', state.readerTapHandler);
+    state.readerTapHandler = null;
+  }
+  if (state.readerRestoreCancelHandler) {
+    ['touchstart', 'wheel', 'pointerdown'].forEach((eventName) => {
+      window.removeEventListener(eventName, state.readerRestoreCancelHandler);
+    });
+    state.readerRestoreCancelHandler = null;
+  }
   if (state.readerScrollHandler) {
     window.removeEventListener('scroll', state.readerScrollHandler);
     state.readerScrollHandler = null;
@@ -1604,6 +1638,18 @@ function scheduleReaderRestore(delay = 120) {
       state.restoringProgress = false;
       return;
     }
+    if (state.readerRestoreInterrupted) {
+      state.restoringProgress = false;
+      state.readerRestoreSnapshot = null;
+      if (state.readerRestoreCancelHandler) {
+        ['touchstart', 'wheel', 'pointerdown'].forEach((eventName) => {
+          window.removeEventListener(eventName, state.readerRestoreCancelHandler);
+        });
+        state.readerRestoreCancelHandler = null;
+      }
+      saveReaderProgress();
+      return;
+    }
     applySavedScrollPosition(saved);
     state.readerRestoreAttempts += 1;
     if (state.readerRestoreAttempts < 5) {
@@ -1612,6 +1658,12 @@ function scheduleReaderRestore(delay = 120) {
     }
     state.restoringProgress = false;
     state.readerRestoreSnapshot = null;
+    if (state.readerRestoreCancelHandler) {
+      ['touchstart', 'wheel', 'pointerdown'].forEach((eventName) => {
+        window.removeEventListener(eventName, state.readerRestoreCancelHandler);
+      });
+      state.readerRestoreCancelHandler = null;
+    }
     saveReaderProgress();
   }, delay);
 }
@@ -1628,6 +1680,13 @@ function restoreScroll(saved) {
   if (saved?.chapterScrollY || saved?.scrollY) {
     state.readerRestoreSnapshot = saved;
     state.readerRestoreAttempts = 0;
+    state.readerRestoreInterrupted = false;
+    state.readerRestoreCancelHandler = () => {
+      state.readerRestoreInterrupted = true;
+    };
+    ['touchstart', 'wheel', 'pointerdown'].forEach((eventName) => {
+      window.addEventListener(eventName, state.readerRestoreCancelHandler, { passive: true });
+    });
     scheduleReaderRestore(120);
     return;
   }

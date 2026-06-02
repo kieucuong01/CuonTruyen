@@ -3,7 +3,10 @@
   "short_name": "Cuộn Truyện",
   "description": "Đọc truyện tranh manhwa, manhua, manga online liền mạch, nhanh và tự lưu vị trí đọc.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
+  "orientation": "portrait-primary",
   "background_color": "#f4f6fb",
   "theme_color": "#ff8b2b",
   "icons": [

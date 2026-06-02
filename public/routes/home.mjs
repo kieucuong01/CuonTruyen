@@ -69,41 +69,53 @@ export function createHomeRoute({
     const updated = home.updated.length ? home.updated : homeSeries;
 
     app.innerHTML = `
-      <main class="site-shell home-shell">
+      <main class="site-shell home-shell app-home-shell">
         ${renderTopbar()}
-        <section class="home-heading">
-          <h2>Cuộn Truyện - Đọc truyện tranh manhwa, manhua online liền mạch</h2>
-          <p>Đọc liên tục, tự lưu vị trí và mở lại đúng chương đang đọc.</p>
-        </section>
-        ${renderMonetizationPanel('home')}
-        <section class="home-layout">
-          <div class="home-main">
-            ${renderContinueShelf(readingSeries, lastSeries)}
-            ${state.searchQuery ? renderRail('Kết quả tìm kiếm', results, 'compact') : ''}
-            ${renderTrendingSection(popular.slice(0, 5))}
-            ${renderUpdatedSection(updated)}
-            <section class="tag-cloud" id="genres">
-              <h2 class="section-title">Thể loại nổi bật</h2>
-              <div>${home.tags.length ? home.tags.map((tag) => `<a data-link href="/the-loai/${tag.slug}">${escapeHtml(tag.name)} <small>${tag.seriesCount}</small></a>`).join('') : '<span class="muted">Chưa có tag.</span>'}</div>
-            </section>
+        <section class="app-home-hero">
+          <div class="app-home-hero-copy">
+            <p class="eyebrow">Cuộn Truyện</p>
+            <h2>Đọc truyện mượt như app</h2>
+            <p>Manhwa, manhua, manga online. Tự lưu vị trí, mở lại đúng chương và đọc liền mạch trên điện thoại.</p>
           </div>
-          <aside class="popular-sidebar">
-            <section class="search-panel" id="search">
-              <div class="search-box">
-                ${icon.search}
-                <input data-search-input placeholder="Tìm kiếm" value="${escapeAttr(state.searchQuery)}" />
-              </div>
-            </section>
-            ${renderPopularSidebar(popular.slice(0, 10))}
-          </aside>
+          <div class="app-home-search" id="search">
+            ${icon.search}
+            <input data-search-input placeholder="Tìm truyện, tác giả, thể loại..." value="${escapeAttr(state.searchQuery)}" />
+          </div>
+          <div class="app-home-stats" aria-label="Thống kê nhanh">
+            <span><strong>${homeSeries.length}</strong><small>truyện</small></span>
+            <span><strong>${updated.length}</strong><small>mới cập nhật</small></span>
+            <span><strong>${home.tags.length}</strong><small>thể loại</small></span>
+          </div>
         </section>
+        <section class="app-quick-actions" aria-label="Lối tắt">
+          <a href="#continue-section"><strong>Đọc tiếp</strong><span>Quay lại truyện đang đọc</span></a>
+          <a href="#/history"><strong>Lịch sử</strong><span>Những truyện đã mở</span></a>
+          <a href="#/followed"><strong>Theo dõi</strong><span>Danh sách lưu local</span></a>
+        </section>
+        <section class="app-home-feed">
+          ${renderContinueShelf(readingSeries, lastSeries)}
+          ${state.searchQuery ? renderRail('Kết quả tìm kiếm', results, 'compact app-search-results') : ''}
+          ${renderTrendingSection(popular.slice(0, 8))}
+          ${renderUpdatedSection(updated)}
+          <section class="tag-cloud app-tag-cloud" id="genres">
+            <h2 class="section-title">Thể loại nổi bật</h2>
+            <div>${home.tags.length ? home.tags.map((tag) => `<a data-link href="/the-loai/${tag.slug}">${escapeHtml(tag.name)} <small>${tag.seriesCount}</small></a>`).join('') : '<span class="muted">Chưa có tag.</span>'}</div>
+          </section>
+          ${renderMonetizationPanel('home')}
+        </section>
+        <nav class="mobile-home-tabbar" aria-label="Điều hướng nhanh">
+          <a data-link href="/"><strong>Nhà</strong></a>
+          <a href="#continue-section"><strong>Đọc tiếp</strong></a>
+          <a href="#/history"><strong>Lịch sử</strong></a>
+          <a href="#search"><strong>Tìm</strong></a>
+        </nav>
       </main>
     `;
 
-    app.querySelector('[data-search-input]').addEventListener('input', throttle((event) => {
+    app.querySelectorAll('[data-search-input]').forEach((input) => input.addEventListener('input', throttle((event) => {
       state.searchQuery = event.target.value.trim();
       renderHome().then(() => reportVisibleAdSlots());
-    }, 350));
+    }, 350)));
     app.querySelector('.small-orange')?.addEventListener('click', () => {
       history.pushState({}, '', '#/search');
       route();
