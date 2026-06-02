@@ -20,7 +20,10 @@ export function createApiClient({
 
     const request = fetch(resolveUrl(url), options).then(async (response) => {
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Request failed');
+      if (!response.ok) {
+        const detail = data.detail && data.detail !== data.error ? `: ${data.detail}` : '';
+        throw new Error(`${data.error || 'Request failed'}${detail}`);
+      }
       return data;
     });
 

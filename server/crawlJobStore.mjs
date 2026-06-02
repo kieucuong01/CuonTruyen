@@ -19,7 +19,9 @@ import {
 } from './crawlQueue.mjs';
 
 const DEFAULT_JSON_QUEUE_PATH = path.join(IMPORT_ROOT, 'crawl-jobs.json');
+const JSON_READ_RETRY_COUNT = 3;
 let jsonWriteQueue = Promise.resolve();
+let lastJsonJobsSnapshot = [];
 
 export async function ensureCrawlQueueStorage() {
   if (usesPostgresStorage()) {
@@ -158,6 +160,7 @@ export async function updateImportJobProgress(id, patch = {}, { log = null, now 
 export async function completeImportJob(id, series, { now = new Date().toISOString() } = {}) {
   await ensureCrawlQueueStorage();
   const current = await getInternalJob(id);
+  const storedSeries = compactSeriesForJob(series);
   const totalSeries = Number(current?.progress?.totalSeries || 1);
   const seriesIndex = Number(current?.progress?.seriesIndex || 1);
   const importSummary = series?.importSummary || {};
@@ -191,15 +194,15 @@ export async function completeImportJob(id, series, { now = new Date().toISOStri
            last_error = null
        where id = $1
        returning *`,
-      [id, JSON.stringify({ series }), series.id, JSON.stringify(progressPatch), now]
+      [id, JSON.stringify({ series: storedSeries }), series.id, JSON.stringify(progressPatch), now]
     );
     return publicJob(jobFromRow(result.rows[0]));
   }
   return updateJsonJob(id, (job) => ({
     ...job,
     status: 'completed',
-    result: { series },
-    series,
+    result: { series: storedSeries },
+    series: storedSeries,
     error: null,
     progress: mergeProgress(job, progressPatch, now),
     finishedAt: now,
@@ -353,23 +356,48 @@ async function updateJsonJob(id, updater) {
 
 async function readJsonJobs() {
   await ensureCrawlQueueStorage();
-  try {
-    const value = JSON.parse(await fs.readFile(jsonQueuePath(), 'utf8'));
-    return Array.isArray(value.jobs) ? value.jobs : [];
-  } catch (error) {
-    if (error.code === 'ENOENT') return [];
-    throw error;
+  for (let attempt = 0; attempt <= JSON_READ_RETRY_COUNT; attempt += 1) {
+    try {
+      const value = JSON.parse(await fs.readFile(jsonQueuePath(), 'utf8'));
+      const jobs = Array.isArray(value.jobs) ? value.jobs : [];
+      lastJsonJobsSnapshot = jobs;
+      return jobs;
+    } catch (error) {
+      if (error.code === 'ENOENT') return [];
+      if (!(error instanceof SyntaxError)) throw error;
+      if (attempt < JSON_READ_RETRY_COUNT) {
+        await delay(25 * (attempt + 1));
+        continue;
+      }
+      if (lastJsonJobsSnapshot.length) return lastJsonJobsSnapshot;
+      throw error;
+    }
   }
+  return lastJsonJobsSnapshot;
 }
 
 function writeJsonJobs(jobs) {
   const pending = jsonWriteQueue.then(async () => {
+    const nextJobs = jobs.map(compactJobForStorage);
+    const queuePath = jsonQueuePath();
     await fs.mkdir(IMPORT_ROOT, { recursive: true });
-    await fs.mkdir(path.dirname(jsonQueuePath()), { recursive: true });
-    await fs.writeFile(jsonQueuePath(), `${JSON.stringify({ jobs }, null, 2)}\n`);
+    await fs.mkdir(path.dirname(queuePath), { recursive: true });
+    await writeJsonAtomic(queuePath, `${JSON.stringify({ jobs: nextJobs }, null, 2)}\n`);
+    lastJsonJobsSnapshot = nextJobs;
   });
   jsonWriteQueue = pending.catch(() => {});
   return pending;
+}
+
+async function writeJsonAtomic(filePath, contents) {
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    await fs.writeFile(tempPath, contents);
+    await fs.rename(tempPath, filePath);
+  } catch (error) {
+    await fs.rm(tempPath, { force: true }).catch(() => {});
+    throw error;
+  }
 }
 
 function jsonQueuePath() {
@@ -405,12 +433,45 @@ function jobFromRow(row) {
   };
 }
 
+function compactJobForStorage(job = {}) {
+  const series = compactSeriesForJob(job.series || job.result?.series);
+  return {
+    ...job,
+    result: job.result?.series ? { ...job.result, series } : job.result,
+    series: series || job.series || null
+  };
+}
+
+function compactSeriesForJob(series) {
+  if (!series) return null;
+  const chapters = Array.isArray(series.chapters) ? series.chapters : [];
+  return {
+    id: series.id,
+    title: series.title,
+    slug: series.slug,
+    sourceUrl: series.sourceUrl,
+    adapter: series.adapter,
+    status: series.status,
+    coverUrl: series.coverUrl,
+    thumbnailUrl: series.thumbnailUrl,
+    importSummary: series.importSummary || null,
+    chapterCount: Number(series.chapterCount ?? chapters.length ?? 0),
+    pageCount: Number(series.pageCount ?? chapters.reduce((sum, chapter) => (
+      sum + Number(chapter.pageCount ?? (Array.isArray(chapter.pages) ? chapter.pages.length : 0))
+    ), 0))
+  };
+}
+
 function jobLog(message, timestamp, level = 'info') {
   return {
     at: timestamp,
     level,
     message: typeof message === 'string' ? message : message?.message || JSON.stringify(message)
   };
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms || 0))));
 }
 
 function iso(value) {
