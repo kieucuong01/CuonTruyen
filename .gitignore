@@ -1,4 +1,5 @@
 .superpowers/
+.vercel/
 node_modules/
 dist/
 .runtime/
@@ -10,3 +11,5 @@ data/imports/
 .env
 .env.local
 .env.*.local
+
+.vercel
