@@ -6,6 +6,9 @@ Use this file as the first stop for any future AI agent. Keep it short; put deta
 
 ## Start Here
 
+- Token-efficient map for AI agents: `docs/agent-playbooks/agent-token-map.md`
+- Current deployment/storage state: `docs/agent-playbooks/current-deployment.md`
+- Vercel + Vietnix S3 publishing flow: `docs/agent-playbooks/vercel-s3-publishing.md`
 - Product and technical playbook: `docs/agent-playbooks/comic-reader.md`
 - Frontend map for AI agents: `docs/agent-playbooks/frontend-map.md`
 - Production-readiness playbook: `docs/agent-playbooks/production-readiness.md`
@@ -26,6 +29,9 @@ Run from the repo root:
 npm test
 npm run dev
 npm run worker:crawl
+npm run export:static-api
+npm run sync:s3:dry-run
+npm run sync:s3
 npm run smoke:import
 ```
 
@@ -42,7 +48,7 @@ $env:PORT='54533'; npm run dev
 - Local JSON catalog and image cache under `data/imports/` by default.
 - PostgreSQL catalog mode when `DATABASE_URL` or `POSTGRES_URL` is set.
 - Separate crawl worker process for durable import jobs.
-- Current preferred hosting mode before VPS: local machine runs crawler, API, and `/imports/*` image hosting.
+- Current preferred public hosting mode: Vercel serves the static frontend, Vietnix S3 serves `/imports/*` images and `/static-api/*` public JSON, and the local machine runs admin/crawler.
 - Browser reading history, follow list, and resume state in `localStorage`, with in-memory fallback for restricted storage.
 - Public SEO routes under `/truyen/:seriesSlug`, `/truyen/:seriesSlug/:chapterSlug`, `/the-loai/:tagSlug`, static policy pages, `/sitemap.xml`, and `/robots.txt`.
 - Admin/crawl/content review UI is in the SPA under `#/admin`.
@@ -62,19 +68,24 @@ $env:PORT='54533'; npm run dev
 ## Editing Rules For Agents
 
 - Do not delete or rewrite `data/imports/` unless the user explicitly asks. It can contain large local crawl output.
-- Do not assume images should move to Supabase Storage. The current owner preference is local/VPS disk storage.
+- Do not commit `.env`, `.env.local`, S3 credentials, Vercel project metadata, logs, `.runtime/`, or `data/imports/`.
+- Do not assume images should move to Supabase Storage. The current owner preference is Vietnix S3 Object Storage for public images, with local crawl/admin.
 - Do not revert unrelated local changes. This workspace is often dirty.
 - Prefer small patches that follow existing vanilla JS/Node patterns.
 - Add tests for crawler parsing, progress/resume, URL normalization, catalog merge behavior, moderation, and sitemap filtering when changing those surfaces.
 - After frontend behavior changes, verify on the exact local URL the user reports when browser tooling is available.
 - If the user reports a broken URL, test both the API endpoint and the rendered browser route.
+- For public Vercel issues, check `public/config.js`, `STATIC_API_BASE_URL`, and S3 public JSON before changing app logic.
 
 ## Verification Checklist
 
 Before saying a bug is fixed:
 
 - `node --check public\app.js` if `public/app.js` changed.
+- `node --check public\routes\home.mjs` or `public\routes\admin.mjs` if those route modules changed.
 - `npm test` for server/frontend logic tests.
+- `npm run export:static-api` after changing public catalog or static API export logic.
+- `npm run sync:s3:dry-run` before a real S3 sync.
 - Browser or HTTP smoke check for the target route:
   - Page is not blank.
   - No "Server error" empty state.

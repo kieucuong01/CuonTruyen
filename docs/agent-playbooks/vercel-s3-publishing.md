@@ -21,6 +21,32 @@ Vercel
 - No image storage
 ```
 
+## Current Live Defaults
+
+Current Vercel default domain:
+
+```text
+https://cuontruyen.vercel.app
+```
+
+Current Vietnix S3 public base:
+
+```text
+https://s3.vn-hcm-1.vietnix.cloud/cuontruyen
+```
+
+Current static API base:
+
+```text
+https://s3.vn-hcm-1.vietnix.cloud/cuontruyen/static-api
+```
+
+If a custom image domain is added later, replace the S3 public base with:
+
+```text
+https://img.cuontruyen.com
+```
+
 ## Required Secrets
 
 Put real values in `.env.local`:
@@ -32,6 +58,7 @@ S3_BUCKET=
 S3_ACCESS_KEY_ID=
 S3_SECRET_ACCESS_KEY=
 S3_PATH_STYLE=true
+S3_ACL=public-read
 S3_PUBLIC_BASE_URL=https://img.example.com
 PUBLIC_IMPORTS_BASE_URL=https://img.example.com
 ```
@@ -67,6 +94,8 @@ npm run sync:s3:dry-run
 npm run sync:s3
 ```
 
+Use `npm run sync:s3:force` only when you intentionally want to re-upload everything. Full image sync can take a long time because the current image library is tens of thousands of files.
+
 Dry-run is the safe default for `scripts/sync-vietnix-s3.mjs`. Use `npm run sync:s3` only after the dry-run count looks reasonable.
 
 ## Vercel Environment
@@ -98,3 +127,5 @@ public
 - If images are missing on Vercel, check `PUBLIC_IMPORTS_BASE_URL` during `export:static-api`.
 - If data is stale, check `STATIC_API_BASE_URL` and S3 cache headers.
 - If admin is needed from Vercel, expose a real backend API and set `API_BASE_URL`; otherwise keep admin local only.
+- Do not upload `data/imports/` to Vercel. `.vercelignore` excludes it.
+- Do not commit `.vercel/project.json`; `.gitignore` excludes `.vercel/`.

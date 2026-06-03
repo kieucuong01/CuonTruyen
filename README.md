@@ -268,13 +268,20 @@ Then inspect:
 Start with:
 
 - `AGENTS.md`
+- `docs/agent-playbooks/agent-token-map.md`
+- `docs/agent-playbooks/current-deployment.md`
 - `docs/agent-playbooks/comic-reader.md`
+- `docs/agent-playbooks/frontend-map.md`
+- `docs/agent-playbooks/vercel-s3-publishing.md`
 - `docs/agent-playbooks/production-readiness.md`
 
 Key rules:
 
 - Preserve continuous reading and "Doc tiep".
 - Do not delete cached imports/images.
+- Do not upload `data/imports/` to Vercel.
+- Do not commit `.env.local`, S3 credentials, logs, or Vercel metadata.
 - Keep source adapters modular.
 - Keep public APIs/sitemap filtered to `public` content only.
+- For public Vercel issues, check S3 static API and `public/config.js` before debugging the local backend.
 - Verify exact user-reported routes when debugging broken URLs.

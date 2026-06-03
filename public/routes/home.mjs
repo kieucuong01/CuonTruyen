@@ -1,19 +1,19 @@
-export const STATIC_INFO_PAGES = {
+﻿export const STATIC_INFO_PAGES = {
   '/gioi-thieu': {
-    title: 'Giới thiệu Cuộn Truyện',
-    body: 'Cuộn Truyện tập trung vào trải nghiệm đọc truyện tranh online mượt, nối chapter liên tục và tự lưu vị trí đọc trên trình duyệt.'
+    title: 'Giá»›i thiá»‡u Cuá»™n Truyá»‡n',
+    body: 'Cuá»™n Truyá»‡n táº­p trung vÃ o tráº£i nghiá»‡m Ä‘á»c truyá»‡n tranh online mÆ°á»£t, ná»‘i chapter liÃªn tá»¥c vÃ  tá»± lÆ°u vá»‹ trÃ­ Ä‘á»c trÃªn trÃ¬nh duyá»‡t.'
   },
   '/lien-he': {
-    title: 'Liên hệ',
-    body: 'Báo lỗi truyện, góp ý trải nghiệm đọc hoặc gửi yêu cầu xử lý nội dung để quản trị viên kiểm tra và ẩn nội dung khi cần.'
+    title: 'LiÃªn há»‡',
+    body: 'BÃ¡o lá»—i truyá»‡n, gÃ³p Ã½ tráº£i nghiá»‡m Ä‘á»c hoáº·c gá»­i yÃªu cáº§u xá»­ lÃ½ ná»™i dung Ä‘á»ƒ quáº£n trá»‹ viÃªn kiá»ƒm tra vÃ  áº©n ná»™i dung khi cáº§n.'
   },
   '/chinh-sach-noi-dung': {
-    title: 'Chính sách nội dung',
-    body: 'Quản trị viên có thể ẩn truyện hoặc chapter khỏi trang public và sitemap. Chỉ vận hành nguồn nội dung mà chủ sở hữu được phép sử dụng.'
+    title: 'ChÃ­nh sÃ¡ch ná»™i dung',
+    body: 'Quáº£n trá»‹ viÃªn cÃ³ thá»ƒ áº©n truyá»‡n hoáº·c chapter khá»i trang public vÃ  sitemap. Chá»‰ váº­n hÃ nh nguá»“n ná»™i dung mÃ  chá»§ sá»Ÿ há»¯u Ä‘Æ°á»£c phÃ©p sá»­ dá»¥ng.'
   },
   '/privacy': {
     title: 'Privacy',
-    body: 'Lịch sử đọc, danh sách theo dõi và vị trí đọc được lưu trên trình duyệt. Sự kiện đọc được dùng để cải thiện trải nghiệm sản phẩm.'
+    body: 'Lá»‹ch sá»­ Ä‘á»c, danh sÃ¡ch theo dÃµi vÃ  vá»‹ trÃ­ Ä‘á»c Ä‘Æ°á»£c lÆ°u trÃªn trÃ¬nh duyá»‡t. Sá»± kiá»‡n Ä‘á»c Ä‘Æ°á»£c dÃ¹ng Ä‘á»ƒ cáº£i thiá»‡n tráº£i nghiá»‡m sáº£n pháº©m.'
   }
 };
 
@@ -71,43 +71,44 @@ export function createHomeRoute({
     app.innerHTML = `
       <main class="site-shell home-shell app-home-shell">
         ${renderTopbar()}
+        ${renderDesktopComicPortal({ popular, updated, readingSeries, lastSeries })}
         <section class="app-home-hero">
           <div class="app-home-hero-copy">
-            <p class="eyebrow">Cuộn Truyện</p>
-            <h2>Đọc truyện mượt như app</h2>
-            <p>Manhwa, manhua, manga online. Tự lưu vị trí, mở lại đúng chương và đọc liền mạch trên điện thoại.</p>
+            <p class="eyebrow">Cuá»™n Truyá»‡n</p>
+            <h2>Äá»c truyá»‡n mÆ°á»£t nhÆ° app</h2>
+            <p>Manhwa, manhua, manga online. Tá»± lÆ°u vá»‹ trÃ­, má»Ÿ láº¡i Ä‘Ãºng chÆ°Æ¡ng vÃ  Ä‘á»c liá»n máº¡ch trÃªn Ä‘iá»‡n thoáº¡i.</p>
           </div>
           <div class="app-home-search" id="search">
             ${icon.search}
-            <input data-search-input placeholder="Tìm truyện, tác giả, thể loại..." value="${escapeAttr(state.searchQuery)}" />
+            <input data-search-input placeholder="TÃ¬m truyá»‡n, tÃ¡c giáº£, thá»ƒ loáº¡i..." value="${escapeAttr(state.searchQuery)}" />
           </div>
-          <div class="app-home-stats" aria-label="Thống kê nhanh">
-            <span><strong>${homeSeries.length}</strong><small>truyện</small></span>
-            <span><strong>${updated.length}</strong><small>mới cập nhật</small></span>
-            <span><strong>${home.tags.length}</strong><small>thể loại</small></span>
+          <div class="app-home-stats" aria-label="Thá»‘ng kÃª nhanh">
+            <span><strong>${homeSeries.length}</strong><small>truyá»‡n</small></span>
+            <span><strong>${updated.length}</strong><small>má»›i cáº­p nháº­t</small></span>
+            <span><strong>${home.tags.length}</strong><small>thá»ƒ loáº¡i</small></span>
           </div>
         </section>
-        <section class="app-quick-actions" aria-label="Lối tắt">
-          <a href="#continue-section"><strong>Đọc tiếp</strong><span>Quay lại truyện đang đọc</span></a>
-          <a href="#/history"><strong>Lịch sử</strong><span>Những truyện đã mở</span></a>
-          <a href="#/followed"><strong>Theo dõi</strong><span>Danh sách lưu local</span></a>
+        <section class="app-quick-actions" aria-label="Lá»‘i táº¯t">
+          <a href="#continue-section"><strong>Äá»c tiáº¿p</strong><span>Quay láº¡i truyá»‡n Ä‘ang Ä‘á»c</span></a>
+          <a href="#/history"><strong>Lá»‹ch sá»­</strong><span>Nhá»¯ng truyá»‡n Ä‘Ã£ má»Ÿ</span></a>
+          <a href="#/followed"><strong>Theo dÃµi</strong><span>Danh sÃ¡ch lÆ°u local</span></a>
         </section>
         <section class="app-home-feed">
           ${renderContinueShelf(readingSeries, lastSeries)}
-          ${state.searchQuery ? renderRail('Kết quả tìm kiếm', results, 'compact app-search-results') : ''}
+          ${state.searchQuery ? renderRail('Káº¿t quáº£ tÃ¬m kiáº¿m', results, 'compact app-search-results') : ''}
           ${renderTrendingSection(popular.slice(0, 8))}
           ${renderUpdatedSection(updated)}
           <section class="tag-cloud app-tag-cloud" id="genres">
-            <h2 class="section-title">Thể loại nổi bật</h2>
-            <div>${home.tags.length ? home.tags.map((tag) => `<a data-link href="/the-loai/${tag.slug}">${escapeHtml(tag.name)} <small>${tag.seriesCount}</small></a>`).join('') : '<span class="muted">Chưa có tag.</span>'}</div>
+            <h2 class="section-title">Thá»ƒ loáº¡i ná»•i báº­t</h2>
+            <div>${home.tags.length ? home.tags.map((tag) => `<a data-link href="/the-loai/${tag.slug}">${escapeHtml(tag.name)} <small>${tag.seriesCount}</small></a>`).join('') : '<span class="muted">ChÆ°a cÃ³ tag.</span>'}</div>
           </section>
           ${renderMonetizationPanel('home')}
         </section>
-        <nav class="mobile-home-tabbar" aria-label="Điều hướng nhanh">
-          <a data-link href="/"><strong>Nhà</strong></a>
-          <a href="#continue-section"><strong>Đọc tiếp</strong></a>
-          <a href="#/history"><strong>Lịch sử</strong></a>
-          <a href="#search"><strong>Tìm</strong></a>
+        <nav class="mobile-home-tabbar" aria-label="Äiá»u hÆ°á»›ng nhanh">
+          <a data-link href="/"><strong>NhÃ </strong></a>
+          <a href="#continue-section"><strong>Äá»c tiáº¿p</strong></a>
+          <a href="#/history"><strong>Lá»‹ch sá»­</strong></a>
+          <a href="#search"><strong>TÃ¬m</strong></a>
         </nav>
       </main>
     `;
@@ -126,12 +127,169 @@ export function createHomeRoute({
     reportVisibleAdSlots();
   }
 
+  function renderDesktopComicPortal({ popular = [], updated = [], readingSeries = [], lastSeries = null } = {}) {
+    const featured = lastSeries || popular[0] || updated[0];
+    const weeklyHot = popular[1] || updated[1] || featured;
+    const rankItems = uniqueSeriesById([...popular, ...updated]).slice(0, 6);
+    const latest = updated.slice(0, 4);
+    const stats = [
+      { value: popular.length || 0, label: 'đề cử hot' },
+      { value: updated.length || 0, label: 'vừa cập nhật' },
+      { value: readingSeries.length || 0, label: 'đang đọc' }
+    ];
+    return `
+      <section class="desktop-comic-portal" aria-label="Trang chủ truyện tranh desktop">
+        <div class="desktop-portal-heading">
+          <div>
+            <p class="eyebrow">Cuốn Truyện</p>
+            <h2>Đọc truyện tranh manga, manhwa, manhua online</h2>
+          </div>
+          <div class="desktop-portal-search" id="desktop-search">
+            ${icon.search}
+            <input data-search-input placeholder="Tìm kiếm truyện..." value="${escapeAttr(state.searchQuery)}" />
+          </div>
+        </div>
+        <div class="desktop-portal-grid">
+          <div class="desktop-portal-main">
+            ${renderDesktopFeature(featured, weeklyHot, stats)}
+            ${renderDesktopCommunity(latest)}
+          </div>
+          ${renderDesktopRankBoard(rankItems)}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderDesktopFeature(featured, weeklyHot, stats = []) {
+    if (!featured) {
+      return `
+        <section class="desktop-feature empty-state">
+          <h3>Chưa có truyện public</h3>
+          <p>Hãy crawl và publish truyện trong admin để hiển thị khu nổi bật.</p>
+        </section>
+      `;
+    }
+    const chapters = (featured.chapters || []).filter((chapter) => chapter.imported || chapter.pageCount > 0);
+    const firstChapter = chapters[0];
+    const cover = coverUrl(featured);
+    const hot = weeklyHot || featured;
+    const hotCover = coverUrl(hot);
+    return `
+      <section class="desktop-feature">
+        <a class="desktop-feature-copy" data-link href="/truyen/${escapeAttr(featured.slug)}">
+          <span class="feature-star">${Math.max(1, Math.min(9, chapters.length || 5))}</span>
+          <div>
+            <h3>${escapeHtml(featured.title)}</h3>
+            <p class="feature-tags">${renderInlineTags(featured)}</p>
+            <strong>SUMMARY</strong>
+            <p>${escapeHtml(featured.description || 'Đọc liền mạch, tự lưu vị trí và mở lại đúng chương đang đọc trên Cuốn Truyện.')}</p>
+            <small>Trạng thái: ${escapeHtml(featured.status === 'public' ? 'Đang phát hành' : 'Đang cập nhật')}</small>
+          </div>
+        </a>
+        <a class="desktop-feature-cover" data-link href="${firstChapter ? `/truyen/${escapeAttr(featured.slug)}/${escapeAttr(firstChapter.slug || firstChapter.id)}` : `/truyen/${escapeAttr(featured.slug)}`}">
+          ${cover ? `<img src="${escapeAttr(cover)}" alt="${escapeAttr(featured.title)}" loading="eager" />` : '<span>Cuốn Truyện</span>'}
+        </a>
+        <a class="desktop-week-card" data-link href="/truyen/${escapeAttr(hot.slug)}">
+          ${hotCover ? `<img src="${escapeAttr(hotCover)}" alt="" loading="lazy" />` : ''}
+          <span class="crown">♛</span>
+          <p>Truyện đang hot tuần này</p>
+          <h3>${escapeHtml(hot.title)}</h3>
+        </a>
+        <div class="desktop-feature-dots" aria-hidden="true">
+          ${Array.from({ length: 8 }, (_, index) => `<span class="${index === 5 ? 'active' : ''}"></span>`).join('')}
+        </div>
+        <div class="desktop-feature-stats">
+          ${stats.map((item) => `<span><strong>${item.value}</strong><small>${escapeHtml(item.label)}</small></span>`).join('')}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderDesktopRankBoard(items = []) {
+    return `
+      <aside class="desktop-rank-board" aria-label="Truyện phổ biến">
+        <div class="desktop-rank-head">
+          <h3>Truyện phổ biến</h3>
+          <div><button type="button">Tuần</button><button type="button">Tháng</button><button type="button">Tất cả</button></div>
+        </div>
+        <ol>
+          ${items.length ? items.map((series, index) => `
+            <li>
+              <span class="rank-index">${index + 1}</span>
+              <a class="rank-thumb" data-link href="/truyen/${escapeAttr(series.slug)}">
+                ${coverUrl(series) ? `<img src="${escapeAttr(coverUrl(series))}" alt="" loading="lazy" />` : '<span>CT</span>'}
+              </a>
+              <a class="rank-copy" data-link href="/truyen/${escapeAttr(series.slug)}">
+                <strong>${escapeHtml(series.title)}</strong>
+                <small>Thể loại: ${renderInlineTags(series) || 'Đang cập nhật'}</small>
+                <em>★★★★★ <span>${ratingFor(series, index)}</span></em>
+              </a>
+            </li>
+          `).join('') : '<li class="empty-state">Chưa có truyện phổ biến.</li>'}
+        </ol>
+      </aside>
+    `;
+  }
+
+  function renderDesktopCommunity(latest = []) {
+    const messages = [
+      {
+        name: 'Cuốn dây',
+        badge: 'ADMIN',
+        text: 'Lưu link này để không gián đoạn đọc truyện. Chapter mới sẽ được đồng bộ sau khi crawl local xong.'
+      },
+      {
+        name: 'Cuốn Truyện',
+        badge: 'BOT',
+        text: 'Website đọc truyện tranh mượt, ít làm phiền, ưu tiên đọc tiếp và ảnh liền mạch.'
+      },
+      ...latest.map((series) => ({
+        name: 'Mới cập nhật',
+        badge: '',
+        text: `${series.title} vừa có trong danh sách cập nhật.`
+      }))
+    ].slice(0, 6);
+    return `
+      <section class="desktop-community">
+        <div class="desktop-community-head">
+          <h3>Cuốn Lầu</h3>
+          <span>Không gian cập nhật nhanh cho độc giả</span>
+        </div>
+        <div class="desktop-community-list">
+          ${messages.map((item, index) => `
+            <article>
+              <span class="avatar">${escapeHtml(item.name.slice(0, 1))}</span>
+              <p><strong>${escapeHtml(item.name)}</strong>${item.badge ? `<mark>${escapeHtml(item.badge)}</mark>` : ''}<small>${index ? `${index + 1} giờ trước` : 'vừa xong'}</small><br>${escapeHtml(item.text)}</p>
+            </article>
+          `).join('')}
+        </div>
+      </section>
+    `;
+  }
+
+  function coverUrl(series = {}) {
+    return series.thumbnailUrl || series.coverThumbnailUrl || series.coverUrl || series.imageUrl || '';
+  }
+
+  function renderInlineTags(series = {}) {
+    return (series.tags || [])
+      .slice(0, 3)
+      .map((tag) => escapeHtml(tag.name || tag.slug || tag))
+      .join(', ');
+  }
+
+  function ratingFor(series = {}, index = 0) {
+    const base = 5 - (index * 0.06);
+    const views = Number(series.stats?.views || 0);
+    return Math.max(4.3, Math.min(5, base + Math.min(0.08, views / 100000))).toFixed(index ? 2 : 0);
+  }
   function renderStaticInfoPage(pathname) {
     stopReaderRuntime();
     const page = STATIC_INFO_PAGES[pathname];
     app.innerHTML = `
       <main class="site-shell static-page">
         ${renderTopbar()}
+        ${renderDesktopComicPortal({ popular, updated, readingSeries, lastSeries })}
         <section class="page-heading">
           <h2>${escapeHtml(page.title)}</h2>
           <p>${escapeHtml(page.body)}</p>
@@ -146,3 +304,4 @@ export function createHomeRoute({
     renderStaticInfoPage
   };
 }
+

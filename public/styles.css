@@ -14,6 +14,495 @@
   --shadow: 0 14px 36px rgba(15, 23, 42, 0.12);
 }
 
+/* Desktop comic portal inspired by classic Vietnamese manga sites.
+   Mobile keeps the app-like layout below. */
+.desktop-comic-portal {
+  display: none;
+}
+
+@media (min-width: 721px) {
+  body:has(.desktop-comic-portal) {
+    background:
+      radial-gradient(circle at 18% 0%, rgba(255, 139, 43, 0.18), transparent 30%),
+      linear-gradient(180deg, #050a14 0%, #0f172a 34%, #f3f6fb 34%);
+  }
+
+  .app-home-shell {
+    max-width: 1530px;
+    padding-inline: 18px;
+  }
+
+  .app-home-shell > .app-home-hero,
+  .app-home-shell > .app-quick-actions {
+    display: none;
+  }
+
+  .desktop-comic-portal {
+    display: grid;
+    gap: 16px;
+    margin: -6px 0 26px;
+    color: #f8fafc;
+  }
+
+  .desktop-portal-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+  }
+
+  .desktop-portal-heading .eyebrow {
+    margin: 0 0 6px;
+    color: #fb923c;
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  .desktop-portal-heading h2 {
+    margin: 0;
+    color: #ffffff;
+    font-size: clamp(26px, 2.5vw, 36px);
+    line-height: 1.1;
+    letter-spacing: -0.035em;
+    text-transform: uppercase;
+  }
+
+  .desktop-portal-search {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 300px;
+    min-height: 52px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 0 16px;
+    background: rgba(7, 10, 20, 0.9);
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.4);
+  }
+
+  .desktop-portal-search input {
+    min-width: 0;
+    flex: 1;
+    border: 0;
+    outline: none;
+    background: transparent;
+    color: #ffffff;
+    font-size: 16px;
+  }
+
+  .desktop-portal-search input::placeholder {
+    color: #94a3b8;
+  }
+
+  .desktop-portal-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 430px;
+    gap: 18px;
+    align-items: start;
+  }
+
+  .desktop-portal-main {
+    display: grid;
+    gap: 0;
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 0;
+    background: #111827;
+    box-shadow: 0 30px 90px rgba(0, 0, 0, 0.35);
+  }
+
+  .desktop-feature {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 190px 250px;
+    gap: 28px;
+    min-height: 395px;
+    padding: 38px 36px 70px;
+    background:
+      radial-gradient(circle at 43% 26%, rgba(255, 139, 43, 0.24), transparent 28%),
+      linear-gradient(90deg, rgba(15, 23, 42, 0.98), rgba(17, 24, 39, 0.82)),
+      #111827;
+  }
+
+  .desktop-feature-copy {
+    display: grid;
+    grid-template-columns: 86px minmax(0, 1fr);
+    gap: 22px;
+    color: #ffffff;
+    text-decoration: none;
+  }
+
+  .feature-star {
+    display: grid;
+    width: 72px;
+    height: 72px;
+    place-items: center;
+    clip-path: polygon(50% 0%, 62% 34%, 98% 35%, 69% 56%, 80% 92%, 50% 70%, 20% 92%, 31% 56%, 2% 35%, 38% 34%);
+    background: #fde047;
+    color: #111827;
+    font-weight: 900;
+  }
+
+  .desktop-feature-copy h3 {
+    display: -webkit-box;
+    overflow: hidden;
+    margin: 0;
+    max-width: 18ch;
+    color: #ffffff;
+    font-size: clamp(24px, 2.2vw, 32px);
+    line-height: 1.13;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .desktop-feature-copy p {
+    max-width: 54ch;
+    margin: 10px 0 0;
+    color: #d1d5db;
+    font-size: 15px;
+    line-height: 1.62;
+  }
+
+  .desktop-feature-copy strong {
+    display: block;
+    margin-top: 16px;
+    color: #ffffff;
+    font-size: 14px;
+    letter-spacing: 0.03em;
+  }
+
+  .desktop-feature-copy small,
+  .feature-tags {
+    color: #fef3c7 !important;
+    font-weight: 800;
+  }
+
+  .desktop-feature-cover {
+    display: grid;
+    overflow: hidden;
+    width: 190px;
+    height: 250px;
+    place-items: center;
+    align-self: center;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #f8fafc;
+    text-decoration: none;
+    box-shadow: 0 18px 36px rgba(0, 0, 0, 0.35);
+  }
+
+  .desktop-feature-cover img,
+  .desktop-week-card img,
+  .rank-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .desktop-week-card {
+    position: relative;
+    display: grid;
+    overflow: hidden;
+    min-height: 260px;
+    align-content: end;
+    padding: 22px;
+    color: #ffffff;
+    text-decoration: none;
+    isolation: isolate;
+  }
+
+  .desktop-week-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: linear-gradient(180deg, rgba(6, 8, 16, 0.2), rgba(6, 8, 16, 0.92));
+  }
+
+  .desktop-week-card img {
+    position: absolute;
+    inset: 0;
+    z-index: -2;
+    filter: saturate(0.9);
+  }
+
+  .desktop-week-card .crown {
+    position: absolute;
+    top: 16px;
+    right: 18px;
+    color: #facc15;
+    font-size: 58px;
+    transform: rotate(18deg);
+  }
+
+  .desktop-week-card p {
+    margin: 0 0 8px;
+    color: #e5e7eb;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .desktop-week-card h3 {
+    margin: 0;
+    font-size: 22px;
+    line-height: 1.18;
+    text-transform: uppercase;
+  }
+
+  .desktop-feature-dots {
+    position: absolute;
+    bottom: 76px;
+    left: 50%;
+    display: flex;
+    gap: 14px;
+    transform: translateX(-50%);
+  }
+
+  .desktop-feature-dots span {
+    width: 14px;
+    height: 14px;
+    border-radius: 999px;
+    background: #ffffff;
+  }
+
+  .desktop-feature-dots .active {
+    background: #facc15;
+  }
+
+  .desktop-feature-stats {
+    position: absolute;
+    right: 28px;
+    bottom: 18px;
+    display: flex;
+    gap: 16px;
+    color: #94a3b8;
+    font-size: 13px;
+  }
+
+  .desktop-feature-stats span {
+    display: inline-flex;
+    gap: 5px;
+    align-items: baseline;
+  }
+
+  .desktop-feature-stats strong {
+    color: #ffffff;
+  }
+
+  .desktop-community {
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    background: #111827;
+  }
+
+  .desktop-community-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 58px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 0 18px;
+  }
+
+  .desktop-community h3 {
+    margin: 0;
+    color: #ffffff;
+    font-size: 18px;
+    text-transform: uppercase;
+  }
+
+  .desktop-community-head span {
+    color: #94a3b8;
+    font-size: 13px;
+  }
+
+  .desktop-community-list {
+    display: grid;
+    max-height: 260px;
+    overflow: auto;
+    scrollbar-color: #fb923c #111827;
+  }
+
+  .desktop-community article {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr);
+    gap: 12px;
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .desktop-community .avatar {
+    display: grid;
+    width: 42px;
+    height: 42px;
+    place-items: center;
+    border-radius: 999px;
+    background: #fb923c;
+    color: #ffffff;
+    font-weight: 900;
+  }
+
+  .desktop-community p {
+    margin: 0;
+    color: #f8fafc;
+    line-height: 1.55;
+  }
+
+  .desktop-community strong {
+    margin-right: 8px;
+    color: #facc15;
+  }
+
+  .desktop-community mark {
+    margin-right: 8px;
+    border-radius: 4px;
+    padding: 3px 6px;
+    background: #facc15;
+    color: #111827;
+    font-size: 11px;
+    font-weight: 900;
+  }
+
+  .desktop-community small {
+    color: #9ca3af;
+  }
+
+  .desktop-rank-board {
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: #111827;
+    box-shadow: 0 30px 90px rgba(0, 0, 0, 0.35);
+  }
+
+  .desktop-rank-head {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 16px 16px 10px;
+  }
+
+  .desktop-rank-head h3 {
+    margin: 0 0 12px;
+    color: #ffffff;
+    font-size: 18px;
+    text-transform: uppercase;
+  }
+
+  .desktop-rank-head div {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    border-radius: 3px;
+    background: #0b1220;
+    padding: 6px;
+  }
+
+  .desktop-rank-head button {
+    min-height: 34px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: #ffffff;
+    font-weight: 800;
+  }
+
+  .desktop-rank-head button:first-child {
+    background: #fb923c;
+  }
+
+  .desktop-rank-board ol {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .desktop-rank-board li {
+    display: grid;
+    grid-template-columns: 34px 70px minmax(0, 1fr);
+    gap: 14px;
+    align-items: center;
+    min-height: 108px;
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .rank-index {
+    display: grid;
+    width: 32px;
+    height: 32px;
+    place-items: center;
+    border: 1px solid rgba(255, 255, 255, 0.45);
+    border-radius: 4px;
+    color: #e5e7eb;
+    font-weight: 900;
+  }
+
+  .rank-thumb {
+    display: grid;
+    overflow: hidden;
+    width: 70px;
+    height: 88px;
+    place-items: center;
+    border-radius: 6px;
+    background: #0b1220;
+    color: #94a3b8;
+    text-decoration: none;
+  }
+
+  .rank-copy {
+    min-width: 0;
+    color: #ffffff;
+    text-decoration: none;
+  }
+
+  .rank-copy strong,
+  .rank-copy small {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .rank-copy strong {
+    font-size: 15px;
+  }
+
+  .rank-copy small {
+    margin-top: 8px;
+    color: #cbd5e1;
+    font-size: 13px;
+  }
+
+  .rank-copy em {
+    display: block;
+    margin-top: 8px;
+    color: #facc15;
+    font-style: normal;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+  }
+
+  .rank-copy em span {
+    color: #9ca3af;
+    letter-spacing: 0;
+  }
+}
+
+@media (max-width: 1100px) and (min-width: 721px) {
+  .desktop-portal-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .desktop-feature {
+    grid-template-columns: minmax(0, 1fr) 170px;
+  }
+
+  .desktop-week-card {
+    display: none;
+  }
+}
+
 @media (max-width: 720px) {
   .admin-chapter-row,
   .series-continue-card {

@@ -21,7 +21,7 @@ For monetization, the likely direction is SEO traffic plus light display ads. Av
 - Tests: built-in `node:test`.
 - Storage: local JSON/images under `data/imports/`, or PostgreSQL catalog mode when `DATABASE_URL` is set.
 - Crawler execution: API enqueues durable jobs; `server/crawlWorker.mjs` runs them in a separate process.
-- Hosting preference: the user's machine should handle crawling and stored images; Vercel can be frontend-only.
+- Hosting preference: Vercel static frontend, Vietnix S3 public images/static JSON, and local machine for admin/crawler.
 - No React/Vite in the current implementation, even though the earliest spec mentioned them.
 
 ## Key Files
@@ -40,6 +40,9 @@ For monetization, the likely direction is SEO traffic plus light display ads. Av
 | Retry/rate limit helpers | `server/crawlRuntime.mjs` |
 | Import URL and limit parsing | `server/importOptions.mjs` |
 | Source adapters | `server/adapters/*.mjs` |
+| Vercel frontend config | `public/config.js`, `scripts/write-public-config.mjs`, `vercel.json` |
+| Static public JSON export | `scripts/export-static-api.mjs` |
+| Vietnix S3 sync | `scripts/sync-vietnix-s3.mjs` |
 
 ## Data Model Snapshot
 
@@ -136,6 +139,15 @@ Public:
 - `GET /api/series/:slug/chapters/:chapterSlug`
 - `POST /api/events`
 
+Static public mode:
+
+- `GET /static-api/home.json`
+- `GET /static-api/series.json`
+- `GET /static-api/series/:slug.json`
+- `GET /static-api/reader/:seriesSlug/:chapterSlug.json`
+- `GET /static-api/reader/:seriesSlug/:chapterSlug/next.json`
+- `GET /static-api/search-index.json`
+
 Admin/local:
 
 - `POST /api/admin/import-jobs`
@@ -155,7 +167,10 @@ SEO/static:
 When `PUBLIC_IMPORTS_BASE_URL` is set, local `/imports/...` image paths are emitted as absolute URLs under that public base. This is for a Vercel frontend reading images from the user's local machine through a public tunnel/domain.
 When `IMPORT_ROOT` is set, local catalog/image runtime files move from `data/imports/` to that disk path. Use this on a VPS with a larger mounted volume.
 
-When the frontend is deployed away from the Node server, set `window.COMIC_READER_CONFIG.apiBaseUrl` in `public/index.html` so browser API calls go to the user's public local API host instead of the frontend origin.
+When the frontend is deployed away from the Node server, use one of two modes:
+
+- `apiBaseUrl`: points browser API calls to a public backend.
+- `staticApiMode/staticApiBaseUrl`: points public read APIs to S3 static JSON. This is the current public Vercel mode.
 
 ## Common Debug Flow
 
@@ -222,9 +237,9 @@ For exact user reports, always use the exact URL they give.
 
 The current owner-preferred production architecture is:
 
-- Vercel for the public frontend, if desired.
-- The user's own machine for crawler jobs, local catalog, and cached images.
-- A stable HTTPS tunnel or reverse proxy for the local API/image host.
+- Vercel for the public static frontend.
+- Vietnix S3 Object Storage for public `/imports/*` images and `/static-api/*` JSON.
+- The user's own machine for admin, crawler jobs, local catalog, and cached images.
 - Local `data/imports/` backups as the first storage safety net.
 
 Do not move crawler jobs into short-lived frontend serverless functions unless the job is tiny. Long crawls need retries, durable progress, and a process that can keep running.
