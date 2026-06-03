@@ -47,6 +47,23 @@ function rawPages(chapter = {}) {
   return Array.isArray(chapter.pages) ? chapter.pages : [];
 }
 
+export function sanitizeReaderPages(pages = []) {
+  if (!Array.isArray(pages) || pages.length < 3) return Array.isArray(pages) ? pages : [];
+  return pages.filter((page, index) => !isStandaloneBoundaryAdPage(page, index, pages.length));
+}
+
+export function isStandaloneBoundaryAdPage(page = {}, index = 0, total = 0) {
+  const isBoundary = index === 0 || index === total - 1;
+  if (!isBoundary || total < 3) return false;
+
+  const width = Number(page.width || 0);
+  const height = Number(page.height || 0);
+  if (!width || !height) return false;
+
+  const aspect = height / width;
+  return width >= 600 && height <= 620 && aspect <= 0.65;
+}
+
 function hasCachedPages(chapter = {}) {
   return rawPages(chapter).length > 0;
 }
@@ -175,9 +192,10 @@ export function publicChapterSummary(chapter) {
 
 export function publicReaderChapter(chapter) {
   const normalized = normalizeChapter(chapter);
+  const pages = sanitizeReaderPages(normalized.pages);
   return {
-    ...publicChapterSummary(normalized),
-    pages: normalized.pages
+    ...publicChapterSummary({ ...normalized, pages, pageCount: pages.length }),
+    pages
   };
 }
 

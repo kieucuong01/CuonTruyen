@@ -1,19 +1,19 @@
-﻿export const STATIC_INFO_PAGES = {
+export const STATIC_INFO_PAGES = {
   '/gioi-thieu': {
-    title: 'Gi?i thi?u Cu?n Truy?n',
-    body: 'Cu?n Truy?n t?p trung v?o tr?i nghi?m ??c truy?n tranh online m??t, n?i chapter li?n t?c v? t? l?u v? tr? ?ang ??c tr?n tr?nh duy?t.'
+    title: 'Giới thiệu Cuốn Truyện',
+    body: 'Cuốn Truyện tập trung vào trải nghiệm đọc truyện tranh online mượt, nối chapter liên tục và tự lưu vị trí đang đọc trên trình duyệt.'
   },
   '/lien-he': {
-    title: 'Li?n h?',
-    body: 'B?o l?i truy?n, g?p ? tr?i nghi?m ??c ho?c g?i y?u c?u x? l? n?i dung ?? qu?n tr? vi?n ki?m tra v? ?n n?i dung khi c?n.'
+    title: 'Liên hệ',
+    body: 'Báo lỗi truyện, góp ý trải nghiệm đọc hoặc gửi yêu cầu xử lý nội dung để quản trị viên kiểm tra và ẩn nội dung khi cần.'
   },
   '/chinh-sach-noi-dung': {
-    title: 'Ch?nh s?ch n?i dung',
-    body: 'Qu?n tr? vi?n c? th? ?n truy?n ho?c chapter kh?i trang public v? sitemap. Ch? v?n h?nh ngu?n n?i dung m? ch? s? h?u ???c ph?p s? d?ng.'
+    title: 'Chính sách nội dung',
+    body: 'Quản trị viên có thể ẩn truyện hoặc chapter khỏi trang public và sitemap. Chỉ vận hành nguồn nội dung mà chủ sở hữu được phép sử dụng.'
   },
   '/privacy': {
     title: 'Privacy',
-    body: 'L?ch s? ??c, danh s?ch theo d?i v? v? tr? ??c ???c l?u tr?n tr?nh duy?t. S? ki?n ??c ???c d?ng ?? c?i thi?n tr?i nghi?m s?n ph?m.'
+    body: 'Lịch sử đọc, danh sách theo dõi và vị trí đọc được lưu trên trình duyệt. Sự kiện đọc được dùng để cải thiện trải nghiệm sản phẩm.'
   }
 };
 

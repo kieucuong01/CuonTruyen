@@ -978,7 +978,9 @@ async function loadReaderChapter(seriesSlug, chapterSlug) {
 
 function applyReaderPayload(payload, { reset = false, currentChapterId = '' } = {}) {
   state.series = payload.series;
-  const incoming = (payload.chapters?.length ? payload.chapters : [payload.chapter]).filter(Boolean);
+  const incoming = (payload.chapters?.length ? payload.chapters : [payload.chapter])
+    .filter(Boolean)
+    .map(sanitizeReaderChapter);
   const added = reset ? incoming : findNewReaderChapters(state.readerChapters, incoming);
   state.readerChapters = reset ? incoming : mergeChapters(state.readerChapters, incoming);
   state.currentChapterId = resolveReaderCurrentChapterId({
@@ -989,6 +991,33 @@ function applyReaderPayload(payload, { reset = false, currentChapterId = '' } = 
   });
   state.loadedChapterCount = state.readerChapters.length;
   return { incoming, added };
+}
+
+function sanitizeReaderChapter(chapter = {}) {
+  const pages = Array.isArray(chapter.pages) ? chapter.pages : [];
+  const cleanPages = sanitizeReaderPages(pages);
+  return {
+    ...chapter,
+    pages: cleanPages,
+    pageCount: cleanPages.length || chapter.pageCount || 0
+  };
+}
+
+function sanitizeReaderPages(pages = []) {
+  if (!Array.isArray(pages) || pages.length < 3) return Array.isArray(pages) ? pages : [];
+  return pages.filter((page, index) => !isStandaloneBoundaryAdPage(page, index, pages.length));
+}
+
+function isStandaloneBoundaryAdPage(page = {}, index = 0, total = 0) {
+  const isBoundary = index === 0 || index === total - 1;
+  if (!isBoundary || total < 3) return false;
+
+  const width = Number(page.width || 0);
+  const height = Number(page.height || 0);
+  if (!width || !height) return false;
+
+  const aspect = height / width;
+  return width >= 600 && height <= 620 && aspect <= 0.65;
 }
 
 function mergeChapters(existing = [], incoming = []) {
