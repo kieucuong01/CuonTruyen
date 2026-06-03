@@ -70,7 +70,7 @@ function staticApiRequest(url, options = {}) {
   }
 
   if (parsed.pathname.startsWith('/api/admin') && !config.apiBaseUrl) {
-    return Promise.reject(new Error('Admin cần API_BASE_URL trỏ tới backend local/VPS. Public Vercel static chỉ dùng để đọc truyện.'));
+    return Promise.reject(new Error('Admin c\u1ea7n API_BASE_URL tr\u1ecf t\u1edbi backend local/VPS. Public Vercel static ch\u1ec9 d\u00f9ng \u0111\u1ec3 \u0111\u1ecdc truy\u1ec7n.'));
   }
 
   if (method !== 'GET') return null;
@@ -115,19 +115,39 @@ function staticApiPath(pathname) {
 }
 
 function fetchStaticJson(path, config) {
-  const baseUrl = trimTrailingSlash(config.staticApiBaseUrl || '/static-api');
-  const url = `${baseUrl}/${path.replace(/^\/+/, '')}`;
-  return fetch(url).then(async (response) => {
-    const text = await response.text();
-    let data = null;
+  const cleanPath = path.replace(/^\/+/, '');
+  const configuredBase = trimTrailingSlash(config.staticApiBaseUrl || '/static-api');
+  const fallbackBase = '/static-api';
+  const bases = uniqueValues([configuredBase, fallbackBase]);
+  let lastError = null;
+
+  return bases.reduce((chain, baseUrl) => chain.catch(async () => {
     try {
-      data = text ? JSON.parse(text) : null;
-    } catch {
-      data = { error: text.slice(0, 200) || 'Static API response is not JSON' };
+      return await fetchStaticJsonFrom(`${baseUrl}/${cleanPath}`, path);
+    } catch (error) {
+      lastError = error;
+      throw error;
     }
-    if (!response.ok) throw new Error(data.error || `Static API not found: ${path}`);
-    return data;
+  }), Promise.reject()).catch(() => {
+    throw lastError || new Error(`Static API not found: ${path}`);
   });
+}
+
+async function fetchStaticJsonFrom(url, path) {
+  const response = await fetch(url);
+  const text = await response.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = { error: text.slice(0, 200) || 'Static API response is not JSON' };
+  }
+  if (!response.ok) throw new Error(data.error || `Static API not found: ${path}`);
+  return data;
+}
+
+function uniqueValues(values = []) {
+  return [...new Set(values.filter(Boolean))];
 }
 
 function safeSegment(value) {
