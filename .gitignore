@@ -2,6 +2,7 @@
 node_modules/
 dist/
 .runtime/
+.tmp/
 logs/
 .tmp-edge-admin-smoke/
 dev-server*.log
