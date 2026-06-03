@@ -1,21 +1,22 @@
 ﻿export const STATIC_INFO_PAGES = {
   '/gioi-thieu': {
-    title: 'Giá»›i thiá»‡u Cuá»™n Truyá»‡n',
-    body: 'Cuá»™n Truyá»‡n táº­p trung vÃ o tráº£i nghiá»‡m Ä‘á»c truyá»‡n tranh online mÆ°á»£t, ná»‘i chapter liÃªn tá»¥c vÃ  tá»± lÆ°u vá»‹ trÃ­ Ä‘á»c trÃªn trÃ¬nh duyá»‡t.'
+    title: 'Gi?i thi?u Cu?n Truy?n',
+    body: 'Cu?n Truy?n t?p trung v?o tr?i nghi?m ??c truy?n tranh online m??t, n?i chapter li?n t?c v? t? l?u v? tr? ?ang ??c tr?n tr?nh duy?t.'
   },
   '/lien-he': {
-    title: 'LiÃªn há»‡',
-    body: 'BÃ¡o lá»—i truyá»‡n, gÃ³p Ã½ tráº£i nghiá»‡m Ä‘á»c hoáº·c gá»­i yÃªu cáº§u xá»­ lÃ½ ná»™i dung Ä‘á»ƒ quáº£n trá»‹ viÃªn kiá»ƒm tra vÃ  áº©n ná»™i dung khi cáº§n.'
+    title: 'Li?n h?',
+    body: 'B?o l?i truy?n, g?p ? tr?i nghi?m ??c ho?c g?i y?u c?u x? l? n?i dung ?? qu?n tr? vi?n ki?m tra v? ?n n?i dung khi c?n.'
   },
   '/chinh-sach-noi-dung': {
-    title: 'ChÃ­nh sÃ¡ch ná»™i dung',
-    body: 'Quáº£n trá»‹ viÃªn cÃ³ thá»ƒ áº©n truyá»‡n hoáº·c chapter khá»i trang public vÃ  sitemap. Chá»‰ váº­n hÃ nh nguá»“n ná»™i dung mÃ  chá»§ sá»Ÿ há»¯u Ä‘Æ°á»£c phÃ©p sá»­ dá»¥ng.'
+    title: 'Ch?nh s?ch n?i dung',
+    body: 'Qu?n tr? vi?n c? th? ?n truy?n ho?c chapter kh?i trang public v? sitemap. Ch? v?n h?nh ngu?n n?i dung m? ch? s? h?u ???c ph?p s? d?ng.'
   },
   '/privacy': {
     title: 'Privacy',
-    body: 'Lá»‹ch sá»­ Ä‘á»c, danh sÃ¡ch theo dÃµi vÃ  vá»‹ trÃ­ Ä‘á»c Ä‘Æ°á»£c lÆ°u trÃªn trÃ¬nh duyá»‡t. Sá»± kiá»‡n Ä‘á»c Ä‘Æ°á»£c dÃ¹ng Ä‘á»ƒ cáº£i thiá»‡n tráº£i nghiá»‡m sáº£n pháº©m.'
+    body: 'L?ch s? ??c, danh s?ch theo d?i v? v? tr? ??c ???c l?u tr?n tr?nh duy?t. S? ki?n ??c ???c d?ng ?? c?i thi?n tr?i nghi?m s?n ph?m.'
   }
 };
+
 
 export function createHomeRoute({
   app,
@@ -74,41 +75,41 @@ export function createHomeRoute({
         ${renderDesktopComicPortal({ popular, updated, readingSeries, lastSeries })}
         <section class="app-home-hero">
           <div class="app-home-hero-copy">
-            <p class="eyebrow">Cuá»™n Truyá»‡n</p>
-            <h2>Äá»c truyá»‡n mÆ°á»£t nhÆ° app</h2>
-            <p>Manhwa, manhua, manga online. Tá»± lÆ°u vá»‹ trÃ­, má»Ÿ láº¡i Ä‘Ãºng chÆ°Æ¡ng vÃ  Ä‘á»c liá»n máº¡ch trÃªn Ä‘iá»‡n thoáº¡i.</p>
+            <p class="eyebrow">Cuốn Truyện</p>
+            <h2>Đọc truyện mượt như app</h2>
+            <p>Manhwa, manhua, manga online. Tự lưu vị trí, mở lại đúng chương và đọc liền mạch trên điện thoại.</p>
           </div>
           <div class="app-home-search" id="search">
             ${icon.search}
-            <input data-search-input placeholder="TÃ¬m truyá»‡n, tÃ¡c giáº£, thá»ƒ loáº¡i..." value="${escapeAttr(state.searchQuery)}" />
+            <input data-search-input placeholder="Tìm truyện, tác giả, thể loại..." value="${escapeAttr(state.searchQuery)}" />
           </div>
-          <div class="app-home-stats" aria-label="Thá»‘ng kÃª nhanh">
-            <span><strong>${homeSeries.length}</strong><small>truyá»‡n</small></span>
-            <span><strong>${updated.length}</strong><small>má»›i cáº­p nháº­t</small></span>
-            <span><strong>${home.tags.length}</strong><small>thá»ƒ loáº¡i</small></span>
+          <div class="app-home-stats" aria-label="Thống kê nhanh">
+            <span><strong>${homeSeries.length}</strong><small>truyện</small></span>
+            <span><strong>${updated.length}</strong><small>mới cập nhật</small></span>
+            <span><strong>${home.tags.length}</strong><small>thể loại</small></span>
           </div>
         </section>
-        <section class="app-quick-actions" aria-label="Lá»‘i táº¯t">
-          <a href="#continue-section"><strong>Äá»c tiáº¿p</strong><span>Quay láº¡i truyá»‡n Ä‘ang Ä‘á»c</span></a>
-          <a href="#/history"><strong>Lá»‹ch sá»­</strong><span>Nhá»¯ng truyá»‡n Ä‘Ã£ má»Ÿ</span></a>
-          <a href="#/followed"><strong>Theo dÃµi</strong><span>Danh sÃ¡ch lÆ°u local</span></a>
+        <section class="app-quick-actions" aria-label="Lối tắt">
+          <a href="#continue-section"><strong>Đọc tiếp</strong><span>Quay lại truyện đang đọc</span></a>
+          <a href="#/history"><strong>Lịch sử</strong><span>Những truyện đã mở</span></a>
+          <a href="#/followed"><strong>Theo dõi</strong><span>Danh sách lưu local</span></a>
         </section>
         <section class="app-home-feed">
           ${renderContinueShelf(readingSeries, lastSeries)}
-          ${state.searchQuery ? renderRail('Káº¿t quáº£ tÃ¬m kiáº¿m', results, 'compact app-search-results') : ''}
+          ${state.searchQuery ? renderRail('Kết quả tìm kiếm', results, 'compact app-search-results') : ''}
           ${renderTrendingSection(popular.slice(0, 8))}
           ${renderUpdatedSection(updated)}
           <section class="tag-cloud app-tag-cloud" id="genres">
-            <h2 class="section-title">Thá»ƒ loáº¡i ná»•i báº­t</h2>
-            <div>${home.tags.length ? home.tags.map((tag) => `<a data-link href="/the-loai/${tag.slug}">${escapeHtml(tag.name)} <small>${tag.seriesCount}</small></a>`).join('') : '<span class="muted">ChÆ°a cÃ³ tag.</span>'}</div>
+            <h2 class="section-title">Thể loại nổi bật</h2>
+            <div>${home.tags.length ? home.tags.map((tag) => `<a data-link href="/the-loai/${tag.slug}">${escapeHtml(tag.name)} <small>${tag.seriesCount}</small></a>`).join('') : '<span class="muted">Chưa có tag.</span>'}</div>
           </section>
           ${renderMonetizationPanel('home')}
         </section>
-        <nav class="mobile-home-tabbar" aria-label="Äiá»u hÆ°á»›ng nhanh">
-          <a data-link href="/"><strong>NhÃ </strong></a>
-          <a href="#continue-section"><strong>Äá»c tiáº¿p</strong></a>
-          <a href="#/history"><strong>Lá»‹ch sá»­</strong></a>
-          <a href="#search"><strong>TÃ¬m</strong></a>
+        <nav class="mobile-home-tabbar" aria-label="Điều hướng nhanh">
+          <a data-link href="/"><strong>Nhà</strong></a>
+          <a href="#continue-section"><strong>Đọc tiếp</strong></a>
+          <a href="#/history"><strong>Lịch sử</strong></a>
+          <a href="#search"><strong>Tìm</strong></a>
         </nav>
       </main>
     `;
@@ -234,14 +235,14 @@ export function createHomeRoute({
   function renderDesktopCommunity(latest = []) {
     const messages = [
       {
-        name: 'Cuốn dây',
+        name: 'Admin',
         badge: 'ADMIN',
-        text: 'Lưu link này để không gián đoạn đọc truyện. Chapter mới sẽ được đồng bộ sau khi crawl local xong.'
+        text: 'Chapter mới sẽ được đồng bộ sau khi crawl local xong. Nếu thấy ảnh lỗi, báo để mình xử lý nhanh.'
       },
       {
-        name: 'Cuốn Truyện',
+        name: 'Đội Cuốn Truyện',
         badge: 'BOT',
-        text: 'Website đọc truyện tranh mượt, ít làm phiền, ưu tiên đọc tiếp và ảnh liền mạch.'
+        text: 'Ưu tiên trải nghiệm đọc mượt, ít làm phiền, mở lại đúng vị trí đang đọc.'
       },
       ...latest.map((series) => ({
         name: 'Mới cập nhật',
@@ -252,8 +253,8 @@ export function createHomeRoute({
     return `
       <section class="desktop-community">
         <div class="desktop-community-head">
-          <h3>Cuốn Lầu</h3>
-          <span>Không gian cập nhật nhanh cho độc giả</span>
+          <h3>Bảng tin Cuốn Truyện</h3>
+          <span>Cập nhật nhanh cho độc giả</span>
         </div>
         <div class="desktop-community-list">
           ${messages.map((item, index) => `
@@ -304,4 +305,5 @@ export function createHomeRoute({
     renderStaticInfoPage
   };
 }
+
 
