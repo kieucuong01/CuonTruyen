@@ -5,6 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "node server/index.mjs",
+    "build:vercel": "node scripts/write-public-config.mjs",
+    "export:static-api": "node scripts/export-static-api.mjs",
+    "sync:s3:dry-run": "node scripts/sync-vietnix-s3.mjs",
+    "sync:s3": "node scripts/sync-vietnix-s3.mjs --apply",
+    "sync:s3:force": "node scripts/sync-vietnix-s3.mjs --apply --force",
+    "publish:static": "npm run export:static-api && npm run sync:s3",
     "test": "node --test tests",
     "db:migrate:catalog": "node scripts/migrate-catalog-to-postgres.mjs",
     "worker:crawl": "node server/crawlWorker.mjs",

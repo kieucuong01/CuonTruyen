@@ -58,7 +58,7 @@ export function corsHeaders() {
   return {
     'access-control-allow-origin': process.env.CORS_ALLOW_ORIGIN || '*',
     'access-control-allow-methods': 'GET,POST,PATCH,OPTIONS',
-    'access-control-allow-headers': 'content-type, authorization'
+    'access-control-allow-headers': 'content-type, authorization, x-admin-token'
   };
 }
 

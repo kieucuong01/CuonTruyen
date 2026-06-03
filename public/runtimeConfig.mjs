@@ -1,5 +1,7 @@
 const DEFAULT_CONFIG = {
-  apiBaseUrl: ''
+  apiBaseUrl: '',
+  staticApiMode: false,
+  staticApiBaseUrl: ''
 };
 
 export function getRuntimeConfig(globalObject = globalThis) {

@@ -19,6 +19,7 @@ Local-first comic reader and crawler for Vietnamese manhua/manhwa workflows. The
 - Multi-URL durable crawl jobs with worker mode, retries, per-domain delay, and progress counters.
 - Local JSON storage by default, PostgreSQL catalog mode when `DATABASE_URL` or `POSTGRES_URL` is set.
 - Cached images served from `data/imports/` or `IMPORT_ROOT` through `/imports/*`.
+- Optional Vercel static frontend mode with images and public JSON served from S3-compatible storage.
 - Series and chapter moderation with `public`, `draft`, and `removed` statuses.
 - Static SEO/policy pages: `/gioi-thieu`, `/lien-he`, `/chinh-sach-noi-dung`, `/privacy`.
 - Sitemap and public APIs exclude draft/removed content.
@@ -53,6 +54,9 @@ npm run dev
 npm run worker:crawl
 npm run worker:crawl:once
 npm run smoke:import
+npm run export:static-api
+npm run sync:s3:dry-run
+npm run sync:s3
 npm run db:migrate:catalog
 npm test
 ```
@@ -158,6 +162,35 @@ data/imports/<seriesId>/<chapterId>/*.jpg
 
 Use `IMPORT_ROOT` to move runtime data to another disk path. Do not delete or rewrite `data/imports/` unless explicitly intended; it is the local image library.
 
+## Vercel Frontend + S3 Images
+
+For low-cost public hosting, the recommended split is:
+
+```text
+Local machine: admin, crawler, data/imports
+Vietnix S3/Object Storage: /imports/* images and /static-api/* public JSON
+Vercel: static frontend from public/
+```
+
+Local publish flow:
+
+```powershell
+$env:PUBLIC_IMPORTS_BASE_URL='https://img.your-domain.com'
+npm run export:static-api
+npm run sync:s3:dry-run
+npm run sync:s3
+```
+
+Vercel environment variables:
+
+```text
+STATIC_API_MODE=true
+STATIC_API_BASE_URL=https://img.your-domain.com/static-api
+API_BASE_URL=
+```
+
+S3 credentials belong in `.env.local`, not in Git. See `.env.example` and `docs/agent-playbooks/vercel-s3-publishing.md`.
+
 ## PostgreSQL Catalog Mode
 
 Set `DATABASE_URL` or `POSTGRES_URL` when local JSON becomes too large:
@@ -197,6 +230,8 @@ See `.env.example` for the full list. Important ones:
 - `PORT` - local HTTP port, usually `54533`.
 - `PUBLIC_SITE_URL` - canonical public site URL for SEO.
 - `PUBLIC_IMPORTS_BASE_URL` - public URL for `/imports/*` image links when frontend/API are split.
+- `STATIC_API_MODE` and `STATIC_API_BASE_URL` - make the Vercel frontend read public JSON from S3.
+- `S3_*` - Vietnix S3 sync settings for images and static API JSON.
 - `CORS_ALLOW_ORIGIN` - exact frontend origin in production.
 - `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_TOKEN` - required admin login/session values.
 - `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_ADMIN_MAX`, `RATE_LIMIT_EVENTS_MAX` - basic in-memory protection for admin/import/events.
