@@ -68,6 +68,9 @@ export function createHomeRoute({
       : [];
     const popular = home.hot.length ? home.hot : homeSeries;
     const updated = home.updated.length ? home.updated : homeSeries;
+    const mobileGenreSource = uniqueSeriesById([...updated, ...popular, ...homeSeries]);
+    const manhwaSeries = pickGenreSeries(mobileGenreSource, 'manhwa').slice(0, 9);
+    const manhuaSeries = pickGenreSeries(mobileGenreSource, 'manhua').slice(0, 9);
 
     app.innerHTML = `
       <main class="site-shell home-shell app-home-shell">
@@ -98,7 +101,28 @@ export function createHomeRoute({
           ${renderContinueShelf(readingSeries, lastSeries)}
           ${state.searchQuery ? renderRail('Kết quả tìm kiếm', results, 'compact app-search-results') : ''}
           ${renderTrendingSection(popular.slice(0, 8))}
-          ${renderUpdatedSection(updated)}
+          <div class="desktop-updated-feed">
+            ${renderUpdatedSection(updated)}
+          </div>
+          <div class="mobile-series-stack" aria-label="Danh sách truyện mobile">
+            ${renderMobileSeriesShowcase({
+              title: 'Mới cập nhật',
+              eyebrow: 'Chapter mới',
+              seriesList: updated.slice(0, 9)
+            })}
+            ${renderMobileSeriesShowcase({
+              title: 'TRUYỆN MANHWA',
+              eyebrow: 'Hàn Quốc',
+              seriesList: manhwaSeries,
+              moreHref: '/the-loai/manhwa'
+            })}
+            ${renderMobileSeriesShowcase({
+              title: 'TRUYỆN MANHUA',
+              eyebrow: 'Trung Quốc',
+              seriesList: manhuaSeries,
+              moreHref: '/the-loai/manhua'
+            })}
+          </div>
           <section class="tag-cloud app-tag-cloud" id="genres">
             <h2 class="section-title">Thể loại nổi bật</h2>
             <div>${home.tags.length ? home.tags.map((tag) => `<a data-link href="/the-loai/${tag.slug}">${escapeHtml(tag.name)} <small>${tag.seriesCount}</small></a>`).join('') : '<span class="muted">Chưa có tag.</span>'}</div>
@@ -284,6 +308,55 @@ export function createHomeRoute({
     const views = Number(series.stats?.views || 0);
     return Math.max(4.3, Math.min(5, base + Math.min(0.08, views / 100000))).toFixed(index ? 2 : 0);
   }
+
+  function renderMobileSeriesShowcase({ title, eyebrow, seriesList = [], moreHref = '' } = {}) {
+    return `
+      <section class="mobile-series-showcase">
+        <div class="mobile-series-showcase-head">
+          <div>
+            ${eyebrow ? `<p>${escapeHtml(eyebrow)}</p>` : ''}
+            <h2>${escapeHtml(title)}</h2>
+          </div>
+          ${moreHref ? `<a data-link href="${escapeAttr(moreHref)}">Xem thêm</a>` : ''}
+        </div>
+        <div class="mobile-series-mini-grid">
+          ${seriesList.length ? seriesList.map((series) => renderMobileMiniCard(series)).join('') : '<p class="empty-state">Chưa có truyện trong mục này.</p>'}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderMobileMiniCard(series = {}) {
+    const cover = coverUrl(series);
+    const latestChapter = (series.chapters || []).find((chapter) => chapter.imported || chapter.pageCount > 0);
+    const meta = latestChapter?.label || `${Number(series.chapterCount || series.chapters?.length || 0)} chương`;
+    return `
+      <a class="mobile-series-mini-card" data-link href="/truyen/${escapeAttr(series.slug)}">
+        <span class="mobile-series-mini-cover">
+          ${cover ? `<img src="${escapeAttr(cover)}" alt="${escapeAttr(series.title)}" loading="lazy" />` : '<span>CT</span>'}
+        </span>
+        <strong>${escapeHtml(series.title)}</strong>
+        <small>${escapeHtml(meta)}</small>
+      </a>
+    `;
+  }
+
+  function pickGenreSeries(seriesList = [], genreSlug = '') {
+    const wanted = normalizeTag(genreSlug);
+    return seriesList.filter((series) => (series.tags || []).some((tag) => {
+      const value = typeof tag === 'string' ? tag : `${tag.slug || ''} ${tag.name || ''}`;
+      return normalizeTag(value).includes(wanted);
+    }));
+  }
+
+  function normalizeTag(value = '') {
+    return String(value)
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-');
+  }
+
   function renderStaticInfoPage(pathname) {
     stopReaderRuntime();
     const page = STATIC_INFO_PAGES[pathname];

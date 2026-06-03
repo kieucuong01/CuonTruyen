@@ -4739,6 +4739,141 @@ button:disabled,
   }
 }
 
+/* Mobile genre shelves: compact 3x3 app-style blocks under latest updates. */
+.mobile-series-stack {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .desktop-updated-feed {
+    display: none;
+  }
+
+  .mobile-series-stack {
+    display: grid;
+    gap: 12px;
+  }
+
+  .mobile-series-showcase {
+    overflow: hidden;
+    border-radius: 26px;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 248, 241, 0.94)),
+      #ffffff;
+    box-shadow: 0 16px 36px rgba(15, 23, 42, 0.09);
+  }
+
+  .mobile-series-showcase-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 15px 14px 10px;
+  }
+
+  .mobile-series-showcase-head p {
+    margin: 0 0 3px;
+    color: #f97316;
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+  }
+
+  .mobile-series-showcase-head h2 {
+    margin: 0;
+    color: #101828;
+    font-size: 17px;
+    line-height: 1.12;
+    letter-spacing: -0.02em;
+  }
+
+  .mobile-series-showcase-head a {
+    flex: 0 0 auto;
+    border: 1px solid rgba(249, 115, 22, 0.2);
+    border-radius: 999px;
+    padding: 8px 11px;
+    background: #fff7ed;
+    color: #f97316;
+    font-size: 12px;
+    font-weight: 900;
+    text-decoration: none;
+  }
+
+  .mobile-series-mini-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px 9px;
+    padding: 0 12px 15px;
+  }
+
+  .mobile-series-mini-grid > .empty-state {
+    grid-column: 1 / -1;
+    margin: 0;
+    border-radius: 18px;
+    padding: 18px 12px;
+    font-size: 13px;
+    text-align: center;
+  }
+
+  .mobile-series-mini-card {
+    display: grid;
+    min-width: 0;
+    color: #101828;
+    text-decoration: none;
+  }
+
+  .mobile-series-mini-cover {
+    position: relative;
+    display: block;
+    overflow: hidden;
+    aspect-ratio: 3 / 4;
+    border-radius: 16px;
+    background:
+      linear-gradient(135deg, rgba(255, 139, 43, 0.22), rgba(15, 23, 42, 0.08)),
+      #f3f4f6;
+    box-shadow: 0 11px 22px rgba(15, 23, 42, 0.14);
+  }
+
+  .mobile-series-mini-cover img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .mobile-series-mini-cover > span {
+    display: grid;
+    width: 100%;
+    height: 100%;
+    place-items: center;
+    color: #f97316;
+    font-size: 13px;
+    font-weight: 900;
+  }
+
+  .mobile-series-mini-card strong {
+    display: -webkit-box;
+    overflow: hidden;
+    min-height: 32px;
+    margin-top: 8px;
+    color: #101828;
+    font-size: 12px;
+    line-height: 1.28;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .mobile-series-mini-card small {
+    overflow: hidden;
+    margin-top: 3px;
+    color: #667085;
+    font-size: 10px;
+    font-weight: 800;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
 /* Mobile home correction: clean app-like layout without oversized web sections. */
 @media (max-width: 720px) {
   .home-shell {
