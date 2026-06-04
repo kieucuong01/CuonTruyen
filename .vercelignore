@@ -11,7 +11,6 @@ node_modules/
 .env.*.local
 dev-server*.log
 npm-debug.log*
-public/static-api/
 public/truyen/
 public/gioi-thieu/
 public/lien-he/

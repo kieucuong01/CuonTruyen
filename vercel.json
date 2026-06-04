@@ -6,6 +6,34 @@
   "trailingSlash": false,
   "rewrites": [
     {
+      "source": "/api/home",
+      "destination": "/static-api/home.json"
+    },
+    {
+      "source": "/api/public/home",
+      "destination": "/static-api/home.json"
+    },
+    {
+      "source": "/api/series",
+      "destination": "/static-api/series.json"
+    },
+    {
+      "source": "/api/tags/:tag",
+      "destination": "/static-api/tags/:tag.json"
+    },
+    {
+      "source": "/api/series/:series/chapters/:chapter/next",
+      "destination": "/static-api/reader/:series/:chapter/next.json"
+    },
+    {
+      "source": "/api/series/:series/chapters/:chapter",
+      "destination": "/static-api/reader/:series/:chapter.json"
+    },
+    {
+      "source": "/api/series/:series",
+      "destination": "/static-api/series/:series.json"
+    },
+    {
       "source": "/truyen/:path*",
       "destination": "/index"
     },

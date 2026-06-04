@@ -280,8 +280,8 @@ async function runConcurrent(items, limit, task) {
 }
 
 async function fetchWithRetry(url, options, {
-  retries = Number(env('S3_REQUEST_RETRIES', 'VIETNIX_S3_REQUEST_RETRIES') || 3),
-  delayMs = Number(env('S3_REQUEST_RETRY_DELAY_MS', 'VIETNIX_S3_REQUEST_RETRY_DELAY_MS') || 500)
+  retries = Number(env('S3_REQUEST_RETRIES', 'VIETNIX_S3_REQUEST_RETRIES') || 6),
+  delayMs = Number(env('S3_REQUEST_RETRY_DELAY_MS', 'VIETNIX_S3_REQUEST_RETRY_DELAY_MS') || 1000)
 } = {}) {
   let lastError = null;
   for (let attempt = 0; attempt <= retries; attempt += 1) {
@@ -327,26 +327,42 @@ async function main() {
   let uploaded = 0;
   let skipped = 0;
   let checked = 0;
+  let failed = 0;
+  const failedItems = [];
   const startedAt = Date.now();
   let lastProgressAt = 0;
 
   console.log(`[s3-sync] ${apply ? 'apply' : 'dry-run'} ${items.length} files to s3://${bucket} concurrency=${concurrency}`);
   await runConcurrent(items, concurrency, async (item) => {
-    const stat = await fs.stat(item.filePath);
-    let remote = { exists: false, size: 0 };
-    if (!force) remote = await headObject(client, item.key);
     checked += 1;
-    if (remote.exists && remote.size === stat.size) {
-      skipped += 1;
+    try {
+      const stat = await fs.stat(item.filePath);
+      let remote = { exists: false, size: 0 };
+      if (!force) remote = await headObject(client, item.key);
+      if (remote.exists && remote.size === stat.size) {
+        skipped += 1;
+        maybePrintProgress();
+        return;
+      }
+      if (apply) await putObject(client, item);
+      uploaded += 1;
       maybePrintProgress();
-      return;
+    } catch (error) {
+      failed += 1;
+      failedItems.push({ key: item.key, error: shortError(error) });
+      if (failedItems.length > 20) failedItems.shift();
+      console.log(`[s3-sync] failed key=${item.key} error=${shortError(error)} checked=${checked}/${items.length} uploaded=${uploaded} skipped=${skipped} failed=${failed}`);
+      maybePrintProgress();
     }
-    if (apply) await putObject(client, item);
-    uploaded += 1;
-    maybePrintProgress();
   });
 
   console.log(progressLine({ done: true }));
+  if (failedItems.length) {
+    console.log(`[s3-sync] failed-items ${JSON.stringify(failedItems)}`);
+  }
+  if (failed > 0) {
+    throw new Error(`S3 sync finished with ${failed} failed file(s). Re-run the same command to retry missing files.`);
+  }
 
   function maybePrintProgress() {
     const now = Date.now();
@@ -367,8 +383,13 @@ async function main() {
     const remaining = Math.max(0, items.length - checked);
     const etaSeconds = checked > 0 ? remaining / (checked / elapsedSeconds) : 0;
     const label = done ? 'done' : 'progress';
-    return `[s3-sync] ${label} checked=${checked}/${items.length} uploaded=${uploaded} skipped=${skipped} rate=${roundOne(ratePerMinute)} files/min eta=${formatDuration(etaSeconds)} concurrency=${concurrency}`;
+    return `[s3-sync] ${label} checked=${checked}/${items.length} uploaded=${uploaded} skipped=${skipped} failed=${failed} rate=${roundOne(ratePerMinute)} files/min eta=${formatDuration(etaSeconds)} concurrency=${concurrency}`;
   }
+}
+
+function shortError(error) {
+  const causeCode = error?.cause?.code ? ` ${error.cause.code}` : '';
+  return String(`${error?.name || 'Error'}${causeCode}: ${error?.message || error}`).replace(/\s+/g, ' ').slice(0, 220);
 }
 
 function formatDuration(seconds) {

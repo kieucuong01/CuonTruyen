@@ -868,6 +868,7 @@ export function createAdminRoute({
           <span>Đã kiểm tra: ${checked}/${total}</span>
           <span>Upload: ${Number(progress.uploaded || 0)}</span>
           <span>Skip: ${Number(progress.skipped || 0)}</span>
+          <span>Lỗi: ${Number(progress.failed || 0)}</span>
           <span>Tốc độ: ${Number(progress.ratePerMinute || 0).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} file/phút</span>
           <span>ETA: ${escapeHtml(progress.eta || 'đang tính')}</span>
           <span>Luồng: ${Number(progress.concurrency || 0) || '?'}</span>

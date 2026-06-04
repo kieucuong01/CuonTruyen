@@ -183,7 +183,14 @@ function fetchStaticJson(path, config) {
 }
 
 async function fetchStaticJsonFrom(url, path) {
-  const response = await fetch(url);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
+  let response;
+  try {
+    response = await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
   const text = await response.text();
   let data = null;
   try {
@@ -191,7 +198,8 @@ async function fetchStaticJsonFrom(url, path) {
   } catch {
     data = { error: text.slice(0, 200) || 'Static API response is not JSON' };
   }
-  if (!response.ok) throw new Error(data.error || `Static API not found: ${path}`);
+  if (!response.ok) throw new Error(data?.error || `Static API not found: ${path}`);
+  if (!data) throw new Error(`Static API response is empty: ${path}`);
   return data;
 }
 
