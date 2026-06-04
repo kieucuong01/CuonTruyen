@@ -167,7 +167,9 @@ function fetchStaticJson(path, config) {
   const cleanPath = path.replace(/^\/+/, '');
   const configuredBase = trimTrailingSlash(config.staticApiBaseUrl || '/static-api');
   const fallbackBase = '/fallback-api';
-  const bases = uniqueValues([configuredBase, fallbackBase]);
+  const bases = fallbackApiShouldLead(cleanPath)
+    ? uniqueValues([fallbackBase, configuredBase])
+    : uniqueValues([configuredBase, fallbackBase]);
   let lastError = null;
 
   return bases.reduce((chain, baseUrl) => chain.catch(async () => {
@@ -180,6 +182,16 @@ function fetchStaticJson(path, config) {
   }), Promise.reject()).catch(() => {
     throw lastError || new Error(`Static API not found: ${path}`);
   });
+}
+
+function fallbackApiShouldLead(path = '') {
+  const cleanPath = String(path || '').replace(/^\/+/, '');
+  return cleanPath === 'home.json'
+    || cleanPath === 'series.json'
+    || cleanPath === 'search-index.json'
+    || cleanPath === 'manifest.json'
+    || /^series\/[^/]+\.json$/.test(cleanPath)
+    || /^tags\/[^/]+\.json$/.test(cleanPath);
 }
 
 async function fetchStaticJsonFrom(url, path) {
