@@ -31,6 +31,7 @@ export function createHomeRoute({
   loadLastSeriesId,
   loadProgress,
   loadReadingHistory,
+  loadUserSession,
   renderContinueShelf,
   renderMonetizationPanel,
   renderPopularSidebar,
@@ -43,11 +44,18 @@ export function createHomeRoute({
   sendEvent,
   stopReaderRuntime,
   throttle,
+  userHeaders,
   uniqueSeriesById
 }) {
+  let desktopFeatureAutoplayTimer = null;
+
   async function renderHome() {
     stopReaderRuntime();
-    const home = await loadHome();
+    clearDesktopFeatureAutoplay();
+    const [home, bulletinMessages] = await Promise.all([
+      loadHome(),
+      loadBulletinMessages()
+    ]);
     const homeSeries = uniqueSeriesById([...(home.hot || []), ...(home.updated || [])]);
     const historyIds = loadReadingHistory();
     const missingHistoryIds = historyIds.filter((seriesId) => !homeSeries.some((series) => series.id === seriesId));
@@ -75,7 +83,7 @@ export function createHomeRoute({
     app.innerHTML = `
       <main class="site-shell home-shell app-home-shell">
         ${renderTopbar()}
-        ${renderDesktopComicPortal({ popular, updated, readingSeries, lastSeries })}
+        ${renderDesktopComicPortal({ popular, updated, readingSeries, lastSeries, bulletinMessages })}
         <section class="app-home-hero">
           <div class="app-home-hero-copy">
             <p class="eyebrow">Cuốn Truyện</p>
@@ -148,13 +156,23 @@ export function createHomeRoute({
     });
     bindReadButtons();
     bindContinueSlider();
+    bindDesktopFeatureSlider();
+    bindDesktopCommunity();
     sendEvent('pageview', {});
     reportVisibleAdSlots();
   }
 
-  function renderDesktopComicPortal({ popular = [], updated = [], readingSeries = [], lastSeries = null } = {}) {
-    const featured = lastSeries || popular[0] || updated[0];
-    const weeklyHot = popular[1] || updated[1] || featured;
+  async function loadBulletinMessages() {
+    try {
+      const payload = await fetchJson('/api/bulletin/messages?limit=20');
+      return Array.isArray(payload.messages) ? payload.messages : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function renderDesktopComicPortal({ popular = [], updated = [], readingSeries = [], lastSeries = null, bulletinMessages = [] } = {}) {
+    const featureSlides = uniqueSeriesById([lastSeries, ...popular, ...updated].filter(Boolean)).slice(0, 8);
     const rankItems = uniqueSeriesById([...popular, ...updated]).slice(0, 6);
     const latest = updated.slice(0, 4);
     const stats = [
@@ -176,8 +194,8 @@ export function createHomeRoute({
         </div>
         <div class="desktop-portal-grid">
           <div class="desktop-portal-main">
-            ${renderDesktopFeature(featured, weeklyHot, stats)}
-            ${renderDesktopCommunity(latest)}
+            ${renderDesktopFeature(featureSlides, stats)}
+            ${renderDesktopCommunity(bulletinMessages, latest, loadUserSession())}
           </div>
           ${renderDesktopRankBoard(rankItems)}
         </div>
@@ -185,8 +203,8 @@ export function createHomeRoute({
     `;
   }
 
-  function renderDesktopFeature(featured, weeklyHot, stats = []) {
-    if (!featured) {
+  function renderDesktopFeature(slides = [], stats = []) {
+    if (!slides.length) {
       return `
         <section class="desktop-feature empty-state">
           <h3>Chưa có truyện public</h3>
@@ -194,13 +212,27 @@ export function createHomeRoute({
         </section>
       `;
     }
+    return `
+      <section class="desktop-feature" data-desktop-feature-slider>
+        <div class="desktop-feature-slides">
+          ${slides.map((series, index) => renderDesktopFeatureSlide(series, { active: index === 0 })).join('')}
+        </div>
+        <div class="desktop-feature-dots" aria-label="Chọn truyện nổi bật">
+          ${slides.map((series, index) => `<button type="button" data-feature-dot="${index}" class="${index === 0 ? 'active' : ''}" aria-label="${escapeAttr(`Xem ${series.title}`)}"></button>`).join('')}
+        </div>
+        <div class="desktop-feature-stats">
+          ${stats.map((item) => `<span><strong>${item.value}</strong><small>${escapeHtml(item.label)}</small></span>`).join('')}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderDesktopFeatureSlide(featured, { active = false } = {}) {
     const chapters = (featured.chapters || []).filter((chapter) => chapter.imported || chapter.pageCount > 0);
     const firstChapter = chapters[0];
     const cover = coverUrl(featured);
-    const hot = weeklyHot || featured;
-    const hotCover = coverUrl(hot);
     return `
-      <section class="desktop-feature">
+      <article class="desktop-feature-slide ${active ? 'is-active' : ''}" data-feature-slide aria-hidden="${active ? 'false' : 'true'}">
         <a class="desktop-feature-copy" data-link href="/truyen/${escapeAttr(featured.slug)}">
           <span class="feature-star">${Math.max(1, Math.min(9, chapters.length || 5))}</span>
           <div>
@@ -212,21 +244,9 @@ export function createHomeRoute({
           </div>
         </a>
         <a class="desktop-feature-cover" data-link href="${firstChapter ? `/truyen/${escapeAttr(featured.slug)}/${escapeAttr(firstChapter.slug || firstChapter.id)}` : `/truyen/${escapeAttr(featured.slug)}`}">
-          ${cover ? `<img src="${escapeAttr(cover)}" alt="${escapeAttr(featured.title)}" loading="eager" />` : '<span>Cuốn Truyện</span>'}
+          ${cover ? `<img src="${escapeAttr(cover)}" alt="${escapeAttr(featured.title)}" loading="${active ? 'eager' : 'lazy'}" />` : '<span>Cuốn Truyện</span>'}
         </a>
-        <a class="desktop-week-card" data-link href="/truyen/${escapeAttr(hot.slug)}">
-          ${hotCover ? `<img src="${escapeAttr(hotCover)}" alt="" loading="lazy" />` : ''}
-          <span class="crown">♛</span>
-          <p>Truyện đang hot tuần này</p>
-          <h3>${escapeHtml(hot.title)}</h3>
-        </a>
-        <div class="desktop-feature-dots" aria-hidden="true">
-          ${Array.from({ length: 8 }, (_, index) => `<span class="${index === 5 ? 'active' : ''}"></span>`).join('')}
-        </div>
-        <div class="desktop-feature-stats">
-          ${stats.map((item) => `<span><strong>${item.value}</strong><small>${escapeHtml(item.label)}</small></span>`).join('')}
-        </div>
-      </section>
+      </article>
     `;
   }
 
@@ -256,40 +276,122 @@ export function createHomeRoute({
     `;
   }
 
-  function renderDesktopCommunity(latest = []) {
-    const messages = [
-      {
-        name: 'Admin',
-        badge: 'ADMIN',
-        text: 'Chapter mới sẽ được đồng bộ sau khi crawl local xong. Nếu thấy ảnh lỗi, báo để mình xử lý nhanh.'
-      },
-      {
-        name: 'Đội Cuốn Truyện',
-        badge: 'BOT',
-        text: 'Ưu tiên trải nghiệm đọc mượt, ít làm phiền, mở lại đúng vị trí đang đọc.'
-      },
-      ...latest.map((series) => ({
-        name: 'Mới cập nhật',
-        badge: '',
-        text: `${series.title} vừa có trong danh sách cập nhật.`
-      }))
-    ].slice(0, 6);
+  function renderDesktopCommunity(messages = [], latest = [], user = null) {
+    const fallbackMessages = latest.map((series) => ({
+      id: `latest-${series.id}`,
+      authorName: 'Mới cập nhật',
+      authorRole: 'system',
+      text: `${series.title} vừa có trong danh sách cập nhật.`,
+      createdAt: series.updatedAt || new Date().toISOString(),
+      pinned: false
+    }));
+    const visibleMessages = messages.length ? messages : fallbackMessages.slice(0, 4);
     return `
       <section class="desktop-community">
         <div class="desktop-community-head">
           <h3>Bảng tin Cuốn Truyện</h3>
-          <span>Cập nhật nhanh cho độc giả</span>
+          <span>Chat chung của độc giả đã đăng nhập</span>
         </div>
         <div class="desktop-community-list">
-          ${messages.map((item, index) => `
-            <article>
-              <span class="avatar">${escapeHtml(item.name.slice(0, 1))}</span>
-              <p><strong>${escapeHtml(item.name)}</strong>${item.badge ? `<mark>${escapeHtml(item.badge)}</mark>` : ''}<small>${index ? `${index + 1} giờ trước` : 'vừa xong'}</small><br>${escapeHtml(item.text)}</p>
+          ${visibleMessages.length ? visibleMessages.map((item) => `
+            <article class="${item.pinned ? 'is-pinned' : ''}">
+              <span class="avatar">${escapeHtml((item.authorName || 'R').slice(0, 1))}</span>
+              <p><strong>${escapeHtml(item.authorName || 'Reader')}</strong>${renderBulletinBadge(item)}<small>${escapeHtml(formatBulletinTime(item.createdAt))}</small><br>${escapeHtml(item.text)}</p>
             </article>
-          `).join('')}
+          `).join('') : '<p class="desktop-community-empty">Chưa có tin nhắn. Hãy là người mở lời đầu tiên.</p>'}
         </div>
+        ${user ? `
+          <form class="desktop-community-form" data-bulletin-form>
+            <input name="text" maxlength="500" autocomplete="off" placeholder="Nhập tin nhắn cho bảng tin..." />
+            <button class="primary-btn" type="submit">Gửi</button>
+          </form>
+          <p class="desktop-community-status" data-bulletin-status></p>
+        ` : `
+          <div class="desktop-community-login">
+            <span>Đăng nhập để chat cùng mọi người.</span>
+            <a class="ghost-btn" data-link href="#/login">Đăng nhập</a>
+          </div>
+        `}
       </section>
     `;
+  }
+
+  function bindDesktopFeatureSlider() {
+    const slider = app.querySelector('[data-desktop-feature-slider]');
+    if (!slider) return;
+    const slides = [...slider.querySelectorAll('[data-feature-slide]')];
+    const dots = [...slider.querySelectorAll('[data-feature-dot]')];
+    if (slides.length < 2) return;
+    let currentIndex = Math.max(0, slides.findIndex((slide) => slide.classList.contains('is-active')));
+    const activate = (nextIndex) => {
+      currentIndex = (nextIndex + slides.length) % slides.length;
+      slides.forEach((slide, index) => {
+        const active = index === currentIndex;
+        slide.classList.toggle('is-active', active);
+        slide.setAttribute('aria-hidden', active ? 'false' : 'true');
+      });
+      dots.forEach((dot, index) => dot.classList.toggle('active', index === currentIndex));
+    };
+    dots.forEach((dot, index) => dot.addEventListener('click', () => activate(index)));
+    const prefersReducedMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (prefersReducedMotion) return;
+    desktopFeatureAutoplayTimer = setInterval(() => {
+      if (!document.body.contains(slider)) {
+        clearDesktopFeatureAutoplay();
+        return;
+      }
+      activate(currentIndex + 1);
+    }, 4500);
+  }
+
+  function clearDesktopFeatureAutoplay() {
+    if (!desktopFeatureAutoplayTimer) return;
+    clearInterval(desktopFeatureAutoplayTimer);
+    desktopFeatureAutoplayTimer = null;
+  }
+
+  function bindDesktopCommunity() {
+    const form = app.querySelector('[data-bulletin-form]');
+    if (!form) return;
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const status = app.querySelector('[data-bulletin-status]');
+      const input = form.elements.text;
+      const button = form.querySelector('button[type="submit"]');
+      const text = input.value.trim();
+      if (!text) return;
+      button.disabled = true;
+      if (status) status.textContent = 'Đang gửi...';
+      try {
+        await fetchJson('/api/bulletin/messages', {
+          method: 'POST',
+          headers: userHeaders(),
+          body: JSON.stringify({ text })
+        });
+        input.value = '';
+        await renderHome();
+      } catch (error) {
+        if (status) status.textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
+    });
+  }
+
+  function renderBulletinBadge(item = {}) {
+    if (item.pinned) return '<mark>GHIM</mark>';
+    if (item.authorRole === 'admin') return '<mark>ADMIN</mark>';
+    return '';
+  }
+
+  function formatBulletinTime(value = '') {
+    const time = Date.parse(value);
+    if (!time) return 'vừa xong';
+    const diff = Date.now() - time;
+    if (diff < 60_000) return 'vừa xong';
+    if (diff < 3_600_000) return `${Math.max(1, Math.floor(diff / 60_000))} phút trước`;
+    if (diff < 86_400_000) return `${Math.max(1, Math.floor(diff / 3_600_000))} giờ trước`;
+    return new Date(time).toLocaleDateString('vi-VN');
   }
 
   function coverUrl(series = {}) {

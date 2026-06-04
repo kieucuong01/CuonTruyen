@@ -64,6 +64,11 @@ export function createAdminRoute({
     return fetchJson('/api/admin/series', { headers: adminHeaders() });
   }
 
+  async function loadAdminBulletin() {
+    return fetchJson('/api/admin/bulletin/messages?limit=40', { headers: adminHeaders() })
+      .catch(() => ({ messages: [] }));
+  }
+
   async function renderAdmin() {
     stopReaderRuntime();
     if (!loadAdminToken()) {
@@ -71,8 +76,12 @@ export function createAdminRoute({
       return;
     }
     let catalog;
+    let bulletin;
     try {
-      catalog = await loadAdminCatalog();
+      [catalog, bulletin] = await Promise.all([
+        loadAdminCatalog(),
+        loadAdminBulletin()
+      ]);
     } catch (error) {
       if (isAdminAuthError(error)) {
         clearAdminSession();
@@ -103,6 +112,7 @@ export function createAdminRoute({
             </select>
             <button class="primary-btn" type="submit">Crawl</button>
           </form>
+          ${renderAdminBulletinPanel(bulletin.messages || [])}
           <div class="status-line" data-status></div>
         </section>
         ${adminFlashMessage ? `<div class="status-line success">${escapeHtml(adminFlashMessage)}</div>` : ''}
@@ -121,6 +131,7 @@ export function createAdminRoute({
     bindAdminCommonActions();
     bindAdminImageFallbacks();
     app.querySelector('[data-import-form]').addEventListener('submit', handleImport);
+    bindAdminBulletinActions();
     app.querySelectorAll('[data-update-chapters]').forEach((button) => button.addEventListener('click', handleUpdateChapters));
   }
 
@@ -168,6 +179,48 @@ export function createAdminRoute({
         <button class="ghost-btn" type="button" data-admin-logout>Đăng xuất</button>
       </section>
     `;
+  }
+
+  function renderAdminBulletinPanel(messages = []) {
+    return `
+      <section class="admin-bulletin-panel">
+        <div class="admin-bulletin-head">
+          <div>
+            <h2>Bảng tin Cuốn Truyện</h2>
+            <p class="muted">Gửi tin admin và ghim thông báo lên đầu bảng chat public.</p>
+          </div>
+        </div>
+        <form class="admin-bulletin-form" data-admin-bulletin-form>
+          <textarea name="text" maxlength="500" rows="3" placeholder="Nhập thông báo hoặc tin nhắn admin..." required></textarea>
+          <label class="toggle-row"><input name="pinned" type="checkbox" /> Ghim tin này</label>
+          <button class="primary-btn" type="submit">Gửi tin</button>
+        </form>
+        <div class="status-line" data-admin-bulletin-status></div>
+        <div class="admin-bulletin-list">
+          ${messages.length ? messages.map(renderAdminBulletinMessage).join('') : '<p class="muted">Chưa có tin nhắn bảng tin.</p>'}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderAdminBulletinMessage(message = {}) {
+    const isAdmin = message.authorRole === 'admin';
+    return `
+      <article class="${message.pinned ? 'is-pinned' : ''}">
+        <div>
+          <strong>${escapeHtml(message.authorName || 'Reader')}</strong>
+          ${message.pinned ? '<mark>GHIM</mark>' : isAdmin ? '<mark>ADMIN</mark>' : ''}
+          <small>${escapeHtml(formatAdminBulletinTime(message.createdAt))}</small>
+          <p>${escapeHtml(message.text || '')}</p>
+        </div>
+        ${isAdmin ? `<button class="ghost-btn" type="button" data-admin-bulletin-pin="${escapeAttr(message.id)}" data-pinned="${message.pinned ? 'true' : 'false'}">${message.pinned ? 'Bỏ ghim' : 'Ghim'}</button>` : '<span class="muted">User</span>'}
+      </article>
+    `;
+  }
+
+  function bindAdminBulletinActions() {
+    app.querySelector('[data-admin-bulletin-form]')?.addEventListener('submit', handleAdminBulletinSubmit);
+    app.querySelectorAll('[data-admin-bulletin-pin]').forEach((button) => button.addEventListener('click', handleAdminBulletinPin));
   }
 
   function bindAdminCommonActions() {
@@ -507,6 +560,67 @@ export function createAdminRoute({
     }
   }
 
+  async function handleAdminBulletinSubmit(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const status = app.querySelector('[data-admin-bulletin-status]');
+    const button = form.querySelector('button[type="submit"]');
+    const formData = new FormData(form);
+    button.disabled = true;
+    if (status) {
+      status.className = 'status-line';
+      status.textContent = 'Đang gửi tin admin...';
+    }
+    try {
+      await fetchJson('/api/admin/bulletin/messages', {
+        method: 'POST',
+        headers: adminHeaders(),
+        body: JSON.stringify({
+          text: formData.get('text'),
+          pinned: formData.get('pinned') === 'on'
+        })
+      });
+      adminFlashMessage = 'Đã gửi tin lên bảng tin.';
+      await renderAdmin();
+    } catch (error) {
+      if (status) {
+        status.className = 'status-line error';
+        status.textContent = error.message;
+      }
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  async function handleAdminBulletinPin(event) {
+    event.preventDefault();
+    const button = event.currentTarget;
+    const status = app.querySelector('[data-admin-bulletin-status]');
+    const id = button.dataset.adminBulletinPin;
+    const pinned = button.dataset.pinned !== 'true';
+    button.disabled = true;
+    if (status) {
+      status.className = 'status-line';
+      status.textContent = pinned ? 'Đang ghim tin...' : 'Đang bỏ ghim...';
+    }
+    try {
+      await fetchJson(`/api/admin/bulletin/messages/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: adminHeaders(),
+        body: JSON.stringify({ pinned })
+      });
+      adminFlashMessage = pinned ? 'Đã ghim tin admin.' : 'Đã bỏ ghim tin admin.';
+      await renderAdmin();
+    } catch (error) {
+      if (status) {
+        status.className = 'status-line error';
+        status.textContent = error.message;
+      }
+    } finally {
+      button.disabled = false;
+    }
+  }
+
   async function handleImport(event) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -651,6 +765,16 @@ export function createAdminRoute({
       </div>
       ${errors.length ? `<div class="progress-errors">${errors.slice(-3).map((error) => `<span>${escapeHtml(error)}</span>`).join('')}</div>` : ''}
     `;
+  }
+
+  function formatAdminBulletinTime(value = '') {
+    const time = Date.parse(value);
+    if (!time) return 'vừa xong';
+    const diff = Date.now() - time;
+    if (diff < 60_000) return 'vừa xong';
+    if (diff < 3_600_000) return `${Math.max(1, Math.floor(diff / 60_000))} phút trước`;
+    if (diff < 86_400_000) return `${Math.max(1, Math.floor(diff / 3_600_000))} giờ trước`;
+    return new Date(time).toLocaleDateString('vi-VN');
   }
 
   return {

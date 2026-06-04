@@ -101,7 +101,8 @@ const state = {
 };
 
 const apiClient = createApiClient({
-  adminTokenProvider: () => loadAdminToken()
+  adminTokenProvider: () => loadAdminToken(),
+  userTokenProvider: () => loadUserSession()?.token
 });
 
 
@@ -159,6 +160,7 @@ const homeRoute = createHomeRoute({
   loadLastSeriesId,
   loadProgress,
   loadReadingHistory,
+  loadUserSession,
   renderContinueShelf,
   renderMonetizationPanel,
   renderPopularSidebar,
@@ -171,6 +173,7 @@ const homeRoute = createHomeRoute({
   sendEvent,
   stopReaderRuntime,
   throttle,
+  userHeaders,
   uniqueSeriesById
 });
 const renderHome = homeRoute.renderHome;
@@ -315,6 +318,10 @@ function invalidateContentCache() {
 
 function adminHeaders(extra = {}) {
   return apiClient.adminHeaders(extra);
+}
+
+function userHeaders(extra = {}) {
+  return apiClient.userHeaders(extra);
 }
 
 async function loadCatalog() {

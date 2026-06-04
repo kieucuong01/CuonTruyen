@@ -608,7 +608,7 @@
 
   .desktop-feature {
     overflow: hidden;
-    grid-template-columns: minmax(0, 1fr) 220px;
+    grid-template-columns: minmax(0, 1fr);
     gap: 26px;
     min-height: 420px;
     border: 1px solid rgba(255, 139, 43, 0.16);
@@ -619,6 +619,23 @@
       radial-gradient(circle at 22% 8%, rgba(37, 99, 235, 0.12), transparent 28%),
       linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(255, 247, 237, 0.95));
     box-shadow: 0 28px 70px rgba(249, 115, 22, 0.14);
+  }
+
+  .desktop-feature-slides {
+    position: relative;
+    z-index: 1;
+    min-width: 0;
+  }
+
+  .desktop-feature-slide {
+    display: none;
+    grid-template-columns: minmax(0, 1fr) 220px;
+    gap: 26px;
+    align-items: center;
+  }
+
+  .desktop-feature-slide.is-active {
+    display: grid;
   }
 
   .desktop-feature::after {
@@ -733,13 +750,18 @@
     transform: none;
   }
 
-  .desktop-feature-dots span {
+  .desktop-feature-dots span,
+  .desktop-feature-dots button {
     width: 9px;
     height: 9px;
+    border: 0;
+    border-radius: 999px;
     background: rgba(15, 23, 42, 0.18);
+    cursor: pointer;
   }
 
-  .desktop-feature-dots .active {
+  .desktop-feature-dots .active,
+  .desktop-feature-dots button.active {
     width: 28px;
     background: #ff8b2b;
   }
@@ -891,6 +913,47 @@
     border-radius: 999px;
     background: #fff7ed;
     color: #ea580c;
+  }
+
+  .desktop-community article.is-pinned {
+    background: #fff7ed;
+  }
+
+  .desktop-community-form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    padding: 14px 18px 18px;
+    border-top: 1px solid rgba(15, 23, 42, 0.08);
+  }
+
+  .desktop-community-form input {
+    min-width: 0;
+    min-height: 42px;
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    border-radius: 8px;
+    padding: 0 12px;
+    color: #101828;
+    background: #ffffff;
+  }
+
+  .desktop-community-status,
+  .desktop-community-empty {
+    margin: 0;
+    padding: 0 18px 14px;
+    color: #667085;
+    font-size: 13px;
+  }
+
+  .desktop-community-login {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 18px 18px;
+    border-top: 1px solid rgba(15, 23, 42, 0.08);
+    color: #667085;
+    font-size: 13px;
   }
 
   .desktop-community small {
@@ -2255,6 +2318,91 @@ button:disabled,
   grid-template-columns: minmax(260px, 1fr) 150px 150px 112px;
 }
 
+.admin-bulletin-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.admin-bulletin-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-bulletin-head h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+
+.admin-bulletin-form {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.admin-bulletin-form textarea {
+  width: 100%;
+  min-height: 72px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 9px 10px;
+  color: var(--text);
+  background: #ffffff;
+  resize: vertical;
+}
+
+.admin-bulletin-list {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-bulletin-list article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--panel-2);
+}
+
+.admin-bulletin-list article.is-pinned {
+  border-color: rgba(255, 139, 43, 0.32);
+  background: #fff7ed;
+}
+
+.admin-bulletin-list strong {
+  margin-right: 8px;
+}
+
+.admin-bulletin-list mark {
+  margin-right: 8px;
+  border-radius: 999px;
+  padding: 2px 7px;
+  color: #ea580c;
+  background: #ffedd5;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.admin-bulletin-list small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.admin-bulletin-list p {
+  margin: 5px 0 0;
+  color: var(--text);
+}
+
 .admin-panel h2 {
   grid-column: 1 / -1;
   margin: 0;
@@ -2762,7 +2910,12 @@ button:disabled,
 
   .import-panel,
   .admin-panel,
+  .admin-bulletin-form,
   .admin-series-card {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-bulletin-list article {
     grid-template-columns: 1fr;
   }
 

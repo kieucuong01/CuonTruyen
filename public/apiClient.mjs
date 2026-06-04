@@ -12,7 +12,8 @@ export function isCacheableRequest(url, options = {}) {
 export function createApiClient({
   cache = createBoundedCache({ maxEntries: 100 }),
   resolveUrl = apiUrl,
-  adminTokenProvider = () => ''
+  adminTokenProvider = () => '',
+  userTokenProvider = () => ''
 } = {}) {
   async function fetchJson(url, options) {
     const staticRequest = staticApiRequest(url, options);
@@ -22,7 +23,7 @@ export function createApiClient({
     if (cacheable && cache.has(url)) return cache.get(url);
 
     const request = fetch(resolveUrl(url), options).then(async (response) => {
-      const data = await response.json();
+      const data = await readJsonResponse(response);
       if (!response.ok) {
         const detail = data.detail && data.detail !== data.error ? `: ${data.detail}` : '';
         throw new Error(`${data.error || 'Request failed'}${detail}`);
@@ -51,11 +52,45 @@ export function createApiClient({
     };
   }
 
+  function userHeaders(extra = {}) {
+    const token = String(userTokenProvider() || '').trim();
+    return {
+      'content-type': 'application/json',
+      ...(token ? { 'x-user-token': token } : {}),
+      ...extra
+    };
+  }
+
   return {
     adminHeaders,
     fetchJson,
-    invalidateContentCache
+    invalidateContentCache,
+    userHeaders
   };
+}
+
+async function readJsonResponse(response) {
+  const text = await response.text();
+  if (!text) return {};
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    const message = text.trim().slice(0, 200);
+    if (!response.ok) {
+      return {
+        error: normalizePlainTextApiError(message, response.status)
+      };
+    }
+    throw new Error(`API response is not JSON: ${message || response.status}`);
+  }
+}
+
+function normalizePlainTextApiError(message = '', status = 0) {
+  if (/^not found$/i.test(message)) {
+    return 'Kh\u00f4ng t\u00ecm th\u1ea5y API endpoint. N\u1ebfu \u0111ang m\u1edf admin tr\u00ean Vercel, h\u00e3y d\u00f9ng backend local/VPS cho admin v\u00e0 crawler.';
+  }
+  return message || `Request failed (${status})`;
 }
 
 function staticApiRequest(url, options = {}) {

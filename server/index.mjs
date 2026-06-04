@@ -18,6 +18,12 @@ import {
   registerUser
 } from './userStore.mjs';
 import {
+  createAdminBulletinMessage,
+  createUserBulletinMessage,
+  listBulletinMessages,
+  setAdminBulletinPinned
+} from './bulletinStore.mjs';
+import {
   buildReaderChapterPayload,
   buildHomeCollections,
   buildTagPage,
@@ -272,6 +278,29 @@ async function handleApi(req, res, url) {
     return true;
   }
 
+  if (req.method === 'GET' && url.pathname === '/api/bulletin/messages') {
+    jsonResponse(res, 200, { messages: await listBulletinMessages({ limit: Number(url.searchParams.get('limit') || 30) }) });
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/bulletin/messages') {
+    try {
+      const user = await getSessionUser(extractUserToken(req.headers));
+      if (!user) {
+        jsonResponse(res, 401, { error: 'Bạn cần đăng nhập để gửi tin nhắn.' });
+        return true;
+      }
+      const message = await createUserBulletinMessage({
+        ...(await readJsonBody(req)),
+        user
+      });
+      jsonResponse(res, 201, { message });
+    } catch (error) {
+      jsonResponse(res, error.status || 500, { error: error.message || 'Không thể gửi tin nhắn.' });
+    }
+    return true;
+  }
+
   if (isAdminPath(url.pathname) && !adminConfigStatus().configured) {
     jsonResponse(res, 503, { error: 'Admin environment is not configured.' });
     return true;
@@ -279,6 +308,36 @@ async function handleApi(req, res, url) {
 
   if (isAdminPath(url.pathname) && !isAdminAuthorized(req.headers)) {
     jsonResponse(res, 401, { error: 'Admin token is required.' });
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/admin/bulletin/messages') {
+    jsonResponse(res, 200, { messages: await listBulletinMessages({ limit: Number(url.searchParams.get('limit') || 60) }) });
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/admin/bulletin/messages') {
+    try {
+      const message = await createAdminBulletinMessage({
+        ...(await readJsonBody(req)),
+        adminEmail: adminConfigStatus().email
+      });
+      jsonResponse(res, 201, { message });
+    } catch (error) {
+      jsonResponse(res, error.status || 500, { error: error.message || 'Không thể gửi tin admin.' });
+    }
+    return true;
+  }
+
+  if (req.method === 'PATCH' && url.pathname.startsWith('/api/admin/bulletin/messages/')) {
+    try {
+      const id = decodeURIComponent(url.pathname.replace('/api/admin/bulletin/messages/', ''));
+      const body = await readJsonBody(req);
+      const message = await setAdminBulletinPinned(id, Boolean(body.pinned));
+      jsonResponse(res, 200, { message });
+    } catch (error) {
+      jsonResponse(res, error.status || 500, { error: error.message || 'Không thể cập nhật tin nhắn.' });
+    }
     return true;
   }
 
