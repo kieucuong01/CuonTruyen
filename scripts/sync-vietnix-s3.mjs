@@ -232,10 +232,12 @@ async function mapUploadItems() {
   const staticApiPrefix = env('S3_STATIC_API_PREFIX', 'VIETNIX_S3_STATIC_API_PREFIX') || 'static-api';
   const imagesOnly = arg('--images-only');
   const staticApiOnly = arg('--static-api-only');
+  const seriesId = argValue('--series-id', '').trim();
   const items = [];
 
   if (!staticApiOnly) {
-    const imageFiles = await walkFiles(importRoot, (filePath) => IMAGE_EXTENSIONS.has(path.extname(filePath).toLowerCase()));
+    const imageRoot = seriesId ? path.join(importRoot, seriesId) : importRoot;
+    const imageFiles = await walkFiles(imageRoot, (filePath) => IMAGE_EXTENSIONS.has(path.extname(filePath).toLowerCase()));
     for (const filePath of imageFiles) {
       const relative = path.relative(importRoot, filePath).replace(/\\/g, '/');
       items.push({

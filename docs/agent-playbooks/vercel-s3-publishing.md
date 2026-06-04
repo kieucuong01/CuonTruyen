@@ -94,6 +94,13 @@ npm run sync:s3:dry-run
 npm run sync:s3
 ```
 
+For a newly completed crawl, prefer syncing only that series' images first:
+
+```powershell
+node scripts/sync-vietnix-s3.mjs --images-only --series-id <series-id> --apply --force
+node scripts/sync-vietnix-s3.mjs --static-api-only --apply --force
+```
+
 Use `npm run sync:s3:force` only when you intentionally want to re-upload everything. Full image sync can take a long time because the current image library is tens of thousands of files.
 
 Dry-run is the safe default for `scripts/sync-vietnix-s3.mjs`. Use `npm run sync:s3` only after the dry-run count looks reasonable.
