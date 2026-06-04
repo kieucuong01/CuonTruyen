@@ -7,6 +7,7 @@ const STORE_PATH = path.join(process.cwd(), '.tmp', `users-test-${process.pid}.j
 process.env.USER_STORE_PATH = STORE_PATH;
 
 const {
+  authenticateGoogleUser,
   getSessionUser,
   loginUser,
   logoutUser,
@@ -56,4 +57,37 @@ test('getSessionUser and logoutUser validate server-issued tokens', async () => 
   assert.equal((await getSessionUser(session.token)).id, session.id);
   await logoutUser(session.token);
   assert.equal(await getSessionUser(session.token), null);
+});
+
+test('authenticateGoogleUser creates a session for a verified Google email', async () => {
+  const session = await authenticateGoogleUser({
+    email: 'GoogleUser@example.com',
+    emailVerified: true,
+    name: 'Google User',
+    sub: 'google-subject-1'
+  });
+  const store = await readUserStore();
+
+  assert.equal(session.identifier, 'googleuser@example.com');
+  assert.equal(session.displayName, 'Google User');
+  assert.equal(Boolean(session.token), true);
+  assert.equal(store.users.length, 1);
+  assert.match(store.users[0].passwordHash, /^oauth:google:/);
+});
+
+test('authenticateGoogleUser links an existing password account without breaking password login', async () => {
+  await registerUser({ identifier: 'reader@example.com', password: 'secret123', displayName: 'Reader' });
+
+  const googleSession = await authenticateGoogleUser({
+    email: 'reader@example.com',
+    emailVerified: true,
+    name: 'Reader Google',
+    sub: 'google-subject-2'
+  });
+  const passwordSession = await loginUser({ identifier: 'reader@example.com', password: 'secret123' });
+  const store = await readUserStore();
+
+  assert.equal(googleSession.id, passwordSession.id);
+  assert.equal(store.users.length, 1);
+  assert.match(store.users[0].passwordHash, /^scrypt:/);
 });

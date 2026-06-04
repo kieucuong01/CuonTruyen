@@ -69,6 +69,39 @@ export async function loginUser({ identifier, password } = {}) {
   return publicSession(user, session.token);
 }
 
+export async function authenticateGoogleUser({ email, emailVerified, name, sub } = {}) {
+  const normalized = normalizeUserIdentifier(email);
+  if (!normalized || !sub) {
+    throw Object.assign(new Error('Google không trả đủ thông tin tài khoản.'), { status: 400 });
+  }
+  if (!emailVerified) {
+    throw Object.assign(new Error('Email Google chưa được xác minh.'), { status: 401 });
+  }
+  assertPersistentUserStore();
+  if (usesLibSqlUserStore()) return authenticateLibSqlGoogleUser({ email: normalized, name, sub });
+
+  const store = await readJsonUserStore();
+  const now = new Date().toISOString();
+  let user = findUser(store, normalized);
+  if (user) {
+    user.displayName = String(user.displayName || name || displayNameFromIdentifier(normalized)).trim();
+    user.updatedAt = now;
+  } else {
+    user = {
+      id: createUserId(normalized),
+      identifier: normalized,
+      displayName: String(name || displayNameFromIdentifier(normalized)).trim(),
+      passwordHash: `oauth:google:${String(sub)}`,
+      createdAt: now,
+      updatedAt: now
+    };
+    store.users.push(user);
+  }
+  const session = await createSessionForUser(store, user);
+  await writeJsonUserStore(store);
+  return publicSession(user, session.token);
+}
+
 export async function getSessionUser(token = '') {
   const rawToken = String(token || '').trim();
   if (!rawToken) return null;
@@ -170,6 +203,37 @@ async function loginLibSqlUser({ identifier, password }) {
   const client = await getLibSqlClient();
   await client.execute({ sql: 'update users set updated_at = ? where id = ?', args: [updatedAt, user.id] });
   user.updatedAt = updatedAt;
+  const session = await createLibSqlSession(user.id);
+  return publicSession(user, session.token);
+}
+
+async function authenticateLibSqlGoogleUser({ email, name, sub }) {
+  await ensureLibSqlSchema();
+  const now = new Date().toISOString();
+  const client = await getLibSqlClient();
+  let user = await getLibSqlUserByIdentifier(email);
+  if (user) {
+    user.displayName = String(user.displayName || name || displayNameFromIdentifier(email)).trim();
+    user.updatedAt = now;
+    await client.execute({
+      sql: 'update users set display_name = ?, updated_at = ? where id = ?',
+      args: [user.displayName, user.updatedAt, user.id]
+    });
+  } else {
+    user = {
+      id: createUserId(email),
+      identifier: email,
+      displayName: String(name || displayNameFromIdentifier(email)).trim(),
+      passwordHash: `oauth:google:${String(sub)}`,
+      createdAt: now,
+      updatedAt: now
+    };
+    await client.execute({
+      sql: `insert into users (id, identifier, display_name, password_hash, created_at, updated_at)
+            values (?, ?, ?, ?, ?, ?)`,
+      args: [user.id, user.identifier, user.displayName, user.passwordHash, user.createdAt, user.updatedAt]
+    });
+  }
   const session = await createLibSqlSession(user.id);
   return publicSession(user, session.token);
 }

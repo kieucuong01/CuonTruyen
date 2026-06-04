@@ -728,6 +728,11 @@ function renderUserAuth() {
         <form class="auth-panel" data-user-login-form>
           <h2>${isRegister ? 'T\u1ea1o t\u00e0i kho\u1ea3n \u0111\u1ecdc' : (user ? '\u0110\u1ed5i t\u00e0i kho\u1ea3n \u0111\u1ecdc' : '\u0110\u0103ng nh\u1eadp')}</h2>
           <p>T\u00e0i kho\u1ea3n c\u1ea7n m\u1eadt kh\u1ea9u \u0111\u1ec3 gi\u1eef danh s\u00e1ch theo d\u00f5i an to\u00e0n h\u01a1n khi \u0111\u1ed5i thi\u1ebft b\u1ecb.</p>
+          <a class="google-login-btn" href="${escapeAttr(apiUrl('/api/auth/google/start'))}">
+            <span aria-hidden="true">G</span>
+            \u0110\u0103ng nh\u1eadp b\u1eb1ng Google
+          </a>
+          <div class="auth-divider"><span>ho\u1eb7c</span></div>
           <input name="identifier" required placeholder="T\u00ean ho\u1eb7c email" value="${escapeAttr(user?.identifier || '')}" autocomplete="username" />
           ${isRegister ? '<input name="displayName" placeholder="T\u00ean hi\u1ec3n th\u1ecb" autocomplete="name" />' : ''}
           <input name="password" type="password" required minlength="6" placeholder="M\u1eadt kh\u1ea9u" autocomplete="${isRegister ? 'new-password' : 'current-password'}" />

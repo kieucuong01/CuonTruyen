@@ -18,6 +18,10 @@ import {
   registerUser
 } from './userStore.mjs';
 import {
+  handleGoogleCallback,
+  handleGoogleStart
+} from './googleAuthApi.mjs';
+import {
   createAdminBulletinMessage,
   createUserBulletinMessage,
   listBulletinMessages,
@@ -275,6 +279,16 @@ async function handleApi(req, res, url) {
 
   if (req.method === 'POST' && url.pathname === '/api/users/logout') {
     jsonResponse(res, 202, await logoutUser(extractUserToken(req.headers)));
+    return true;
+  }
+
+  if (url.pathname === '/api/auth/google/start') {
+    await handleGoogleStart(req, res);
+    return true;
+  }
+
+  if (url.pathname === '/api/auth/google/callback') {
+    await handleGoogleCallback(req, res);
     return true;
   }
 
