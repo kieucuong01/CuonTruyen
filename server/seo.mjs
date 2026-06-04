@@ -10,7 +10,7 @@ function readMonetizationConfig() {
 }
 
 function monetizationConfigScript() {
-  return `<script>window.COMIC_READER_CONFIG=${escapeScriptJson({ monetization: readMonetizationConfig() })};</script>`;
+  return `<script>window.COMIC_READER_CONFIG={...(window.COMIC_READER_CONFIG||{}),monetization:${escapeScriptJson(readMonetizationConfig())}};</script>`;
 }
 
 const DEFAULT_DESCRIPTION = 'Cuộn Truyện giúp đọc truyện tranh manhwa, manhua, manga online liền mạch, tải nhanh và tự lưu đúng vị trí đang đọc.';
@@ -206,6 +206,7 @@ export function renderHtmlShell({
   </head>
   <body>
     ${bodyHtml}
+    <script src="/config.js"></script>
     ${monetizationConfigScript()}
   <script type="module" src="/app.js"></script>
   </body>
