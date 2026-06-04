@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node server/index.mjs",
-    "build:vercel": "node scripts/write-public-config.mjs",
+    "build:vercel": "node scripts/build-vercel.mjs",
     "export:static-api": "node scripts/export-static-api.mjs",
     "sync:s3:dry-run": "node scripts/sync-vietnix-s3.mjs",
     "sync:s3": "node scripts/sync-vietnix-s3.mjs --apply",

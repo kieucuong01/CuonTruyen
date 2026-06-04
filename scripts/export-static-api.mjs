@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const ROOT = process.cwd();
 const DEFAULT_OUTPUT_DIR = path.join(ROOT, '.runtime', 'static-api');
@@ -54,7 +55,7 @@ function searchSeriesShape(series) {
   };
 }
 
-async function main() {
+export async function main() {
   await loadEnvFile(path.join(ROOT, '.env.local'));
   await loadEnvFile(path.join(ROOT, '.env'));
 
@@ -155,7 +156,9 @@ async function main() {
   console.log(`[static-api] exported ${seriesCount} series, ${chapterPayloadCount} reader payloads, ${tagCount} tags to ${outputDir}`);
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}
