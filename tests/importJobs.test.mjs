@@ -11,6 +11,7 @@ import {
   failImportJob,
   getImportJob,
   getRunningImportJobForUrl,
+  resetStaleRunningImportJobs,
   updateImportJobProgress
 } from '../server/importJobs.mjs';
 
@@ -82,4 +83,54 @@ test('failImportJob retries until max attempts, then marks failed', async () => 
   assert.equal(failed.status, 'failed');
   assert.equal(failed.error, 'Source blocked crawler');
   assert.equal((await getRunningImportJobForUrl(created.job.payload.url)), null);
+});
+
+test('resetStaleRunningImportJobs moves old running jobs back to retrying', async () => {
+  const created = await createImportJob({ url: 'https://example.test/stale-comic' });
+  const claimedAt = new Date(Date.parse(created.job.runAfter)).toISOString();
+  const staleAt = new Date(Date.parse(claimedAt) + 30 * 60 * 1000).toISOString();
+  const reclaimedAt = new Date(Date.parse(staleAt) + 60_000).toISOString();
+  const claimed = await claimNextImportJob({
+    workerId: 'stale-worker',
+    now: claimedAt
+  });
+
+  assert.equal(claimed.id, created.job.id);
+  assert.equal(claimed.status, 'running');
+
+  const resetCount = await resetStaleRunningImportJobs({
+    now: staleAt,
+    staleMs: 5 * 60 * 1000
+  });
+  const resetJob = await getImportJob(claimed.id);
+
+  assert.equal(resetCount, 1);
+  assert.equal(resetJob.status, 'retrying');
+
+  const reclaimed = await claimNextImportJob({
+    workerId: 'fresh-worker',
+    now: reclaimedAt
+  });
+  assert.equal(reclaimed.id, claimed.id);
+  assert.equal(reclaimed.status, 'running');
+});
+
+test('resetStaleRunningImportJobs resets a running job locked by a dead worker pid', async () => {
+  const created = await createImportJob({ url: 'https://example.test/dead-worker-comic' });
+  const claimedAt = new Date(Date.parse(created.job.runAfter)).toISOString();
+  const checkedAt = new Date(Date.parse(claimedAt) + 1_000).toISOString();
+  const claimed = await claimNextImportJob({
+    workerId: 'crawl-worker-99999999',
+    now: claimedAt
+  });
+
+  assert.equal(claimed.status, 'running');
+
+  const resetCount = await resetStaleRunningImportJobs({
+    now: checkedAt,
+    staleMs: 60 * 60 * 1000
+  });
+
+  assert.equal(resetCount, 1);
+  assert.equal((await getImportJob(claimed.id)).status, 'retrying');
 });

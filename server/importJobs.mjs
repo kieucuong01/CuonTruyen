@@ -8,5 +8,6 @@ export {
   getImportJob,
   getRunningImportJobForUrl,
   listImportJobs,
+  resetStaleRunningImportJobs,
   updateImportJobProgress
 } from './crawlJobStore.mjs';

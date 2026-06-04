@@ -118,14 +118,19 @@ function seriesMeta(series = {}) {
 
 export function normalizeChapter(chapter = {}) {
   const label = chapterLabel(chapter);
-  const pages = rawPages(chapter).map((page, index) => ({
-    ...page,
-    order: Number(page.order ?? page.index ?? index),
-    imageUrl: publicImportUrl(page.imageUrl || page.src || page.sourceUrl || ''),
-    storageKey: page.storageKey || page.src || page.imageUrl || '',
-    width: page.width || null,
-    height: page.height || null
-  }));
+  const pages = rawPages(chapter).map((page, index) => {
+    const imageUrl = publicImportUrl(page.imageUrl || page.src || page.sourceUrl || '');
+    const storageKey = publicImportUrl(page.storageKey || page.src || page.imageUrl || '');
+    return {
+      ...page,
+      order: Number(page.order ?? page.index ?? index),
+      src: imageUrl || page.src || '',
+      imageUrl,
+      storageKey: storageKey || imageUrl || '',
+      width: page.width || null,
+      height: page.height || null
+    };
+  });
   return {
     ...chapter,
     title: chapter.title || label,

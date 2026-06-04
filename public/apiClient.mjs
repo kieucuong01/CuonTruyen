@@ -104,6 +104,10 @@ function staticApiRequest(url, options = {}) {
     return Promise.resolve({ ok: true, static: true });
   }
 
+  if (parsed.pathname.startsWith('/api/admin') && isLocalAdminOrigin()) {
+    return null;
+  }
+
   if (parsed.pathname.startsWith('/api/admin') && !config.apiBaseUrl) {
     return Promise.reject(new Error('Admin c\u1ea7n API_BASE_URL tr\u1ecf t\u1edbi backend local/VPS. Public Vercel static ch\u1ec9 d\u00f9ng \u0111\u1ec3 \u0111\u1ecdc truy\u1ec7n.'));
   }
@@ -128,6 +132,16 @@ function parseApiUrl(url) {
   } catch {
     return null;
   }
+}
+
+function isLocalAdminOrigin(globalObject = globalThis) {
+  const hostname = String(globalObject?.location?.hostname || '').toLowerCase();
+  return hostname === 'localhost'
+    || hostname === '127.0.0.1'
+    || hostname === '::1'
+    || /^192\.168\./.test(hostname)
+    || /^10\./.test(hostname)
+    || /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname);
 }
 
 function staticApiPath(pathname) {

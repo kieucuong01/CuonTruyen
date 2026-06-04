@@ -117,6 +117,8 @@ const READER_PRELOAD_ROOT_MARGIN = '6500px 0px';
 const READER_IMAGE_RELEASE_BEHIND_PX = 28000;
 const READER_BLANK_IMAGE = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
 const preloadedImageUrls = new Set();
+const readerPreloadLinkUrls = new Set();
+const readerDecodeQueue = new Set();
 
 const icon = {
   back: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -1331,9 +1333,18 @@ function attachReaderObservers() {
   window.addEventListener('scroll', state.readerScrollHandler, { passive: true });
   startReaderToolbarControls();
   startReaderScrollSync();
+  preloadInitialReaderImages();
   warmReaderImagesAroundViewport({ initial: true });
   releaseFarBehindReaderImages();
   saveReaderProgress();
+}
+
+function preloadInitialReaderImages() {
+  const images = [...document.querySelectorAll('[data-reader-image]')].slice(0, READER_EAGER_IMAGE_COUNT);
+  images.forEach((image, index) => {
+    const source = image.dataset.readerSrc || image.currentSrc || image.src;
+    preloadReaderLink(source, { highPriority: index < 6 });
+  });
 }
 
 function startReaderToolbarControls() {
@@ -1428,6 +1439,7 @@ function warmReaderImage(image, { highPriority = false } = {}) {
   image.loading = 'eager';
   if ('fetchPriority' in image) image.fetchPriority = highPriority ? 'high' : 'auto';
   preloadImageUrl(source);
+  decodeReaderImageSoon(image);
 }
 
 function preloadImageUrl(src) {
@@ -1436,6 +1448,29 @@ function preloadImageUrl(src) {
   const image = new Image();
   image.decoding = 'async';
   image.src = src;
+}
+
+function preloadReaderLink(src, { highPriority = false } = {}) {
+  if (!src || readerPreloadLinkUrls.has(src)) return;
+  readerPreloadLinkUrls.add(src);
+  const link = document.createElement('link');
+  link.rel = 'preload';
+  link.as = 'image';
+  link.href = src;
+  if (highPriority) link.fetchPriority = 'high';
+  document.head.appendChild(link);
+}
+
+function decodeReaderImageSoon(image) {
+  if (!image || readerDecodeQueue.has(image) || !image.decode) return;
+  readerDecodeQueue.add(image);
+  const run = () => {
+    image.decode()
+      .catch(() => {})
+      .finally(() => readerDecodeQueue.delete(image));
+  };
+  if ('requestIdleCallback' in window) window.requestIdleCallback(run, { timeout: 900 });
+  else window.setTimeout(run, 80);
 }
 
 function releaseFarBehindReaderImages() {

@@ -1,6 +1,9 @@
 import './env.mjs';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+import { IMPORT_ROOT } from './catalogStore.mjs';
 import { importSeries } from './importer.mjs';
 import { ensureStorageSchema, readCatalog } from './dataStore.mjs';
 import { setStoredCrawlSchedule } from './contentStore.mjs';
@@ -10,24 +13,33 @@ import {
   createImportJobs,
   ensureCrawlQueueStorage,
   failImportJob,
+  resetStaleRunningImportJobs,
   updateImportJobProgress
 } from './importJobs.mjs';
 import { createScheduledCrawlPayloads, selectScheduledSeries } from './crawlQueue.mjs';
 
 const DEFAULT_WORKER_ID = `crawl-worker-${process.pid}`;
+const WORKER_LOCK_PATH = process.env.CRAWL_WORKER_LOCK_PATH || path.join(IMPORT_ROOT, 'crawl-worker.lock');
+const WORKER_LOCK_STALE_MS = Math.max(60_000, Number(process.env.CRAWL_WORKER_LOCK_STALE_MS || 6 * 60 * 60 * 1000));
+const WORKER_LOCK_HEARTBEAT_MS = Math.max(5_000, Number(process.env.CRAWL_WORKER_LOCK_HEARTBEAT_MS || 30_000));
 
 export async function runWorkerOnce({
   workerId = DEFAULT_WORKER_ID,
   enqueueSchedules = false
 } = {}) {
-  await ensureStorageSchema();
-  await ensureCrawlQueueStorage();
-  if (enqueueSchedules) await enqueueDueScheduledCrawls();
+  return withWorkerLock(workerId, async () => {
+    await ensureStorageSchema();
+    await ensureCrawlQueueStorage();
+    if (enqueueSchedules) await enqueueDueScheduledCrawls();
+    if (process.env.CRAWL_RESET_STALE_RUNNING_JOBS !== 'false') {
+      await resetStaleRunningImportJobs();
+    }
 
-  const job = await claimNextImportJob({ workerId });
-  if (!job) return { claimed: false };
-  await runClaimedImportJob(job, { workerId });
-  return { claimed: true, jobId: job.id };
+    const job = await claimNextImportJob({ workerId });
+    if (!job) return { claimed: false };
+    await runClaimedImportJob(job, { workerId });
+    return { claimed: true, jobId: job.id };
+  });
 }
 
 export async function runClaimedImportJob(job, { workerId = DEFAULT_WORKER_ID } = {}) {
@@ -41,6 +53,9 @@ export async function runClaimedImportJob(job, { workerId = DEFAULT_WORKER_ID } 
       maxChapters: payload.maxChapters,
       maxPages: payload.maxPages,
       imageRetries: Number(payload.imageRetries ?? process.env.CRAWL_IMAGE_RETRIES ?? 2),
+      imageConcurrency: Number(payload.imageConcurrency ?? process.env.CRAWL_IMAGE_CONCURRENCY ?? 4),
+      imageDomainDelayMs: Number(payload.imageDomainDelayMs ?? process.env.CRAWL_IMAGE_DOMAIN_DELAY_MS ?? 80),
+      optimizeDuringCrawl: payload.optimizeDuringCrawl ?? process.env.CRAWL_OPTIMIZE_DURING_CRAWL === 'true',
       domainDelayMs: Number(payload.domainDelayMs ?? process.env.CRAWL_DOMAIN_DELAY_MS ?? 650)
     }, (patch) => updateImportJobProgress(job.id, patch));
     await completeImportJob(job.id, series);
@@ -117,6 +132,83 @@ export async function startWorkerLoop({
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, Math.max(250, Number(ms || 0))));
+}
+
+async function withWorkerLock(workerId, callback) {
+  if (process.env.CRAWL_WORKER_LOCK_DISABLED === 'true') return callback();
+  const lock = await acquireWorkerLock(workerId);
+  if (!lock) return { claimed: false, locked: true };
+  try {
+    return await callback();
+  } finally {
+    await lock.release();
+  }
+}
+
+export async function acquireWorkerLock(workerId) {
+  await fs.mkdir(path.dirname(WORKER_LOCK_PATH), { recursive: true });
+  const payload = JSON.stringify({
+    workerId,
+    pid: process.pid,
+    startedAt: new Date().toISOString()
+  }, null, 2);
+  try {
+    await fs.writeFile(WORKER_LOCK_PATH, payload, { flag: 'wx' });
+  } catch (error) {
+    if (error.code !== 'EEXIST') throw error;
+    const isStale = await isWorkerLockStale();
+    if (!isStale) return null;
+    await fs.rm(WORKER_LOCK_PATH, { force: true }).catch(() => {});
+    try {
+      await fs.writeFile(WORKER_LOCK_PATH, payload, { flag: 'wx' });
+    } catch (retryError) {
+      if (retryError.code === 'EEXIST') return null;
+      throw retryError;
+    }
+  }
+
+  const heartbeat = setInterval(() => {
+    const now = new Date();
+    fs.utimes(WORKER_LOCK_PATH, now, now).catch(() => {});
+  }, WORKER_LOCK_HEARTBEAT_MS);
+  heartbeat.unref?.();
+  return {
+    release: async () => {
+      clearInterval(heartbeat);
+      await fs.rm(WORKER_LOCK_PATH, { force: true }).catch(() => {});
+    }
+  };
+}
+
+async function isWorkerLockStale() {
+  try {
+    const stat = await fs.stat(WORKER_LOCK_PATH);
+    const lock = await readWorkerLock();
+    if (lock?.pid && !isProcessAlive(lock.pid)) return true;
+    return Date.now() - stat.mtimeMs > WORKER_LOCK_STALE_MS;
+  } catch (error) {
+    if (error.code === 'ENOENT') return true;
+    throw error;
+  }
+}
+
+async function readWorkerLock() {
+  try {
+    return JSON.parse(await fs.readFile(WORKER_LOCK_PATH, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function isProcessAlive(pid) {
+  const processId = Number(pid || 0);
+  if (!processId || processId === process.pid) return true;
+  try {
+    process.kill(processId, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

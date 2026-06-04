@@ -133,6 +133,7 @@ export function createAdminRoute({
     app.querySelector('[data-import-form]').addEventListener('submit', handleImport);
     bindAdminBulletinActions();
     app.querySelectorAll('[data-update-chapters]').forEach((button) => button.addEventListener('click', handleUpdateChapters));
+    app.querySelectorAll('[data-publish-production]').forEach((button) => button.addEventListener('click', handleProductionPublish));
   }
 
   async function renderAdminSeriesDetail(seriesId) {
@@ -170,6 +171,7 @@ export function createAdminRoute({
     bindAdminImageFallbacks();
     app.querySelectorAll('[data-admin-series]').forEach((form) => form.addEventListener('submit', handleAdminSave));
     app.querySelectorAll('[data-update-chapters]').forEach((button) => button.addEventListener('click', handleUpdateChapters));
+    app.querySelectorAll('[data-publish-production]').forEach((button) => button.addEventListener('click', handleProductionPublish));
   }
 
   function renderAdminSessionBar() {
@@ -318,6 +320,7 @@ export function createAdminRoute({
           </div>
         </section>
         <div class="status-line admin-wide admin-update-status" data-update-chapters-status="${escapeAttr(series.id)}"></div>
+        ${renderProductionPublishPanel(series)}
         <section class="admin-editor-section">
           <div class="section-head admin-editor-section-head">
             <div>
@@ -351,6 +354,49 @@ export function createAdminRoute({
         </div>
       </form>
     `;
+  }
+
+  function renderProductionPublishPanel(series) {
+    const productionUrl = productionSeriesUrl(series);
+    return `
+      <section class="admin-editor-section production-publish-panel">
+        <div class="section-head admin-editor-section-head">
+          <div>
+            <p class="eyebrow">Production workflow</p>
+            <h2>Đưa truyện này lên production</h2>
+            <p>Tự chạy tuần tự: tối ưu ảnh, dọn file thừa, export static API, sync ảnh lên S3 rồi sync dữ liệu public.</p>
+          </div>
+          <button class="primary-btn" type="button" data-publish-production="${escapeAttr(series.id)}">Chạy workflow</button>
+        </div>
+        <div class="production-flow-grid" aria-label="Các bước publish production">
+          ${[
+            'Tối ưu ảnh',
+            'Relink + cleanup',
+            'Export static API',
+            'Sync ảnh S3',
+            'Sync dữ liệu S3',
+            'Mở production kiểm tra'
+          ].map((label, index) => `
+            <span>
+              <b>${index + 1}</b>
+              ${escapeHtml(label)}
+            </span>
+          `).join('')}
+        </div>
+        <div class="production-publish-note">
+          <span>Chạy trên máy local/admin, không chạy trong Vercel.</span>
+          ${productionUrl ? `<a href="${escapeAttr(productionUrl)}" target="_blank" rel="noopener noreferrer">Mở production</a>` : '<span>Truyện chưa có slug public để mở production.</span>'}
+        </div>
+        <div class="status-line admin-wide production-publish-status" data-production-publish-status="${escapeAttr(series.id)}"></div>
+      </section>
+    `;
+  }
+
+  function productionSeriesUrl(series) {
+    if (!series?.slug) return '';
+    const configuredBase = window.COMIC_READER_CONFIG?.productionBaseUrl || window.COMIC_READER_CONFIG?.publicSiteUrl || '';
+    const base = String(configuredBase || 'https://cuontruyen.vercel.app').replace(/\/+$/, '');
+    return `${base}/truyen/${encodeURIComponent(series.slug)}`;
   }
 
   function renderAdminSeriesCover(series, { large = false } = {}) {
@@ -560,6 +606,40 @@ export function createAdminRoute({
     }
   }
 
+  async function handleProductionPublish(event) {
+    event.preventDefault();
+    const button = event.currentTarget;
+    const seriesId = button.dataset.publishProduction;
+    const status = app.querySelector(`[data-production-publish-status="${CSS.escape(seriesId)}"]`);
+    button.disabled = true;
+    button.textContent = 'Đang chạy...';
+    if (status) {
+      status.className = 'status-line admin-wide production-publish-status';
+      status.textContent = 'Đang tạo workflow production...';
+    }
+
+    try {
+      const result = await fetchJson(`/api/admin/series/${encodeURIComponent(seriesId)}/publish-production`, {
+        method: 'POST',
+        headers: adminHeaders(),
+        body: JSON.stringify({})
+      });
+      if (result.reused && status) status.textContent = 'Workflow của truyện này đang chạy, đang theo dõi job hiện tại...';
+      const job = await pollProductionJob(result.job.id, status);
+      if (status) renderProductionProgress(status, job);
+      invalidateContentCache();
+      button.textContent = 'Sync lại production';
+    } catch (error) {
+      if (status) {
+        status.className = 'status-line admin-wide production-publish-status error';
+        status.textContent = error.message;
+      }
+      button.textContent = 'Chạy workflow';
+    } finally {
+      button.disabled = false;
+    }
+  }
+
   async function handleAdminBulletinSubmit(event) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -731,13 +811,114 @@ export function createAdminRoute({
     }
   }
 
+  async function pollProductionJob(jobId, status) {
+    while (true) {
+      const job = await fetchJson(`/api/admin/production-jobs/${encodeURIComponent(jobId)}`, {
+        headers: adminHeaders()
+      });
+      renderProductionProgress(status, job);
+      if (job.status === 'completed') return job;
+      if (job.status === 'failed') throw new Error(job.error || 'Production workflow thất bại.');
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+    }
+  }
+
+  function renderProductionProgress(status, job) {
+    if (!status) return;
+    const steps = Array.isArray(job.steps) ? job.steps : [];
+    const done = steps.filter((step) => step.status === 'completed').length;
+    const percent = steps.length ? Math.round((done / steps.length) * 100) : 0;
+    const activeStep = steps.find((step) => step.status === 'running') || steps.find((step) => step.status === 'failed') || steps[steps.length - 1] || {};
+    const logs = Array.isArray(job.logs) ? job.logs.slice(-6) : [];
+    status.className = `status-line production-progress${job.status === 'failed' ? ' error' : ''}`;
+    status.innerHTML = `
+      <div class="progress-copy">
+        <strong>${escapeHtml(productionJobMessage(job, activeStep))}</strong>
+        <span>${done}/${steps.length || '?'} bước - ${escapeHtml(job.status || 'running')}</span>
+      </div>
+      <div class="crawl-meter" aria-label="Tiến độ production workflow">
+        <div style="width:${Math.max(4, Math.min(100, percent))}%"></div>
+      </div>
+      <div class="production-step-list">
+        ${steps.map((step, index) => `
+          <article class="production-step is-${escapeAttr(step.status || 'pending')}">
+            <b>${productionStepIcon(step.status)} ${index + 1}. ${escapeHtml(step.label || step.key || 'Bước')}</b>
+            <span>${escapeHtml(step.description || '')}</span>
+            ${renderProductionStepProgress(step)}
+            ${step.error ? `<small>${escapeHtml(step.error)}</small>` : step.output && step.status === 'completed' ? `<small>${escapeHtml(step.output.split('\n').slice(-2).join(' · '))}</small>` : ''}
+          </article>
+        `).join('')}
+      </div>
+      ${logs.length ? `<div class="production-log">${logs.map((log) => `<span>${escapeHtml(log.text || '')}</span>`).join('')}</div>` : ''}
+    `;
+  }
+
+  function renderProductionStepProgress(step = {}) {
+    const progress = step.progress || {};
+    const total = Number(progress.total || 0);
+    if (!total) return '';
+    const checked = Number(progress.checked || 0);
+    const percent = Math.round((checked / total) * 100);
+    return `
+      <div class="production-step-progress">
+        <div class="crawl-meter" aria-label="Tiến độ ${escapeAttr(step.label || step.key || 'sync')}">
+          <div style="width:${Math.max(4, Math.min(100, percent))}%"></div>
+        </div>
+        <div class="production-step-metrics">
+          <span>Đã kiểm tra: ${checked}/${total}</span>
+          <span>Upload: ${Number(progress.uploaded || 0)}</span>
+          <span>Skip: ${Number(progress.skipped || 0)}</span>
+          <span>Tốc độ: ${Number(progress.ratePerMinute || 0).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} file/phút</span>
+          <span>ETA: ${escapeHtml(progress.eta || 'đang tính')}</span>
+          <span>Luồng: ${Number(progress.concurrency || 0) || '?'}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  function productionJobMessage(job, activeStep = {}) {
+    if (job.status === 'completed') return job.result?.message || 'Đã sync production xong.';
+    if (job.status === 'failed') return job.error || activeStep.error || 'Workflow production bị lỗi.';
+    if (activeStep.label) return `Đang chạy: ${activeStep.label}`;
+    return 'Đang chuẩn bị workflow production...';
+  }
+
+  function productionStepIcon(status) {
+    if (status === 'completed') return '✓';
+    if (status === 'running') return '…';
+    if (status === 'failed') return '!';
+    return '○';
+  }
+
+  function formatCrawlDuration(seconds) {
+    const value = Number(seconds);
+    if (!Number.isFinite(value) || value < 0) return 'đang tính';
+    if (value < 60) return `${Math.max(1, Math.round(value))} giây`;
+    const minutes = Math.floor(value / 60);
+    const remainingSeconds = Math.round(value % 60);
+    if (minutes < 60) return remainingSeconds ? `${minutes} phút ${remainingSeconds} giây` : `${minutes} phút`;
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    return remainingMinutes ? `${hours} giờ ${remainingMinutes} phút` : `${hours} giờ`;
+  }
+
+  function formatCrawlRate(value, suffix) {
+    const rate = Number(value || 0);
+    if (!rate) return `0 ${suffix}`;
+    return `${rate.toLocaleString('vi-VN', { maximumFractionDigits: 1 })} ${suffix}`;
+  }
+
   function renderImportProgress(status, job) {
     if (!status) return;
     const progress = job.progress || {};
     const chapterTotal = Number(progress.totalChapters || 0);
     const chapterDone = Number(progress.processedChapters || 0);
     const imageTotal = Number(progress.totalImages || 0);
-    const imageDone = Number(progress.downloadedImages || 0);
+    const imageDone = Number(progress.processedImages || progress.downloadedImages || 0);
+    const downloadedImages = Number(progress.downloadedImages || 0);
+    const skippedExistingImages = Number(progress.skippedExistingImages || 0);
+    const usableImages = Number(progress.usableImages ?? (downloadedImages + skippedExistingImages));
+    const failedImages = Number(progress.failedImages || 0);
     const seriesTotal = Number(progress.totalSeries || 1);
     const seriesDone = Number(progress.processedSeries || 0);
     const errors = Array.isArray(progress.errors) ? progress.errors : [];
@@ -759,7 +940,15 @@ export function createAdminRoute({
         <span>Truyện: ${seriesDone}/${seriesTotal}</span>
         <span>Phase: ${escapeHtml(progress.phase || job.status)}</span>
         <span>Chapter: ${chapterDone}/${chapterTotal || '?'}</span>
-        <span>Ảnh: ${imageDone}/${imageTotal || '?'}</span>
+        <span>Ảnh xử lý: ${imageDone}/${imageTotal || '?'}</span>
+        <span>Ảnh dùng được: ${usableImages}</span>
+        <span>Tải mới: ${downloadedImages}</span>
+        <span>Skip có sẵn: ${skippedExistingImages}</span>
+        <span>Ảnh lỗi skip: ${failedImages}</span>
+        <span>Tốc độ ảnh: ${formatCrawlRate(progress.imagesPerMinute, 'ảnh/phút')}</span>
+        <span>Tốc độ chapter: ${formatCrawlRate(progress.chaptersPerMinute, 'chapter/phút')}</span>
+        <span>ETA: ${formatCrawlDuration(progress.etaSeconds)}</span>
+        <span>Concurrency: ${Number(progress.imageConcurrency || 1)}</span>
         <span>Trạng thái: ${escapeHtml(job.status)}</span>
         <span>Lỗi: ${Number(progress.errorCount || errors.length || 0)}</span>
       </div>

@@ -6,8 +6,32 @@
   "trailingSlash": false,
   "rewrites": [
     {
-      "source": "/((?!api/).*)",
-      "destination": "/index.html"
+      "source": "/truyen/:path*",
+      "destination": "/index"
+    },
+    {
+      "source": "/the-loai/:path*",
+      "destination": "/index"
+    },
+    {
+      "source": "/admin/:path*",
+      "destination": "/index"
+    },
+    {
+      "source": "/gioi-thieu",
+      "destination": "/index"
+    },
+    {
+      "source": "/lien-he",
+      "destination": "/index"
+    },
+    {
+      "source": "/chinh-sach-noi-dung",
+      "destination": "/index"
+    },
+    {
+      "source": "/privacy",
+      "destination": "/index"
     }
   ]
 }

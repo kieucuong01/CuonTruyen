@@ -314,7 +314,7 @@ async function main() {
   const pathStyle = String(env('S3_PATH_STYLE', 'VIETNIX_S3_PATH_STYLE') || 'true').toLowerCase() !== 'false';
   const apply = arg('--apply');
   const force = arg('--force');
-  const concurrency = Math.max(1, Number(env('S3_SYNC_CONCURRENCY', 'VIETNIX_S3_SYNC_CONCURRENCY') || 3));
+  const concurrency = Math.max(1, Number(env('S3_SYNC_CONCURRENCY', 'VIETNIX_S3_SYNC_CONCURRENCY') || 8));
 
   if (!endpoint || !bucket || !accessKeyId || !secretAccessKey) {
     throw new Error('Missing S3 config. Required: S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY.');
@@ -327,8 +327,10 @@ async function main() {
   let uploaded = 0;
   let skipped = 0;
   let checked = 0;
+  const startedAt = Date.now();
+  let lastProgressAt = 0;
 
-  console.log(`[s3-sync] ${apply ? 'apply' : 'dry-run'} ${items.length} files to s3://${bucket}`);
+  console.log(`[s3-sync] ${apply ? 'apply' : 'dry-run'} ${items.length} files to s3://${bucket} concurrency=${concurrency}`);
   await runConcurrent(items, concurrency, async (item) => {
     const stat = await fs.stat(item.filePath);
     let remote = { exists: false, size: 0 };
@@ -336,17 +338,53 @@ async function main() {
     checked += 1;
     if (remote.exists && remote.size === stat.size) {
       skipped += 1;
-      if (checked % 500 === 0) console.log(`[s3-sync] checked=${checked} uploaded=${uploaded} skipped=${skipped}`);
+      maybePrintProgress();
       return;
     }
     if (apply) await putObject(client, item);
     uploaded += 1;
-    if (uploaded % 100 === 0 || checked % 500 === 0) {
-      console.log(`[s3-sync] checked=${checked} uploaded=${uploaded} skipped=${skipped}`);
-    }
+    maybePrintProgress();
   });
 
-  console.log(`[s3-sync] done checked=${checked} ${apply ? 'uploaded' : 'wouldUpload'}=${uploaded} skipped=${skipped}`);
+  console.log(progressLine({ done: true }));
+
+  function maybePrintProgress() {
+    const now = Date.now();
+    if (
+      checked === items.length
+      || checked % 200 === 0
+      || (uploaded > 0 && uploaded % 50 === 0)
+      || now - lastProgressAt > 5_000
+    ) {
+      lastProgressAt = now;
+      console.log(progressLine());
+    }
+  }
+
+  function progressLine({ done = false } = {}) {
+    const elapsedSeconds = Math.max(0.001, (Date.now() - startedAt) / 1000);
+    const ratePerMinute = checked / (elapsedSeconds / 60);
+    const remaining = Math.max(0, items.length - checked);
+    const etaSeconds = checked > 0 ? remaining / (checked / elapsedSeconds) : 0;
+    const label = done ? 'done' : 'progress';
+    return `[s3-sync] ${label} checked=${checked}/${items.length} uploaded=${uploaded} skipped=${skipped} rate=${roundOne(ratePerMinute)} files/min eta=${formatDuration(etaSeconds)} concurrency=${concurrency}`;
+  }
+}
+
+function formatDuration(seconds) {
+  const value = Math.max(0, Number(seconds || 0));
+  if (!Number.isFinite(value) || value <= 0) return '0s';
+  if (value < 60) return `${Math.ceil(value)}s`;
+  const minutes = Math.floor(value / 60);
+  const remainingSeconds = Math.round(value % 60);
+  if (minutes < 60) return remainingSeconds ? `${minutes}m${remainingSeconds}s` : `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes ? `${hours}h${remainingMinutes}m` : `${hours}h`;
+}
+
+function roundOne(value) {
+  return Math.round(Number(value || 0) * 10) / 10;
 }
 
 main().catch((error) => {

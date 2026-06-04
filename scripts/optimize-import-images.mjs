@@ -16,8 +16,9 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const config = imageOptimizationConfig(process.env);
   const root = path.resolve(args.root || IMPORT_ROOT);
-  const allImages = await collectImages(root);
-  const catalogImagePaths = args.catalogOnly ? await collectCatalogImageFilePaths(root) : null;
+  const scanRoot = args.seriesId ? path.join(root, args.seriesId) : root;
+  const allImages = await collectImages(scanRoot);
+  const catalogImagePaths = args.catalogOnly ? await collectCatalogImageFilePaths(root, args.seriesId) : null;
   const sourceImages = catalogImagePaths ? allImages.filter((item) => catalogImagePaths.has(path.resolve(item.filePath))) : allImages;
   const candidates = sourceImages
     .filter((item) => shouldAttemptImageOptimization({
@@ -31,12 +32,14 @@ async function main() {
     : candidates.slice(0, Math.max(1, Number(args.limit || 500)));
 
   const mode = args.apply || process.env.IMAGE_OPTIMIZE_APPLY === 'true' ? 'apply' : 'dry-run';
+  const optimizeConcurrency = Math.max(1, Math.min(8, Number(args.concurrency || process.env.IMAGE_OPTIMIZE_CONCURRENCY || 6)));
   let catalog = null;
   const catalogUpdates = new Map();
   if (mode === 'apply') catalog = await readCatalog();
   const summary = {
     mode,
     changedFiles: 0,
+    concurrency: optimizeConcurrency,
     catalogPagesUpdated: 0,
     deletedOriginalFiles: 0,
     deletedOriginalBytes: 0,
@@ -44,6 +47,7 @@ async function main() {
     cleanupSkippedMissing: 0,
     cleanupSkippedUnsafe: 0,
     root,
+    scanRoot,
     config,
     totalImages: allImages.length,
     scopedImages: sourceImages.length,
@@ -61,16 +65,16 @@ async function main() {
     bestSavings: []
   };
 
-  for (const item of selected) {
+  await runConcurrent(selected, optimizeConcurrency, async (item) => {
     const buffer = await fs.readFile(item.filePath);
     const optimized = await optimizeImageBuffer(buffer, item.name, config);
     if (optimized.reason === 'sharp-not-installed') {
       summary.skippedBecauseSharpMissing += 1;
-      break;
+      return;
     }
     if (!optimized.attempted || !optimized.optimizedBytes) {
       summary.failed += 1;
-      continue;
+      return;
     }
 
     const savingPercent = estimateOptimizationSaving({
@@ -114,21 +118,21 @@ async function main() {
       summary.bestSavings.sort((a, b) => b.saveMB - a.saveMB);
       summary.bestSavings = summary.bestSavings.slice(0, 20);
     }
-  }
+  });
 
   if (mode === 'apply' && catalogUpdates.size) await writeCatalog(catalog);
   if (mode === 'apply' && args.cleanupOriginals) {
-    const cleanup = await cleanupOptimizedOriginals(catalog, root);
+    const cleanup = await cleanupOptimizedOriginals(catalog, root, args.seriesId);
     Object.assign(summary, cleanup);
   }
 
   printSummary(summary, { json: args.json, partial: !args.all && candidates.length > selected.length });
 }
 
-async function collectCatalogImageFilePaths(root) {
+async function collectCatalogImageFilePaths(root, seriesId = '') {
   const catalog = await readCatalog();
   const paths = new Set();
-  for (const series of catalog.series || []) {
+  for (const series of matchingSeries(catalog, seriesId)) {
     for (const chapter of series.chapters || []) {
       for (const page of chapter.pages || []) {
         for (const value of [page.src, page.imageUrl, page.storageKey]) {
@@ -171,11 +175,35 @@ async function collectImages(root) {
 }
 
 function importFileFromPublicPath(root, value = '') {
-  const raw = String(value || '');
-  if (!raw.startsWith('/imports/')) return '';
-  const parts = raw.replace(/^\/imports\//, '').split('/').map((part) => decodeURIComponent(part));
+  const raw = String(value || '').trim();
+  const importPath = extractImportPath(raw);
+  if (!importPath) return '';
+  const parts = importPath.replace(/^\/imports\//, '').split('/').map((part) => decodeURIComponent(part));
   if (parts.length < 3) return '';
   return path.join(root, ...parts);
+}
+
+async function runConcurrent(items, limit, task) {
+  let index = 0;
+  const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length || 1)) }, async () => {
+    while (index < items.length) {
+      const item = items[index];
+      index += 1;
+      await task(item);
+    }
+  });
+  await Promise.all(workers);
+}
+
+function extractImportPath(value = '') {
+  if (value.startsWith('/imports/')) return value;
+  try {
+    const parsed = new URL(value);
+    const marker = '/imports/';
+    const markerIndex = parsed.pathname.indexOf(marker);
+    if (markerIndex >= 0) return decodeURI(parsed.pathname.slice(markerIndex));
+  } catch {}
+  return '';
 }
 function updateCatalogPageForOptimizedImage({ catalog, root, originalPath, optimizedPath, optimized, originalBytes }) {
   if (!catalog || !Array.isArray(catalog.series)) return null;
@@ -215,7 +243,7 @@ function publicPathFromImportFile(root, filePath) {
   return publicImportPath(decodeURIComponent(seriesId), decodeURIComponent(chapterId), decodeURIComponent(rest.join('/')));
 }
 
-async function cleanupOptimizedOriginals(catalog, root) {
+async function cleanupOptimizedOriginals(catalog, root, seriesId = '') {
   const result = {
     deletedOriginalFiles: 0,
     deletedOriginalBytes: 0,
@@ -229,7 +257,7 @@ async function cleanupOptimizedOriginals(catalog, root) {
   const activeRefs = activeCatalogImportReferences(catalog, rootPath);
   const candidates = new Map();
 
-  for (const series of catalog.series || []) {
+  for (const series of matchingSeries(catalog, seriesId)) {
     for (const chapter of series.chapters || []) {
       for (const page of chapter.pages || []) {
         if (!page.optimized || !page.originalImageUrl) continue;
@@ -296,6 +324,13 @@ function activeCatalogImportReferences(catalog, root) {
     }
   }
   return refs;
+}
+
+function matchingSeries(catalog, seriesId = '') {
+  const target = String(seriesId || '').trim();
+  const series = Array.isArray(catalog.series) ? catalog.series : [];
+  if (!target) return series;
+  return series.filter((item) => item.id === target || item.slug === target);
 }
 
 function addActiveRef(refs, root, value) {
@@ -368,6 +403,8 @@ function parseArgs(args) {
     apply: false,
     catalogOnly: false,
     cleanupOriginals: false,
+    concurrency: 0,
+    seriesId: '',
     limit: 500,
     root: ''
   };
@@ -377,6 +414,8 @@ function parseArgs(args) {
     else if (arg === '--apply') parsed.apply = true;
     else if (arg === '--catalog-only') parsed.catalogOnly = true;
     else if (arg === '--cleanup-originals') parsed.cleanupOriginals = true;
+    else if (arg === '--concurrency') parsed.concurrency = Number(args[index += 1] || 0);
+    else if (arg === '--series-id') parsed.seriesId = args[index += 1] || '';
     else if (arg === '--json') parsed.json = true;
     else if (arg === '--limit') parsed.limit = Number(args[index += 1] || parsed.limit);
     else if (arg === '--root') parsed.root = args[index += 1] || '';

@@ -139,16 +139,32 @@ export async function chapterDir(seriesId, chapterId) {
 }
 
 function publicImportsBaseUrl() {
+  if (process.env.PUBLIC_IMPORTS_BASE_URL_ENABLED !== 'true') return '';
   return (process.env.PUBLIC_IMPORTS_BASE_URL || '').replace(/\/$/, '');
 }
 
 export function publicImportUrl(value = '') {
   const url = String(value || '');
-  if (!url || !url.startsWith('/imports/')) return url;
+  const importPath = toPublicImportPath(url);
+  if (!importPath) return url;
   const baseUrl = publicImportsBaseUrl();
-  return baseUrl ? `${baseUrl}${url}` : url;
+  return baseUrl ? `${baseUrl}${importPath}` : importPath;
 }
 
 export function publicImportPath(seriesId, chapterId, filename) {
   return publicImportUrl(`/imports/${encodeURIComponent(seriesId)}/${encodeURIComponent(chapterId)}/${encodeURIComponent(filename)}`);
+}
+
+function toPublicImportPath(value = '') {
+  if (!value) return '';
+  if (value.startsWith('/imports/')) return value;
+  try {
+    const parsed = new URL(value);
+    const marker = '/imports/';
+    const markerIndex = parsed.pathname.indexOf(marker);
+    if (markerIndex >= 0) return decodeURI(parsed.pathname.slice(markerIndex));
+  } catch {
+    return '';
+  }
+  return '';
 }

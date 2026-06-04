@@ -64,6 +64,7 @@ export async function main() {
   if (publicImportsBase && !process.env.PUBLIC_IMPORTS_BASE_URL) {
     process.env.PUBLIC_IMPORTS_BASE_URL = publicImportsBase;
   }
+  if (publicImportsBase) process.env.PUBLIC_IMPORTS_BASE_URL_ENABLED = 'true';
 
   const {
     buildHomeCollections,

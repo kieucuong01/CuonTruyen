@@ -20,6 +20,8 @@ import {
 
 const DEFAULT_JSON_QUEUE_PATH = path.join(IMPORT_ROOT, 'crawl-jobs.json');
 const JSON_READ_RETRY_COUNT = 3;
+const JSON_WRITE_RETRY_COUNT = 8;
+const DEFAULT_RUNNING_JOB_STALE_MS = 20 * 60 * 1000;
 let jsonWriteQueue = Promise.resolve();
 let lastJsonJobsSnapshot = [];
 
@@ -132,6 +134,63 @@ export async function claimNextImportJob({ workerId = 'worker', now = new Date()
   jobs[index] = updated;
   await writeJsonJobs(jobs);
   return publicJob(updated);
+}
+
+export async function resetStaleRunningImportJobs({
+  now = new Date().toISOString(),
+  staleMs = Number(process.env.CRAWL_RUNNING_JOB_STALE_MS || DEFAULT_RUNNING_JOB_STALE_MS)
+} = {}) {
+  await ensureCrawlQueueStorage();
+  const thresholdMs = Date.parse(now) - Math.max(60_000, Number(staleMs || DEFAULT_RUNNING_JOB_STALE_MS));
+  const message = 'Reset stale running job to retrying before worker claim.';
+  if (usesPostgresStorage()) {
+    const result = await queryPostgres(
+      `update crawl_jobs
+       set status = 'retrying',
+           progress = progress || $2::jsonb,
+           logs = logs || $3::jsonb,
+           run_after = $4,
+           updated_at = $4,
+           locked_by = null,
+           locked_at = null,
+           last_error = null
+       where status = 'running'
+         and extract(epoch from coalesce(locked_at, updated_at, started_at, created_at)) * 1000 < $1
+       returning id`,
+      [
+        thresholdMs,
+        JSON.stringify({ phase: 'retrying', message, updatedAt: now }),
+        JSON.stringify([jobLog(message, now)]),
+        now
+      ]
+    );
+    return result.rows.length;
+  }
+
+  let resetCount = 0;
+  await updateJsonJobs((jobs) => jobs.map((job) => {
+    if (job.status !== 'running') return job;
+    const lastActiveAt = Date.parse(job.lockedAt || job.updatedAt || job.startedAt || job.createdAt || 0);
+    const ownerIsDead = isJobLockOwnerDead(job.lockedBy);
+    if (!ownerIsDead && (!lastActiveAt || lastActiveAt >= thresholdMs)) return job;
+    resetCount += 1;
+    return {
+      ...job,
+      status: 'retrying',
+      runAfter: now,
+      lockedBy: null,
+      lockedAt: null,
+      lastError: null,
+      error: null,
+      progress: mergeProgress(job, {
+        phase: 'retrying',
+        message,
+        updatedAt: now
+      }, now),
+      logs: [...(job.logs || []), jobLog(message, now)]
+    };
+  }));
+  return resetCount;
 }
 
 export async function updateImportJobProgress(id, patch = {}, { log = null, now = new Date().toISOString() } = {}) {
@@ -345,13 +404,23 @@ async function getInternalJob(id) {
 }
 
 async function updateJsonJob(id, updater) {
+  let updatedJob = null;
+  await updateJsonJobs((jobs) => {
+    const index = jobs.findIndex((job) => job.id === id);
+    if (index < 0) return jobs;
+    const nextJobs = [...jobs];
+    updatedJob = updater(nextJobs[index]);
+    nextJobs[index] = updatedJob;
+    return nextJobs;
+  });
+  return updatedJob ? publicJob(updatedJob) : null;
+}
+
+async function updateJsonJobs(updater) {
   const jobs = await readJsonJobs();
-  const index = jobs.findIndex((job) => job.id === id);
-  if (index < 0) return null;
-  const updated = updater(jobs[index]);
-  jobs[index] = updated;
-  await writeJsonJobs(jobs);
-  return publicJob(updated);
+  const updatedJobs = updater(jobs);
+  await writeJsonJobs(updatedJobs);
+  return updatedJobs;
 }
 
 async function readJsonJobs() {
@@ -364,7 +433,7 @@ async function readJsonJobs() {
       return jobs;
     } catch (error) {
       if (error.code === 'ENOENT') return [];
-      if (!(error instanceof SyntaxError)) throw error;
+      if (!(error instanceof SyntaxError) && !isRetryableJsonFileError(error)) throw error;
       if (attempt < JSON_READ_RETRY_COUNT) {
         await delay(25 * (attempt + 1));
         continue;
@@ -390,13 +459,34 @@ function writeJsonJobs(jobs) {
 }
 
 async function writeJsonAtomic(filePath, contents) {
-  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  for (let attempt = 0; attempt <= JSON_WRITE_RETRY_COUNT; attempt += 1) {
+    const tempPath = `${filePath}.${process.pid}.${Date.now()}.${attempt}.tmp`;
+    try {
+      await fs.writeFile(tempPath, contents);
+      await fs.rename(tempPath, filePath);
+      return;
+    } catch (error) {
+      await fs.rm(tempPath, { force: true }).catch(() => {});
+      if (!isRetryableJsonFileError(error) || attempt >= JSON_WRITE_RETRY_COUNT) throw error;
+      await delay(75 * (attempt + 1));
+    }
+  }
+}
+
+function isRetryableJsonFileError(error) {
+  return ['EBUSY', 'EACCES', 'EPERM'].includes(error?.code);
+}
+
+function isJobLockOwnerDead(lockedBy = '') {
+  const match = String(lockedBy || '').match(/(?:^|-)worker-(\d+)$/);
+  if (!match) return false;
+  const pid = Number(match[1]);
+  if (!pid || pid === process.pid) return false;
   try {
-    await fs.writeFile(tempPath, contents);
-    await fs.rename(tempPath, filePath);
-  } catch (error) {
-    await fs.rm(tempPath, { force: true }).catch(() => {});
-    throw error;
+    process.kill(pid, 0);
+    return false;
+  } catch {
+    return true;
   }
 }
 

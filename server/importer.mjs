@@ -86,8 +86,10 @@ export function resolveImportedChapterStatus({
   publishNewChapters = false,
   existingSeries = null
 } = {}) {
-  if (mode === CRAWL_MODE_NEW_CHAPTERS && publishNewChapters && existingSeries?.status === 'public') return 'public';
-  return 'draft';
+  void mode;
+  void publishNewChapters;
+  void existingSeries;
+  return 'public';
 }
 
 async function fetchImageBuffer(url, refererUrl) {
@@ -117,17 +119,34 @@ export async function importSeries(seriesUrl, options = {}, onProgress = () => {
   const mode = options.mode === CRAWL_MODE_NEW_CHAPTERS ? CRAWL_MODE_NEW_CHAPTERS : 'full';
   const maxChapters = Number(options.maxChapters || 0);
   const maxPages = Number(options.maxPages || 0);
-  const imageRetries = Number(options.imageRetries ?? process.env.CRAWL_IMAGE_RETRIES ?? 2);
+  const imageRetries = clampNumber(options.imageRetries ?? process.env.CRAWL_IMAGE_RETRIES ?? 2, 0, 4);
+  const optimizeDuringCrawl = parseBooleanOption(
+    options.optimizeDuringCrawl,
+    process.env.CRAWL_OPTIMIZE_DURING_CRAWL,
+    false
+  );
+  const imageConcurrency = clampNumber(options.imageConcurrency ?? process.env.CRAWL_IMAGE_CONCURRENCY ?? 6, 1, 8);
   const imageOptimizeConfig = options.imageOptimizeConfig || imageOptimizationConfig();
+  const downloadImageConfig = optimizeDuringCrawl ? imageOptimizeConfig : { ...imageOptimizeConfig, enabled: false };
   const thumbnailConfig = options.coverThumbnailConfig || coverThumbnailConfig();
   const rateLimiter = options.rateLimiter || new DomainRateLimiter({
     minDelayMs: Number(options.domainDelayMs ?? process.env.CRAWL_DOMAIN_DELAY_MS ?? 650)
   });
+  const imageRateLimiter = options.imageRateLimiter || new DomainRateLimiter({
+    minDelayMs: Number(options.imageDomainDelayMs ?? process.env.CRAWL_IMAGE_DOMAIN_DELAY_MS ?? 80)
+  });
   const errors = [];
   const emitProgress = (patch) => Promise.resolve(onProgress(patch));
+  const crawlStartedAt = new Date().toISOString();
+  let lastImageProgressAt = 0;
+  let skippedExistingImages = 0;
+  let failedImages = 0;
   await emitProgress({
     phase: 'fetching-series',
-    message: 'Đang lấy metadata và danh sách chapter...'
+    message: 'Đang lấy metadata và danh sách chapter...',
+    startedAt: crawlStartedAt,
+    imageConcurrency,
+    optimizeDuringCrawl
   });
   const html = await fetchHtmlWithLimit(adapter, seriesUrl, rateLimiter);
   const parsed = adapter.parseSeriesPage(html, seriesUrl);
@@ -157,8 +176,14 @@ export async function importSeries(seriesUrl, options = {}, onProgress = () => {
     processedChapters: 0,
     totalImages: 0,
     downloadedImages: 0,
+    skippedExistingImages,
+    failedImages,
+    processedImages: 0,
     newChapterCount: 0,
-    skippedExistingChapterCount
+    skippedExistingChapterCount,
+    imageConcurrency,
+    optimizeDuringCrawl,
+    startedAt: crawlStartedAt
   });
 
   if (mode === CRAWL_MODE_NEW_CHAPTERS && chaptersToImport.length === 0) {
@@ -175,6 +200,9 @@ export async function importSeries(seriesUrl, options = {}, onProgress = () => {
       processedChapters: 0,
       totalImages: 0,
       downloadedImages: 0,
+      skippedExistingImages,
+      failedImages,
+      processedImages: 0,
       ...importSummary
     });
     return {
@@ -186,6 +214,7 @@ export async function importSeries(seriesUrl, options = {}, onProgress = () => {
   const chapters = [];
   let totalImages = 0;
   let downloadedImages = 0;
+  const chapterJobs = [];
   let coverThumbnail = await createSeriesCoverThumbnailFromUrl({
     id,
     sourceUrl: parsed.coverUrl,
@@ -202,45 +231,98 @@ export async function importSeries(seriesUrl, options = {}, onProgress = () => {
     publishNewChapters: Boolean(options.publishNewChapters),
     existingSeries
   });
+
   for (let chapterIndex = 0; chapterIndex < chaptersToImport.length; chapterIndex += 1) {
     const chapter = chaptersToImport[chapterIndex];
     await emitProgress({
       phase: 'fetching-chapter',
-      message: `Đang lấy ${chapter.label} (${chapterIndex + 1}/${chaptersToImport.length})...`,
+      message: `Đang lấy danh sách ảnh ${chapter.label} (${chapterIndex + 1}/${chaptersToImport.length})...`,
       mode,
       currentChapterLabel: chapter.label,
-      processedChapters: chapterIndex
+      fetchedChapters: chapterIndex,
+      processedChapters: 0,
+      ...progressMetrics({
+        startedAt: crawlStartedAt,
+        totalImages,
+        downloadedImages,
+        skippedExistingImages,
+        failedImages,
+        processedChapters: 0,
+        totalChapters: chaptersToImport.length
+      })
     });
     const chapterHtml = await fetchHtmlWithLimit(adapter, chapter.url, rateLimiter);
     const imageUrls = adapter.extractChapterImages(chapterHtml, chapter.url);
     const selectedImages = maxPages > 0 ? imageUrls.slice(0, maxPages) : imageUrls;
+    const dir = await chapterDir(id, chapter.id);
     totalImages += selectedImages.length;
+    chapterJobs.push({
+      chapter,
+      chapterIndex,
+      selectedImages,
+      dir
+    });
     await emitProgress({
-      phase: 'downloading-images',
-      message: `${chapter.label}: tìm thấy ${selectedImages.length} ảnh, đang tải...`,
+      phase: 'fetching-chapters',
+      message: `${chapter.label}: tìm thấy ${selectedImages.length} ảnh.`,
       mode,
       currentChapterLabel: chapter.label,
+      fetchedChapters: chapterIndex + 1,
+      processedChapters: 0,
       totalImages,
-      downloadedImages
+      downloadedImages,
+      skippedExistingImages,
+      failedImages,
+      processedImages: progressMetrics({
+        totalImages,
+        downloadedImages,
+        skippedExistingImages,
+        failedImages
+      }).processedImages
     });
-    const dir = await chapterDir(id, chapter.id);
-    const pages = [];
+  }
 
-    for (let index = 0; index < selectedImages.length; index += 1) {
-      const sourceUrl = selectedImages[index];
+  for (const chapterJob of chapterJobs) {
+    const { chapter, chapterIndex, selectedImages, dir } = chapterJob;
+    const pagesByIndex = new Array(selectedImages.length);
+    let completedChapterImages = 0;
+    await emitProgress({
+      phase: 'downloading-images',
+      message: `${chapter.label}: đang tải ${selectedImages.length} ảnh với concurrency ${imageConcurrency}.`,
+      mode,
+      currentChapterLabel: chapter.label,
+      processedChapters: chapterIndex,
+      totalImages,
+      downloadedImages,
+      skippedExistingImages,
+      failedImages,
+      imageConcurrency,
+      optimizeDuringCrawl,
+      ...progressMetrics({
+        startedAt: crawlStartedAt,
+        totalImages,
+        downloadedImages,
+        skippedExistingImages,
+        failedImages,
+        processedChapters: chapterIndex,
+        totalChapters: chapterJobs.length
+      })
+    });
+
+    await runWithConcurrency(selectedImages, imageConcurrency, async (sourceUrl, index) => {
       const filename = adapter.filenameForImage(sourceUrl, index);
       let storedImage = await findExistingStoredImage(dir, filename, imageOptimizeConfig);
       if (!storedImage.existed) {
         try {
           await retryOperation(
             async () => {
-              await rateLimiter.wait(sourceUrl);
+              await imageRateLimiter.wait(sourceUrl);
               const buffer = await fetchImageBuffer(sourceUrl, chapter.url);
               storedImage = await writeImageWithOptimization({
                 buffer,
                 dir,
                 filename,
-                config: imageOptimizeConfig
+                config: downloadImageConfig
               });
             },
             {
@@ -256,6 +338,14 @@ export async function importSeries(seriesUrl, options = {}, onProgress = () => {
                   currentChapterLabel: chapter.label,
                   totalImages,
                   downloadedImages,
+                  skippedExistingImages,
+                  failedImages,
+                  processedImages: progressMetrics({
+                    totalImages,
+                    downloadedImages,
+                    skippedExistingImages,
+                    failedImages
+                  }).processedImages,
                   errors: errors.slice(-20),
                   errorCount: errors.length
                 });
@@ -263,6 +353,8 @@ export async function importSeries(seriesUrl, options = {}, onProgress = () => {
             }
           );
         } catch (error) {
+          failedImages += 1;
+          completedChapterImages += 1;
           const message = `${chapter.label}: skipped image ${index + 1}/${selectedImages.length} after retries because ${error.message || String(error)}.`;
           errors.push(message);
           await emitProgress({
@@ -272,23 +364,55 @@ export async function importSeries(seriesUrl, options = {}, onProgress = () => {
             currentChapterLabel: chapter.label,
             totalImages,
             downloadedImages,
+            skippedExistingImages,
+            failedImages,
+            ...progressMetrics({
+              startedAt: crawlStartedAt,
+              totalImages,
+              downloadedImages,
+              skippedExistingImages,
+              failedImages,
+              processedChapters: chapterIndex,
+              totalChapters: chapterJobs.length
+            }),
             errors: errors.slice(-20),
             errorCount: errors.length
           });
-          continue;
+          return;
         }
+      } else {
+        skippedExistingImages += 1;
       }
-      downloadedImages += 1;
+      if (!storedImage.existed) downloadedImages += 1;
+      completedChapterImages += 1;
       if (!fallbackCoverImagePath && storedImage.filePath) fallbackCoverImagePath = storedImage.filePath;
-      await emitProgress({
+      const now = Date.now();
+      const shouldEmitImageProgress = now - lastImageProgressAt > 1200 || completedChapterImages === selectedImages.length;
+      if (shouldEmitImageProgress) {
+        lastImageProgressAt = now;
+        await emitProgress({
         phase: 'downloading-images',
-        message: `${chapter.label}: đã tải ${index + 1}/${selectedImages.length} ảnh.`,
+        message: `${chapter.label}: đã xử lý ${completedChapterImages}/${selectedImages.length} ảnh.`,
         mode,
         currentChapterLabel: chapter.label,
         totalImages,
-        downloadedImages
-      });
-      pages.push({
+        downloadedImages,
+        skippedExistingImages,
+        failedImages,
+        imageConcurrency,
+        optimizeDuringCrawl,
+        ...progressMetrics({
+          startedAt: crawlStartedAt,
+          totalImages,
+          downloadedImages,
+          skippedExistingImages,
+          failedImages,
+          processedChapters: chapterIndex,
+          totalChapters: chapterJobs.length
+        })
+        });
+      }
+      pagesByIndex[index] = {
         index,
         sourceUrl,
         src: publicImportPath(id, chapter.id, storedImage.filename),
@@ -298,9 +422,10 @@ export async function importSeries(seriesUrl, options = {}, onProgress = () => {
         originalBytes: storedImage.originalBytes || null,
         storedBytes: storedImage.storedBytes || null,
         optimized: Boolean(storedImage.optimized)
-      });
-    }
+      };
+    });
 
+    const pages = pagesByIndex.filter(Boolean);
     chapters.push({
       ...chapter,
       sourceUrl: chapter.url,
@@ -317,6 +442,19 @@ export async function importSeries(seriesUrl, options = {}, onProgress = () => {
       processedChapters: chapterIndex + 1,
       totalImages,
       downloadedImages,
+      skippedExistingImages,
+      failedImages,
+      imageConcurrency,
+      optimizeDuringCrawl,
+      ...progressMetrics({
+        startedAt: crawlStartedAt,
+        totalImages,
+        downloadedImages,
+        skippedExistingImages,
+        failedImages,
+        processedChapters: chapterIndex + 1,
+        totalChapters: chapterJobs.length
+      }),
       newChapterCount: chapters.length,
       skippedExistingChapterCount
     });
@@ -380,7 +518,7 @@ export async function importSeries(seriesUrl, options = {}, onProgress = () => {
     coverUrl: parsed.coverUrl,
     thumbnailUrl: coverThumbnail?.thumbnailUrl || '',
     coverThumbnail: coverThumbnail?.metadata || null,
-    status: 'draft',
+    status: 'public',
     chapters: [...chapters, ...untouchedChapters]
   });
   return {
@@ -396,6 +534,62 @@ function hashCode(value) {
     hash |= 0;
   }
   return hash;
+}
+
+function clampNumber(value, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return min;
+  return Math.max(min, Math.min(max, Math.floor(number)));
+}
+
+function parseBooleanOption(value, envValue, defaultValue = false) {
+  const selected = value ?? envValue;
+  if (selected === undefined || selected === null || selected === '') return defaultValue;
+  if (typeof selected === 'boolean') return selected;
+  return ['1', 'true', 'yes', 'on'].includes(String(selected).trim().toLowerCase());
+}
+
+async function runWithConcurrency(items, limit, worker) {
+  const queue = Array.isArray(items) ? items : [];
+  const workerCount = Math.min(Math.max(1, Number(limit || 1)), Math.max(1, queue.length));
+  let nextIndex = 0;
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (nextIndex < queue.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      await worker(queue[currentIndex], currentIndex);
+    }
+  }));
+}
+
+export function progressMetrics({
+  startedAt = '',
+  totalImages = 0,
+  downloadedImages = 0,
+  skippedExistingImages = 0,
+  failedImages = 0,
+  processedChapters = 0,
+  totalChapters = 0
+} = {}) {
+  const usableImages = Number(downloadedImages || 0) + Number(skippedExistingImages || 0);
+  const processedImages = usableImages + Number(failedImages || 0);
+  const elapsedMs = Math.max(1, Date.now() - (Date.parse(startedAt) || Date.now()));
+  const elapsedMinutes = elapsedMs / 60_000;
+  const imagesPerMinute = elapsedMinutes > 0 ? Math.round((processedImages / elapsedMinutes) * 10) / 10 : 0;
+  const chaptersPerMinute = elapsedMinutes > 0 ? Math.round((Number(processedChapters || 0) / elapsedMinutes) * 10) / 10 : 0;
+  const remainingImages = Math.max(0, Number(totalImages || 0) - processedImages);
+  const etaSeconds = imagesPerMinute > 0 ? Math.round((remainingImages / imagesPerMinute) * 60) : null;
+  return {
+    processedImages,
+    usableImages,
+    downloadedImages: Number(downloadedImages || 0),
+    skippedExistingImages: Number(skippedExistingImages || 0),
+    failedImages: Number(failedImages || 0),
+    imagesPerMinute,
+    chaptersPerMinute,
+    etaSeconds,
+    totalChapters
+  };
 }
 
 async function createSeriesCoverThumbnailFromUrl({

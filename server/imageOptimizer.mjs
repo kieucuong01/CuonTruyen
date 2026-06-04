@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-const SUPPORTED_SOURCE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
+const DEFAULT_SOURCE_EXTENSIONS = ['.jpg', '.jpeg', '.png'];
 let sharpLoader = null;
 
 export function imageOptimizationConfig(env = process.env) {
@@ -11,7 +11,8 @@ export function imageOptimizationConfig(env = process.env) {
     quality: clampNumber(env.IMAGE_QUALITY, 1, 100, 84),
     maxWidth: clampNumber(env.IMAGE_MAX_WIDTH, 320, 2400, 900),
     skipBelowBytes: Math.max(0, Number(env.IMAGE_SKIP_BELOW_KB || 180) * 1024),
-    minSavingPercent: clampNumber(env.IMAGE_MIN_SAVING_PERCENT, 0, 90, 10)
+    minSavingPercent: clampNumber(env.IMAGE_MIN_SAVING_PERCENT, 0, 90, 10),
+    sourceExtensions: sourceExtensions(env.IMAGE_SOURCE_EXTENSIONS)
   };
 }
 
@@ -43,7 +44,7 @@ export function shouldAttemptImageOptimization({
   const ext = path.extname(filename).toLowerCase();
   return Boolean(
     config.enabled
-    && SUPPORTED_SOURCE_EXTENSIONS.has(ext)
+    && new Set(config.sourceExtensions || DEFAULT_SOURCE_EXTENSIONS).has(ext)
     && Number(byteLength || 0) >= Number(config.skipBelowBytes || 0)
   );
 }
@@ -289,4 +290,13 @@ function clampNumber(value, min, max, fallback) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(min, Math.min(max, parsed));
+}
+
+function sourceExtensions(value = '') {
+  const selected = String(value || '')
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean)
+    .map((item) => item.startsWith('.') ? item : `.${item}`);
+  return selected.length ? [...new Set(selected)] : DEFAULT_SOURCE_EXTENSIONS;
 }

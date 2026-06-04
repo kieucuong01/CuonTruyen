@@ -49,6 +49,10 @@ import {
   getImportJob,
   listImportJobs
 } from './importJobs.mjs';
+import {
+  createProductionPublishJob,
+  getProductionPublishJob
+} from './productionPublishJobs.mjs';
 import { runWorkerOnce } from './crawlWorker.mjs';
 import { normalizeImportBatchPayload, normalizeImportPayload } from './importOptions.mjs';
 import { createUpdateChaptersPayload, sourceUrlForSeries } from './crawlQueue.mjs';
@@ -72,7 +76,7 @@ const PORT = Number(process.env.PORT || 4173);
 const API_CACHE_TTL_MS = 15_000;
 const apiResponseCache = createBoundedCache({ maxEntries: Number(process.env.API_CACHE_MAX_ENTRIES || 250) });
 const SPA_ROUTE_PATHS = new Set(['/admin']);
-const EMBEDDED_CRAWL_WORKER_ENABLED = process.env.CRAWL_EMBEDDED_WORKER !== 'false';
+const EMBEDDED_CRAWL_WORKER_ENABLED = process.env.CRAWL_EMBEDDED_WORKER === 'true';
 const EMBEDDED_CRAWL_WORKER_ID = `server-crawl-worker-${process.pid}`;
 const EMBEDDED_CRAWL_DRAIN_LIMIT = Math.max(1, Number(process.env.CRAWL_EMBEDDED_DRAIN_LIMIT || 50));
 let embeddedCrawlDrainPromise = null;
@@ -460,6 +464,32 @@ async function handleApi(req, res, url) {
     }));
     clearApiCache();
     jsonResponse(res, result.status, { job: result.job, reused: result.reused });
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname.match(/^\/api\/admin\/series\/[^/]+\/publish-production$/)) {
+    const id = decodeURIComponent(url.pathname.split('/')[4]);
+    const catalog = await readCatalog({ includePages: false });
+    const series = findSeriesBySlug(catalog, id, { includeDraft: true }) || await getSeries(id, { includePages: false, includeDraft: true });
+    if (!series) {
+      jsonResponse(res, 404, { error: 'Series not found' });
+      return true;
+    }
+    const result = createProductionPublishJob({
+      seriesId: series.id || id,
+      seriesSlug: series.slug || '',
+      title: series.title || ''
+    });
+    clearApiCache();
+    jsonResponse(res, result.reused ? 200 : 202, result);
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname.startsWith('/api/admin/production-jobs/')) {
+    const id = decodeURIComponent(url.pathname.replace('/api/admin/production-jobs/', ''));
+    const job = getProductionPublishJob(id);
+    if (job?.status === 'completed') clearApiCache();
+    jsonResponse(res, job ? 200 : 404, job || { error: 'Production job not found' });
     return true;
   }
 

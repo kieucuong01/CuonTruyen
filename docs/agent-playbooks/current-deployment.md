@@ -76,6 +76,27 @@ http://localhost:54533
 http://localhost:54533/#/admin
 ```
 
+Local crawler:
+
+```powershell
+$env:CRAWL_EMBEDDED_WORKER='false'
+$env:CRAWL_IMAGE_CONCURRENCY='6'
+$env:CRAWL_OPTIMIZE_DURING_CRAWL='false'
+npm run dev
+npm run worker:crawl
+```
+
+Run only one crawler worker at a time. The server does not run the embedded
+crawler unless `CRAWL_EMBEDDED_WORKER=true`, which avoids JSON queue lock errors
+when a separate `npm run worker:crawl` process is active. The worker also keeps
+a local `crawl-worker.lock` heartbeat so two Node processes do not claim crawl
+jobs at the same time.
+
+Use `CRAWL_IMAGE_CONCURRENCY=6` as the fast default. Lower to `4` if the source
+rate-limits or returns many `fetch failed` errors; raise to `8` only when the
+source is stable. Keep `CRAWL_OPTIMIZE_DURING_CRAWL=false` for faster crawling,
+then run the image optimization scripts after the crawl completes.
+
 Local image/catalog root:
 
 ```text

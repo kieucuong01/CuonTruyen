@@ -3,6 +3,7 @@ logs/
 .runtime/
 .tmp/
 .tmp-edge-admin-smoke/
+.tmp-vercel-deploy*/
 node_modules/
 .git/
 .env
@@ -10,3 +11,9 @@ node_modules/
 .env.*.local
 dev-server*.log
 npm-debug.log*
+public/static-api/
+public/truyen/
+public/gioi-thieu/
+public/lien-he/
+public/chinh-sach-noi-dung/
+public/privacy/
