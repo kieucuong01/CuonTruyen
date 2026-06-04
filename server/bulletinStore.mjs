@@ -7,8 +7,15 @@ const BULLETIN_STORE_PATH = path.resolve(process.env.BULLETIN_STORE_PATH || path
 const MAX_MESSAGES = Number(process.env.BULLETIN_MAX_MESSAGES || 200);
 const MAX_TEXT_LENGTH = Number(process.env.BULLETIN_MAX_TEXT_LENGTH || 500);
 let writeQueue = Promise.resolve();
+let libSqlClientPromise = null;
+let libSqlSchemaPromise = null;
+
+export function usesLibSqlBulletinStore() {
+  return Boolean(libSqlDatabaseUrl());
+}
 
 export async function listBulletinMessages({ limit = 30 } = {}) {
+  if (usesLibSqlBulletinStore()) return listLibSqlBulletinMessages({ limit });
   const store = await readBulletinStore();
   return sortMessages(store.messages)
     .slice(0, Math.max(1, Number(limit || 30)))
@@ -38,6 +45,7 @@ export async function createAdminBulletinMessage({ text, adminEmail, pinned = fa
 }
 
 export async function setAdminBulletinPinned(id, pinned = false, { now = new Date().toISOString() } = {}) {
+  if (usesLibSqlBulletinStore()) return setLibSqlAdminBulletinPinned(id, pinned, { now });
   const store = await readBulletinStore();
   const message = store.messages.find((item) => item.id === id);
   if (!message) throw Object.assign(new Error('Không tìm thấy tin nhắn.'), { status: 404 });
@@ -64,10 +72,133 @@ async function appendMessage({ text, now, authorRole, authorId, authorName, pinn
     createdAt: now,
     updatedAt: now
   };
+  if (usesLibSqlBulletinStore()) {
+    await insertLibSqlMessage(message);
+    return publicMessage(message);
+  }
   const store = await readBulletinStore();
   store.messages = sortMessages([message, ...store.messages]).slice(0, MAX_MESSAGES);
   await writeBulletinStore(store);
   return publicMessage(message);
+}
+
+async function listLibSqlBulletinMessages({ limit = 30 } = {}) {
+  await ensureLibSqlSchema();
+  const client = await getLibSqlClient();
+  const result = await client.execute({
+    sql: `select * from bulletin_messages
+          order by pinned desc,
+                   coalesce(pinned_at, created_at) desc,
+                   created_at desc
+          limit ?`,
+    args: [Math.max(1, Number(limit || 30))]
+  });
+  return result.rows.map(messageFromLibSqlRow).map(publicMessage);
+}
+
+async function insertLibSqlMessage(message) {
+  await ensureLibSqlSchema();
+  const client = await getLibSqlClient();
+  await client.execute({
+    sql: `insert into bulletin_messages (
+            id, text, author_role, author_id, author_name, pinned, pinned_at, created_at, updated_at
+          ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [
+      message.id,
+      message.text,
+      message.authorRole,
+      message.authorId,
+      message.authorName,
+      message.pinned ? 1 : 0,
+      message.pinnedAt,
+      message.createdAt,
+      message.updatedAt
+    ]
+  });
+}
+
+async function setLibSqlAdminBulletinPinned(id, pinned = false, { now = new Date().toISOString() } = {}) {
+  await ensureLibSqlSchema();
+  const client = await getLibSqlClient();
+  const existing = await client.execute({
+    sql: 'select * from bulletin_messages where id = ? limit 1',
+    args: [id]
+  });
+  const message = existing.rows[0] ? messageFromLibSqlRow(existing.rows[0]) : null;
+  if (!message) throw Object.assign(new Error('Không tìm thấy tin nhắn.'), { status: 404 });
+  if (message.authorRole !== 'admin') {
+    throw Object.assign(new Error('Chỉ tin nhắn admin mới được ghim.'), { status: 400 });
+  }
+  const nextPinnedAt = pinned ? now : null;
+  await client.execute({
+    sql: 'update bulletin_messages set pinned = ?, pinned_at = ?, updated_at = ? where id = ?',
+    args: [pinned ? 1 : 0, nextPinnedAt, now, id]
+  });
+  return publicMessage({
+    ...message,
+    pinned: Boolean(pinned),
+    pinnedAt: nextPinnedAt,
+    updatedAt: now
+  });
+}
+
+async function ensureLibSqlSchema() {
+  if (!libSqlSchemaPromise) {
+    libSqlSchemaPromise = (async () => {
+      const client = await getLibSqlClient();
+      await client.batch([
+        `create table if not exists bulletin_messages (
+          id text primary key,
+          text text not null,
+          author_role text not null,
+          author_id text not null,
+          author_name text not null,
+          pinned integer not null default 0,
+          pinned_at text,
+          created_at text not null,
+          updated_at text not null
+        )`,
+        'create index if not exists idx_bulletin_messages_pinned on bulletin_messages(pinned, pinned_at)',
+        'create index if not exists idx_bulletin_messages_created_at on bulletin_messages(created_at)'
+      ]);
+    })();
+  }
+  return libSqlSchemaPromise;
+}
+
+async function getLibSqlClient() {
+  if (!libSqlClientPromise) {
+    libSqlClientPromise = (async () => {
+      const { createClient } = await import('@libsql/client');
+      return createClient({
+        url: libSqlDatabaseUrl(),
+        authToken: libSqlAuthToken()
+      });
+    })();
+  }
+  return libSqlClientPromise;
+}
+
+function messageFromLibSqlRow(row = {}) {
+  return normalizeMessage({
+    id: row.id,
+    text: row.text,
+    authorRole: row.author_role ?? row.authorRole,
+    authorId: row.author_id ?? row.authorId,
+    authorName: row.author_name ?? row.authorName,
+    pinned: Boolean(Number(row.pinned ?? 0)),
+    pinnedAt: row.pinned_at ?? row.pinnedAt ?? null,
+    createdAt: row.created_at ?? row.createdAt,
+    updatedAt: row.updated_at ?? row.updatedAt
+  });
+}
+
+function libSqlDatabaseUrl() {
+  return process.env.LIBSQL_DATABASE_URL || process.env.TURSO_DATABASE_URL || '';
+}
+
+function libSqlAuthToken() {
+  return process.env.LIBSQL_AUTH_TOKEN || process.env.TURSO_AUTH_TOKEN || '';
 }
 
 async function readBulletinStore() {
