@@ -166,7 +166,7 @@ function staticApiPath(pathname) {
 function fetchStaticJson(path, config) {
   const cleanPath = path.replace(/^\/+/, '');
   const configuredBase = trimTrailingSlash(config.staticApiBaseUrl || '/static-api');
-  const fallbackBase = '/static-api';
+  const fallbackBase = '/fallback-api';
   const bases = uniqueValues([configuredBase, fallbackBase]);
   let lastError = null;
 
