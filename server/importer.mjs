@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { chapterDir, publicImportPath } from './catalogStore.mjs';
 import { getAdapterForUrl } from './adapters/index.mjs';
 import { DomainRateLimiter, retryOperation } from './crawlRuntime.mjs';
-import { getSeries, upsertSeries } from './dataStore.mjs';
+import { getSeries, readCatalog, upsertSeries } from './dataStore.mjs';
 import {
   coverThumbnailConfig,
   findExistingStoredImage,
@@ -28,6 +28,39 @@ function chapterKeys(chapter = {}) {
 
 function chapterSourceUrl(chapter = {}) {
   return normalizeSourceUrl(chapter.sourceUrl || chapter.url || '');
+}
+
+export function sourceIdentityKey(url = '') {
+  try {
+    const parsed = new URL(normalizeSourceUrl(url));
+    return parsed.pathname.replace(/\/$/, '').toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+export function sourceMappingsWith(series = {}, adapterName = '', sourceUrl = '') {
+  const mappings = [
+    ...(Array.isArray(series.sourceMappings) ? series.sourceMappings : []),
+    series.sourceUrl ? { adapter: series.adapter || adapterName, sourceUrl: series.sourceUrl } : null,
+    sourceUrl ? { adapter: adapterName, sourceUrl } : null
+  ].filter((mapping) => mapping?.sourceUrl);
+  const seen = new Set();
+  return mappings.filter((mapping) => {
+    const key = `${mapping.adapter || ''}:${normalizeSourceUrl(mapping.sourceUrl)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+export function findExistingSeriesForImport(catalog = {}, parsed = {}, sourceUrl = '') {
+  const sourceKey = sourceIdentityKey(sourceUrl);
+  const parsedSlug = String(parsed.slug || slugify(parsed.title || '')).trim();
+  return (catalog.series || []).find((series) => {
+    if (parsedSlug && series.slug === parsedSlug) return true;
+    return sourceKey && sourceMappingsWith(series).some((mapping) => sourceIdentityKey(mapping.sourceUrl) === sourceKey);
+  }) || null;
 }
 
 export function selectNewChaptersForImport(parsedChapters = [], existingChapters = []) {
@@ -101,10 +134,11 @@ export async function importSeries(seriesUrl, options = {}, onProgress = () => {
   if (!parsed.chapters.length) {
     throw new Error('Không tìm thấy danh sách chapter hợp lệ trong trang truyện.');
   }
-  const id = String(options.seriesId || `${parsed.slug}-${Math.abs(hashCode(seriesUrl)).toString(36)}`);
+  const defaultId = `${parsed.slug}-${Math.abs(hashCode(sourceIdentityKey(seriesUrl) || seriesUrl)).toString(36)}`;
   const existingSeries = mode === CRAWL_MODE_NEW_CHAPTERS
-    ? (options.existingSeries || await getSeries(id, { includePages: true, includeDraft: true }))
-    : null;
+    ? (options.existingSeries || await getSeries(String(options.seriesId || defaultId), { includePages: true, includeDraft: true }))
+    : (options.existingSeries || findExistingSeriesForImport(await readCatalog(), parsed, seriesUrl));
+  const id = String(options.seriesId || existingSeries?.id || defaultId);
   if (mode === CRAWL_MODE_NEW_CHAPTERS && !existingSeries) {
     throw new Error('Không tìm thấy truyện hiện có để cập nhật chapter mới.');
   }
@@ -324,7 +358,7 @@ export async function importSeries(seriesUrl, options = {}, onProgress = () => {
     title: existingSeries.title || parsed.title,
     slug: existingSeries.slug || slugify(existingSeries.title || parsed.title),
     sourceUrl: existingSeries.sourceUrl || seriesUrl,
-    sourceMappings: existingSeries.sourceMappings || [{ adapter: adapter.name, sourceUrl: seriesUrl }],
+    sourceMappings: sourceMappingsWith(existingSeries, adapter.name, seriesUrl),
     adapter: existingSeries.adapter || adapter.name,
     coverUrl: existingSeries.coverUrl || parsed.coverUrl,
     thumbnailUrl: coverThumbnail?.thumbnailUrl || existingSeries.thumbnailUrl || existingSeries.coverThumbnailUrl || '',
@@ -341,6 +375,7 @@ export async function importSeries(seriesUrl, options = {}, onProgress = () => {
     title: parsed.title,
     slug: slugify(parsed.title),
     sourceUrl: seriesUrl,
+    sourceMappings: sourceMappingsWith({}, adapter.name, seriesUrl),
     adapter: adapter.name,
     coverUrl: parsed.coverUrl,
     thumbnailUrl: coverThumbnail?.thumbnailUrl || '',
