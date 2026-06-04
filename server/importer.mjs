@@ -1,3 +1,4 @@
+import './env.mjs';
 import fs from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 

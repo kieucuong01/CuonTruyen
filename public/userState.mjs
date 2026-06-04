@@ -1,5 +1,4 @@
-export const USER_SESSION_KEY = 'comic-user-session';
-export const USER_PROFILES_KEY = 'comic-user-profiles';
+﻿export const USER_SESSION_KEY = 'comic-user-session';
 
 const memoryStorage = new Map();
 
@@ -46,52 +45,17 @@ export function normalizeUserIdentifier(value = '') {
   return String(value).trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
-function slugUserId(identifier) {
-  const safe = normalizeUserIdentifier(identifier)
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-  return `user:${safe || 'reader'}`;
-}
-
-function displayNameFromIdentifier(identifier) {
-  const normalized = normalizeUserIdentifier(identifier);
-  const name = normalized.includes('@') ? normalized.split('@')[0] : normalized;
-  return name
-    .split(/[.\-_\s]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ') || 'Reader';
-}
-
 export function followStorageKey(userId) {
   return `comic-user-follows:${userId}`;
 }
 
 export function loadUserSession({ storage } = {}) {
   const session = readJson(USER_SESSION_KEY, null, storage);
-  return session?.id ? session : null;
+  return session?.id && session?.token ? session : null;
 }
 
-export function loginOrRegisterUser(identifier, { storage, now = () => new Date() } = {}) {
-  const normalized = normalizeUserIdentifier(identifier);
-  if (!normalized) throw new Error('Vui lòng nhập tên hoặc email.');
-
-  const profiles = readJson(USER_PROFILES_KEY, {}, storage);
-  const id = slugUserId(normalized);
-  const timestamp = now().toISOString();
-  const existing = profiles[id] || {};
-  const session = {
-    id,
-    identifier: normalized,
-    displayName: existing.displayName || displayNameFromIdentifier(normalized),
-    createdAt: existing.createdAt || timestamp,
-    lastLoginAt: timestamp
-  };
-
-  profiles[id] = session;
-  writeJson(USER_PROFILES_KEY, profiles, storage);
+export function saveUserSession(session, { storage } = {}) {
+  if (!session?.id || !session?.token) throw new Error('Phiên đăng nhập không hợp lệ.');
   writeJson(USER_SESSION_KEY, session, storage);
   return session;
 }

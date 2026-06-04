@@ -1,3 +1,4 @@
+import './env.mjs';
 import { pathToFileURL } from 'node:url';
 
 import { importSeries } from './importer.mjs';

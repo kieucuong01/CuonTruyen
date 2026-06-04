@@ -1,4 +1,4 @@
-import test from 'node:test';
+﻿import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
@@ -6,7 +6,7 @@ import {
   isFollowingSeries,
   loadFollowedSeriesIds,
   loadUserSession,
-  loginOrRegisterUser,
+  saveUserSession,
   toggleFollowSeries
 } from '../public/userState.mjs';
 
@@ -25,38 +25,30 @@ function createStorage() {
   };
 }
 
-test('loginOrRegisterUser creates a lightweight session from one input', () => {
-  const storage = createStorage();
-  const session = loginOrRegisterUser('  cuong@example.com  ', {
-    storage,
-    now: () => new Date('2026-05-23T10:00:00.000Z')
-  });
+function userFixture() {
+  return {
+    id: 'user_123',
+    identifier: 'cuong@example.com',
+    displayName: 'Cuong',
+    token: 'session-token'
+  };
+}
 
-  assert.equal(session.id, 'user:cuong-example-com');
-  assert.equal(session.displayName, 'Cuong');
-  assert.equal(session.identifier, 'cuong@example.com');
-  assert.equal(loadUserSession({ storage }).id, session.id);
+test('saveUserSession stores a server-issued session token', () => {
+  const storage = createStorage();
+  const session = saveUserSession(userFixture(), { storage });
+
+  assert.equal(session.id, 'user_123');
+  assert.equal(loadUserSession({ storage }).token, 'session-token');
 });
 
-test('loginOrRegisterUser reuses the same local profile on later login', () => {
-  const storage = createStorage();
-  const first = loginOrRegisterUser('Lan', {
-    storage,
-    now: () => new Date('2026-05-23T10:00:00.000Z')
-  });
-  const second = loginOrRegisterUser(' lan ', {
-    storage,
-    now: () => new Date('2026-05-24T10:00:00.000Z')
-  });
-
-  assert.equal(second.id, first.id);
-  assert.equal(second.createdAt, first.createdAt);
-  assert.equal(second.lastLoginAt, '2026-05-24T10:00:00.000Z');
+test('saveUserSession rejects sessions without a token', () => {
+  assert.throws(() => saveUserSession({ id: 'user_123' }), /Phiên đăng nhập không hợp lệ/);
 });
 
 test('toggleFollowSeries keeps followed series per active user without duplicates', () => {
   const storage = createStorage();
-  const user = loginOrRegisterUser('Reader', { storage });
+  const user = saveUserSession(userFixture(), { storage });
 
   assert.deepEqual(loadFollowedSeriesIds({ storage, user }), []);
   assert.deepEqual(toggleFollowSeries('series-1', { storage, user }).seriesIds, ['series-1']);
@@ -67,7 +59,7 @@ test('toggleFollowSeries keeps followed series per active user without duplicate
 
 test('clearUserSession logs out without deleting followed series', () => {
   const storage = createStorage();
-  const user = loginOrRegisterUser('Reader', { storage });
+  const user = saveUserSession(userFixture(), { storage });
   toggleFollowSeries('series-1', { storage, user });
 
   clearUserSession({ storage });

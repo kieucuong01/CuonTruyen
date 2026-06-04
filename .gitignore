@@ -8,6 +8,8 @@ logs/
 .tmp-edge-admin-smoke/
 dev-server*.log
 data/imports/
+data/users.json
+data/users.json.*.tmp
 .env
 .env.local
 .env.*.local

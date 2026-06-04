@@ -1,3 +1,4 @@
+import './env.mjs';
 import fs from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import http from 'node:http';
@@ -9,6 +10,13 @@ import { createBoundedCache } from './cacheStore.mjs';
 import { ensureStorageSchema, getSeries, readCatalog, usesPostgresStorage } from './dataStore.mjs';
 import { appendAnalyticsEvent } from './analyticsStore.mjs';
 import { adminConfigStatus, createAdminSession, isAdminAuthorized, isAdminPath } from './adminAuth.mjs';
+import {
+  extractUserToken,
+  getSessionUser,
+  loginUser,
+  logoutUser,
+  registerUser
+} from './userStore.mjs';
 import {
   buildReaderChapterPayload,
   buildHomeCollections,
@@ -232,6 +240,35 @@ async function handleApi(req, res, url) {
     }
     const session = createAdminSession(await readJsonBody(req));
     jsonResponse(res, session ? 200 : 401, session || { error: 'Email hoặc mật khẩu admin không đúng.' });
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/users/register') {
+    try {
+      jsonResponse(res, 201, await registerUser(await readJsonBody(req)));
+    } catch (error) {
+      jsonResponse(res, error.status || 500, { error: error.message || 'Register failed' });
+    }
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/users/login') {
+    try {
+      jsonResponse(res, 200, await loginUser(await readJsonBody(req)));
+    } catch (error) {
+      jsonResponse(res, error.status || 500, { error: error.message || 'Login failed' });
+    }
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/users/me') {
+    const user = await getSessionUser(extractUserToken(req.headers));
+    jsonResponse(res, user ? 200 : 401, user || { error: 'User session is required.' });
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/users/logout') {
+    jsonResponse(res, 202, await logoutUser(extractUserToken(req.headers)));
     return true;
   }
 

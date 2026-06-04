@@ -41,7 +41,7 @@ import {
   isFollowingSeries,
   loadFollowedSeriesIds,
   loadUserSession,
-  loginOrRegisterUser,
+  saveUserSession,
   toggleFollowSeries
 } from './userState.mjs';
 import {
@@ -713,15 +713,21 @@ async function renderTagPage(tagSlug) {
 function renderUserAuth() {
   stopReaderRuntime();
   const user = loadUserSession();
+  const isRegister = location.hash === '#/register';
   app.innerHTML = `
     <main class="site-shell">
       ${renderTopbar()}
       <section class="auth-card">
         <form class="auth-panel" data-user-login-form>
-          <h2>${user ? 'Đổi tài khoản đọc' : 'Đăng nhập / đăng ký nhanh'}</h2>
-          <p>Nhập tên hoặc email một lần để lưu danh sách theo dõi trên trình duyệt này.</p>
-          <input name="identifier" required placeholder="Tên hoặc email" value="${escapeAttr(user?.identifier || '')}" autocomplete="username" />
-          <button class="primary-btn" type="submit">Tiếp tục đọc truyện</button>
+          <h2>${isRegister ? 'T\u1ea1o t\u00e0i kho\u1ea3n \u0111\u1ecdc' : (user ? '\u0110\u1ed5i t\u00e0i kho\u1ea3n \u0111\u1ecdc' : '\u0110\u0103ng nh\u1eadp')}</h2>
+          <p>T\u00e0i kho\u1ea3n c\u1ea7n m\u1eadt kh\u1ea9u \u0111\u1ec3 gi\u1eef danh s\u00e1ch theo d\u00f5i an to\u00e0n h\u01a1n khi \u0111\u1ed5i thi\u1ebft b\u1ecb.</p>
+          <input name="identifier" required placeholder="T\u00ean ho\u1eb7c email" value="${escapeAttr(user?.identifier || '')}" autocomplete="username" />
+          ${isRegister ? '<input name="displayName" placeholder="T\u00ean hi\u1ec3n th\u1ecb" autocomplete="name" />' : ''}
+          <input name="password" type="password" required minlength="6" placeholder="M\u1eadt kh\u1ea9u" autocomplete="${isRegister ? 'new-password' : 'current-password'}" />
+          <button class="primary-btn" type="submit">${isRegister ? '\u0110\u0103ng k\u00fd' : '\u0110\u0103ng nh\u1eadp'}</button>
+          <p class="muted">${isRegister
+            ? '\u0110\u00e3 c\u00f3 t\u00e0i kho\u1ea3n? <a data-link href="#/login">\u0110\u0103ng nh\u1eadp</a>'
+            : 'Ch\u01b0a c\u00f3 t\u00e0i kho\u1ea3n? <a data-link href="#/register">\u0110\u0103ng k\u00fd</a>'}</p>
           <span class="status-line" data-status></span>
         </form>
       </section>
@@ -736,10 +742,20 @@ async function handleUserLogin(event) {
   const button = form.querySelector('button[type="submit"]');
   const status = form.querySelector('[data-status]');
   const formData = new FormData(form);
+  const isRegister = location.hash === '#/register';
   setControlPending(button);
-  if (status) status.textContent = 'Đang lưu tài khoản...';
+  if (status) status.textContent = isRegister ? '\u0110ang t\u1ea1o t\u00e0i kho\u1ea3n...' : '\u0110ang \u0111\u0103ng nh\u1eadp...';
   try {
-    loginOrRegisterUser(formData.get('identifier'));
+    const session = await fetchJson(isRegister ? '/api/users/register' : '/api/users/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        identifier: formData.get('identifier'),
+        password: formData.get('password'),
+        displayName: formData.get('displayName')
+      })
+    });
+    saveUserSession(session);
     history.pushState({}, '', '/');
     await route();
   } catch (error) {
