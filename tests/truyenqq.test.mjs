@@ -12,6 +12,11 @@ test('getAdapterForUrl selects the TruyenQQ adapter by hostname', () => {
   assert.equal(adapter.name, 'truyenqq');
 });
 
+test('getAdapterForUrl accepts TruyenQQ mirror hostnames', () => {
+  const adapter = getAdapterForUrl('https://truyenqqgo.com/truyen-tranh/gacha-vo-han-13496');
+  assert.equal(adapter.name, 'truyenqq');
+});
+
 test('parseSeriesPage extracts TruyenQQ metadata and source-order chapters', () => {
   const html = `
     <title>Mạnh Nhất Lịch Sử chương mới nhất 388 - TruyenQQ</title>

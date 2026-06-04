@@ -58,13 +58,18 @@ export function resolveImportedChapterStatus({
 }
 
 async function fetchImageBuffer(url, refererUrl) {
-  const response = await fetch(url, {
-    headers: {
-      'user-agent': 'Mozilla/5.0 ComicReaderPrototype/0.1',
-      accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-      referer: refererUrl || new URL(url).origin
-    }
-  });
+  let response;
+  try {
+    response = await fetch(url, {
+      headers: {
+        'user-agent': 'Mozilla/5.0 ComicReaderPrototype/0.1',
+        accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+        referer: refererUrl || new URL(url).origin
+      }
+    });
+  } catch (error) {
+    throw new Error(`Image fetch failed for ${url}: ${error.message || String(error)}`);
+  }
   if (!response.ok) throw new Error(`Image fetch failed ${response.status}`);
   return Buffer.from(await response.arrayBuffer());
 }
@@ -192,36 +197,52 @@ export async function importSeries(seriesUrl, options = {}, onProgress = () => {
       const filename = adapter.filenameForImage(sourceUrl, index);
       let storedImage = await findExistingStoredImage(dir, filename, imageOptimizeConfig);
       if (!storedImage.existed) {
-        await retryOperation(
-          async () => {
-            await rateLimiter.wait(sourceUrl);
-            const buffer = await fetchImageBuffer(sourceUrl, chapter.url);
-            storedImage = await writeImageWithOptimization({
-              buffer,
-              dir,
-              filename,
-              config: imageOptimizeConfig
-            });
-          },
-          {
-            retries: imageRetries,
-            delayMs: Number(process.env.CRAWL_IMAGE_RETRY_DELAY_MS || 500),
-            onRetry: async (event) => {
-              const message = `${chapter.label}: retry image ${index + 1}/${selectedImages.length} attempt ${event.attempt} because ${event.error}.`;
-              errors.push(message);
-              await emitProgress({
-                phase: 'retrying-image',
-                message,
-                mode,
-                currentChapterLabel: chapter.label,
-                totalImages,
-                downloadedImages,
-                errors: errors.slice(-20),
-                errorCount: errors.length
+        try {
+          await retryOperation(
+            async () => {
+              await rateLimiter.wait(sourceUrl);
+              const buffer = await fetchImageBuffer(sourceUrl, chapter.url);
+              storedImage = await writeImageWithOptimization({
+                buffer,
+                dir,
+                filename,
+                config: imageOptimizeConfig
               });
+            },
+            {
+              retries: imageRetries,
+              delayMs: Number(process.env.CRAWL_IMAGE_RETRY_DELAY_MS || 500),
+              onRetry: async (event) => {
+                const message = `${chapter.label}: retry image ${index + 1}/${selectedImages.length} attempt ${event.attempt} because ${event.error}.`;
+                errors.push(message);
+                await emitProgress({
+                  phase: 'retrying-image',
+                  message,
+                  mode,
+                  currentChapterLabel: chapter.label,
+                  totalImages,
+                  downloadedImages,
+                  errors: errors.slice(-20),
+                  errorCount: errors.length
+                });
+              }
             }
-          }
-        );
+          );
+        } catch (error) {
+          const message = `${chapter.label}: skipped image ${index + 1}/${selectedImages.length} after retries because ${error.message || String(error)}.`;
+          errors.push(message);
+          await emitProgress({
+            phase: 'skipping-image',
+            message,
+            mode,
+            currentChapterLabel: chapter.label,
+            totalImages,
+            downloadedImages,
+            errors: errors.slice(-20),
+            errorCount: errors.length
+          });
+          continue;
+        }
       }
       downloadedImages += 1;
       if (!fallbackCoverImagePath && storedImage.filePath) fallbackCoverImagePath = storedImage.filePath;

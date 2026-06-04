@@ -99,14 +99,19 @@ export function filenameForImage(url, index) {
 }
 
 export async function fetchHtml(url) {
-  const response = await fetch(url, {
-    headers: {
-      'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
-      accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      'accept-language': 'vi,en-US;q=0.9,en;q=0.8',
-      referer: new URL(url).origin
-    }
-  });
+  let response;
+  try {
+    response = await fetch(url, {
+      headers: {
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+        accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'accept-language': 'vi,en-US;q=0.9,en;q=0.8',
+        referer: new URL(url).origin
+      }
+    });
+  } catch (error) {
+    throw new Error(`Fetch failed for ${url}: ${error.message || String(error)}`);
+  }
   if (!response.ok) throw new Error(`Fetch failed ${response.status} for ${url}`);
   const html = await response.text();
   if (html.length < 200 || /^(connection refused|access denied|captcha)/i.test(html.trim())) {
@@ -117,7 +122,7 @@ export async function fetchHtml(url) {
 
 export const truyenqqAdapter = {
   name: 'truyenqq',
-  hostnames: ['truyenqqko.com'],
+  hostnames: ['truyenqqko.com', 'truyenqqgo.com'],
   parseSeriesPage,
   extractChapterImages,
   filenameForImage,
