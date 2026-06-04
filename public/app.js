@@ -377,22 +377,27 @@ function reportVisibleAdSlots() {
 
 function renderTopbar() {
   const user = loadUserSession();
+  const navItems = [
+    { href: '/', label: 'Trang chủ', active: location.pathname === '/' && !location.hash },
+    { href: '#/following', label: 'Theo dõi', active: location.hash === '#/following' },
+    { href: '#/history', label: 'Lịch sử', active: location.hash === '#/history' },
+    { href: '#/search', label: 'Tìm kiếm', active: location.hash === '#/search' },
+    { href: '#/genres', label: 'Thể loại', active: location.hash === '#/genres' || location.pathname.startsWith('/the-loai/') }
+  ];
   return `
     <header class="topbar">
       <a class="brand" data-link href="/">
         ${renderBrandLogo()}
       </a>
       <nav class="main-nav" aria-label="Điều hướng chính">
-        <a data-link href="/">Trang chủ</a>
-        <a data-link href="#/following">Theo dõi</a>
-        <a data-link href="#/history">Lịch sử</a>
-        <a data-link href="#/search">Tìm kiếm</a>
-        <a data-link href="#/genres">Thể loại</a>
+        ${navItems.map((item) => `
+          <a data-link href="${escapeAttr(item.href)}" ${item.active ? 'aria-current="page" class="active"' : ''}>${escapeHtml(item.label)}</a>
+        `).join('')}
       </nav>
-      <div class="top-actions">
+      <div class="top-actions ${user ? 'is-authenticated' : ''}">
         ${user ? `
           <span class="user-chip">${escapeHtml(user.displayName || 'Reader')}</span>
-          <button class="login-btn muted-btn" type="button" data-user-logout>Thoát</button>
+          <button class="login-btn muted-btn logout-btn" type="button" data-user-logout>Đăng xuất</button>
         ` : '<a class="login-btn" data-link href="#/login">Đăng nhập</a>'}
       </div>
     </header>

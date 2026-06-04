@@ -2790,6 +2790,39 @@ button:disabled,
   min-height: 72vh;
 }
 
+.static-page-heading h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: clamp(28px, 4vw, 44px);
+  line-height: 1.05;
+}
+
+.static-info-panel {
+  display: grid;
+  gap: 18px;
+  max-width: 780px;
+  border: 1px solid rgba(255, 139, 43, 0.18);
+  border-radius: 8px;
+  padding: 22px;
+  background: linear-gradient(135deg, #ffffff 0%, #fff7ed 100%);
+  box-shadow: var(--shadow);
+}
+
+.static-info-panel ul {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding-left: 20px;
+  color: var(--text);
+  line-height: 1.65;
+}
+
+.static-info-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .series-continue-card {
   display: flex;
   align-items: center;
@@ -5644,5 +5677,166 @@ button:disabled,
   .home-ad {
     min-height: 76px;
     border: 1px dashed rgba(255, 139, 43, 0.2);
+  }
+}
+
+/* Keep the public header visually identical across home, follow, history and browse routes. */
+@media (min-width: 721px) {
+  .site-shell:not(.admin-shell) .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    min-height: 68px;
+    margin-bottom: 28px;
+    border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+    background: rgba(255, 255, 255, 0.9);
+    color: #111827;
+    box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+    backdrop-filter: blur(18px);
+  }
+
+  .site-shell:not(.admin-shell) .brand,
+  .site-shell:not(.admin-shell) .brand-logo-fallback strong {
+    color: #111827;
+  }
+
+  .site-shell:not(.admin-shell) .brand-logo-fallback small {
+    color: #f97316;
+  }
+
+  .site-shell:not(.admin-shell) .main-nav a {
+    min-height: 42px;
+    border-radius: 999px;
+    color: #344054;
+    font-size: 14px;
+    font-weight: 800;
+  }
+
+  .site-shell:not(.admin-shell) .main-nav a:hover,
+  .site-shell:not(.admin-shell) .main-nav a.active,
+  .site-shell:not(.admin-shell) .main-nav a[aria-current="page"] {
+    background: #fff7ed;
+    color: #ea580c;
+  }
+
+  .site-shell:not(.admin-shell) .top-actions {
+    align-items: center;
+    flex-wrap: nowrap;
+  }
+
+  .site-shell:not(.admin-shell) .user-chip {
+    border-color: rgba(249, 115, 22, 0.18);
+    color: #111827;
+    background: #fff7ed;
+  }
+
+  .site-shell:not(.admin-shell) .muted-btn {
+    border-color: rgba(249, 115, 22, 0.22);
+    background: #fff7ed;
+    color: #c2410c;
+  }
+}
+
+@media (max-width: 720px) {
+  .site-shell:not(.admin-shell) .topbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "brand actions"
+      "nav nav";
+    align-items: center;
+    gap: 8px 10px;
+    position: sticky;
+    top: 0;
+    z-index: 44;
+    min-height: calc(56px + var(--safe-top));
+    margin: -22px -14px 14px;
+    border-radius: 0 0 22px 22px;
+    padding: var(--safe-top) 12px 10px;
+    background: rgba(17, 24, 39, 0.94);
+    box-shadow: 0 14px 34px rgba(15, 23, 42, 0.18);
+    backdrop-filter: blur(18px);
+  }
+
+  .site-shell:not(.admin-shell) .brand {
+    grid-area: brand;
+    min-width: 0;
+    gap: 8px;
+  }
+
+  .site-shell:not(.admin-shell) .brand-logo img {
+    width: 34px;
+    height: 34px;
+  }
+
+  .site-shell:not(.admin-shell) .brand-logo-fallback strong {
+    font-size: 15px;
+  }
+
+  .site-shell:not(.admin-shell) .brand-logo-fallback small,
+  .site-shell:not(.admin-shell) .brand p {
+    display: none;
+  }
+
+  .site-shell:not(.admin-shell) .main-nav {
+    grid-area: nav;
+    width: 100%;
+    margin-left: 0;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .site-shell:not(.admin-shell) .main-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .site-shell:not(.admin-shell) .main-nav a {
+    min-height: 38px;
+    border-radius: 999px;
+    padding: 0 12px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #f8fafc;
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .site-shell:not(.admin-shell) .main-nav a.active,
+  .site-shell:not(.admin-shell) .main-nav a[aria-current="page"] {
+    background: #ffffff;
+    color: #ea580c;
+  }
+
+  .site-shell:not(.admin-shell) .top-actions {
+    display: flex;
+    grid-area: actions;
+    align-items: center;
+    justify-content: flex-end;
+    width: auto;
+    min-width: 0;
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+
+  .site-shell:not(.admin-shell) .user-chip {
+    max-width: min(34vw, 132px);
+    min-height: 34px;
+    border-radius: 999px;
+    padding: 0 9px;
+    font-size: 12px;
+  }
+
+  .site-shell:not(.admin-shell) .login-btn {
+    min-height: 34px;
+    border-radius: 999px;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+
+  .site-shell:not(.admin-shell) .logout-btn {
+    border-color: rgba(255, 255, 255, 0.2);
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.1);
   }
 }

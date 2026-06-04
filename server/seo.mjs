@@ -21,28 +21,48 @@ export const STATIC_PAGES = [
     title: 'Giới thiệu Cuộn Truyện - Trình đọc truyện tranh liền mạch',
     description: 'Cuộn Truyện tập trung vào trải nghiệm đọc truyện tranh online mượt, nối chapter liên tục và tự lưu vị trí đọc trên trình duyệt.',
     heading: 'Giới thiệu Cuộn Truyện',
-    body: 'Cuộn Truyện là website đọc truyện tranh tối ưu cho trải nghiệm cuộn liên tục, giúp bạn mở lại đúng bộ đang đọc và theo dõi lịch sử ngay trên trình duyệt.'
+    body: 'Cuộn Truyện là website đọc truyện tranh tối ưu cho trải nghiệm cuộn liên tục, giúp bạn mở lại đúng bộ đang đọc và theo dõi lịch sử ngay trên trình duyệt.',
+    items: [
+      'Đọc liền mạch nhiều chapter mà không phải bấm chuyển trang.',
+      'Tự lưu lịch sử, danh sách theo dõi và vị trí đọc trên trình duyệt.',
+      'Chỉ hiển thị nội dung đã được quản trị viên publish ra public.'
+    ]
   },
   {
     path: '/lien-he',
     title: 'Liên hệ - Cuộn Truyện',
     description: 'Liên hệ Cuộn Truyện để báo lỗi truyện, góp ý trải nghiệm đọc hoặc yêu cầu xử lý nội dung.',
     heading: 'Liên hệ',
-    body: 'Nếu bạn thấy truyện lỗi ảnh, sai thông tin hoặc cần gửi yêu cầu xử lý nội dung, hãy liên hệ quản trị viên Cuộn Truyện qua kênh liên hệ được công bố trên website.'
+    body: 'Nếu bạn thấy truyện lỗi ảnh, sai thông tin hoặc cần gửi yêu cầu xử lý nội dung, hãy liên hệ quản trị viên Cuộn Truyện qua kênh liên hệ được công bố trên website.',
+    items: [
+      'Ghi rõ tên truyện, chapter và lỗi bạn gặp để đội vận hành kiểm tra nhanh hơn.',
+      'Với yêu cầu gỡ bỏ nội dung, hãy gửi kèm đường dẫn và bằng chứng quyền sở hữu hợp lệ.',
+      'Các nội dung vi phạm có thể được chuyển sang trạng thái removed và biến mất khỏi public/sitemap.'
+    ]
   },
   {
     path: '/chinh-sach-noi-dung',
     title: 'Chính sách nội dung và gỡ bỏ - Cuộn Truyện',
     description: 'Chính sách nội dung của Cuộn Truyện: quản trị viên có thể ẩn truyện, ẩn chapter và xử lý yêu cầu gỡ bỏ.',
     heading: 'Chính sách nội dung',
-    body: 'Cuộn Truyện chỉ nên vận hành với nguồn nội dung chủ sở hữu được phép sử dụng. Khi có yêu cầu hợp lệ, quản trị viên có thể ẩn truyện hoặc chapter khỏi trang public và sitemap.'
+    body: 'Cuộn Truyện chỉ nên vận hành với nguồn nội dung chủ sở hữu được phép sử dụng. Khi có yêu cầu hợp lệ, quản trị viên có thể ẩn truyện hoặc chapter khỏi trang public và sitemap.',
+    items: [
+      'Nội dung mới sau khi crawl mặc định ở trạng thái draft để chờ review.',
+      'Draft và removed không xuất hiện ở trang public, reader, search, tag hoặc sitemap.',
+      'Takedown hợp lệ được xử lý bằng cách ẩn truyện/chapter thay vì xóa dữ liệu vận hành ngay lập tức.'
+    ]
   },
   {
     path: '/privacy',
     title: 'Privacy - Cuộn Truyện',
     description: 'Cuộn Truyện lưu lịch sử đọc và theo dõi chủ yếu trên trình duyệt của người dùng; sự kiện đọc được dùng để cải thiện trải nghiệm.',
     heading: 'Privacy',
-    body: 'Lịch sử đọc, danh sách theo dõi và vị trí đọc được lưu trên trình duyệt. Website có thể ghi nhận sự kiện như lượt xem, độ sâu đọc và tương tác để cải thiện sản phẩm.'
+    body: 'Lịch sử đọc, danh sách theo dõi và vị trí đọc được lưu trên trình duyệt. Website có thể ghi nhận sự kiện như lượt xem, độ sâu đọc và tương tác để cải thiện sản phẩm.',
+    items: [
+      'Tiến độ đọc và danh sách theo dõi dùng localStorage theo từng trình duyệt.',
+      'Khi đăng nhập, phiên đọc có token server-issued để đồng bộ các thao tác tài khoản.',
+      'Sự kiện như lượt xem, click donate hoặc độ sâu đọc chỉ dùng để cải thiện sản phẩm.'
+    ]
   }
 ];
 
@@ -194,12 +214,14 @@ export function renderHtmlShell({
 }
 
 function renderStaticBody(page) {
+  const items = (page.items || []).map((item) => `<li>${escapeHtml(item)}</li>`).join('');
   return `
     <main id="app" class="site-shell static-page">
-      <section class="page-heading">
-        <h2>${escapeHtml(page.heading)}</h2>
+      <section class="page-heading static-page-heading">
+        <h1>${escapeHtml(page.heading)}</h1>
         <p>${escapeHtml(page.body)}</p>
       </section>
+      ${items ? `<section class="static-info-panel"><ul>${items}</ul></section>` : ''}
     </main>
   `;
 }

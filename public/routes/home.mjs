@@ -1,19 +1,39 @@
 export const STATIC_INFO_PAGES = {
   '/gioi-thieu': {
-    title: 'Giới thiệu Cuốn Truyện',
-    body: 'Cuốn Truyện tập trung vào trải nghiệm đọc truyện tranh online mượt, nối chapter liên tục và tự lưu vị trí đang đọc trên trình duyệt.'
+    title: 'Giới thiệu Cuộn Truyện',
+    body: 'Cuộn Truyện tập trung vào trải nghiệm đọc truyện tranh online mượt, nối chapter liên tục và tự lưu vị trí đang đọc trên trình duyệt.',
+    items: [
+      'Đọc liền mạch nhiều chapter mà không phải bấm chuyển trang.',
+      'Tự lưu lịch sử, danh sách theo dõi và vị trí đọc trên trình duyệt.',
+      'Chỉ hiển thị nội dung đã được quản trị viên publish ra public.'
+    ]
   },
   '/lien-he': {
     title: 'Liên hệ',
-    body: 'Báo lỗi truyện, góp ý trải nghiệm đọc hoặc gửi yêu cầu xử lý nội dung để quản trị viên kiểm tra và ẩn nội dung khi cần.'
+    body: 'Báo lỗi truyện, góp ý trải nghiệm đọc hoặc gửi yêu cầu xử lý nội dung để quản trị viên kiểm tra và ẩn nội dung khi cần.',
+    items: [
+      'Ghi rõ tên truyện, chapter và lỗi bạn gặp để đội vận hành kiểm tra nhanh hơn.',
+      'Với yêu cầu gỡ bỏ nội dung, hãy gửi kèm đường dẫn và bằng chứng quyền sở hữu hợp lệ.',
+      'Các nội dung vi phạm có thể được chuyển sang trạng thái removed và biến mất khỏi public/sitemap.'
+    ]
   },
   '/chinh-sach-noi-dung': {
     title: 'Chính sách nội dung',
-    body: 'Quản trị viên có thể ẩn truyện hoặc chapter khỏi trang public và sitemap. Chỉ vận hành nguồn nội dung mà chủ sở hữu được phép sử dụng.'
+    body: 'Quản trị viên có thể ẩn truyện hoặc chapter khỏi trang public và sitemap. Chỉ vận hành nguồn nội dung mà chủ sở hữu được phép sử dụng.',
+    items: [
+      'Nội dung mới sau khi crawl mặc định ở trạng thái draft để chờ review.',
+      'Draft và removed không xuất hiện ở trang public, reader, search, tag hoặc sitemap.',
+      'Takedown hợp lệ được xử lý bằng cách ẩn truyện/chapter thay vì xóa dữ liệu vận hành ngay lập tức.'
+    ]
   },
   '/privacy': {
     title: 'Privacy',
-    body: 'Lịch sử đọc, danh sách theo dõi và vị trí đọc được lưu trên trình duyệt. Sự kiện đọc được dùng để cải thiện trải nghiệm sản phẩm.'
+    body: 'Lịch sử đọc, danh sách theo dõi và vị trí đọc được lưu trên trình duyệt. Sự kiện đọc được dùng để cải thiện trải nghiệm sản phẩm.',
+    items: [
+      'Tiến độ đọc và danh sách theo dõi dùng localStorage theo từng trình duyệt.',
+      'Khi đăng nhập, phiên đọc có token server-issued để đồng bộ các thao tác tài khoản.',
+      'Sự kiện như lượt xem, click donate hoặc độ sâu đọc chỉ dùng để cải thiện sản phẩm.'
+    ]
   }
 };
 
@@ -86,7 +106,7 @@ export function createHomeRoute({
         ${renderDesktopComicPortal({ popular, updated, readingSeries, lastSeries, bulletinMessages })}
         <section class="app-home-hero">
           <div class="app-home-hero-copy">
-            <p class="eyebrow">Cuốn Truyện</p>
+            <p class="eyebrow">Cuộn Truyện</p>
             <h2>Đọc truyện mượt như app</h2>
             <p>Manhwa, manhua, manga online. Tự lưu vị trí, mở lại đúng chương và đọc liền mạch trên điện thoại.</p>
           </div>
@@ -103,7 +123,7 @@ export function createHomeRoute({
         <section class="app-quick-actions" aria-label="Lối tắt">
           <a href="#continue-section"><strong>Đọc tiếp</strong><span>Quay lại truyện đang đọc</span></a>
           <a href="#/history"><strong>Lịch sử</strong><span>Những truyện đã mở</span></a>
-          <a href="#/followed"><strong>Theo dõi</strong><span>Danh sách lưu local</span></a>
+          <a href="#/following"><strong>Theo dõi</strong><span>Danh sách lưu local</span></a>
         </section>
         <section class="app-home-feed">
           ${renderContinueShelf(readingSeries, lastSeries)}
@@ -184,7 +204,7 @@ export function createHomeRoute({
       <section class="desktop-comic-portal" aria-label="Trang chủ truyện tranh desktop">
         <div class="desktop-portal-heading">
           <div>
-            <p class="eyebrow">Cuốn Truyện</p>
+            <p class="eyebrow">Cuộn Truyện</p>
             <h2>Đọc truyện tranh manga, manhwa, manhua online</h2>
           </div>
           <div class="desktop-portal-search" id="desktop-search">
@@ -239,12 +259,12 @@ export function createHomeRoute({
             <h3>${escapeHtml(featured.title)}</h3>
             <p class="feature-tags">${renderInlineTags(featured)}</p>
             <strong>SUMMARY</strong>
-            <p>${escapeHtml(featured.description || 'Đọc liền mạch, tự lưu vị trí và mở lại đúng chương đang đọc trên Cuốn Truyện.')}</p>
+            <p>${escapeHtml(featured.description || 'Đọc liền mạch, tự lưu vị trí và mở lại đúng chương đang đọc trên Cuộn Truyện.')}</p>
             <small>Trạng thái: ${escapeHtml(featured.status === 'public' ? 'Đang phát hành' : 'Đang cập nhật')}</small>
           </div>
         </a>
         <a class="desktop-feature-cover" data-link href="${firstChapter ? `/truyen/${escapeAttr(featured.slug)}/${escapeAttr(firstChapter.slug || firstChapter.id)}` : `/truyen/${escapeAttr(featured.slug)}`}">
-          ${cover ? `<img src="${escapeAttr(cover)}" alt="${escapeAttr(featured.title)}" loading="${active ? 'eager' : 'lazy'}" />` : '<span>Cuốn Truyện</span>'}
+          ${cover ? `<img src="${escapeAttr(cover)}" alt="${escapeAttr(featured.title)}" loading="${active ? 'eager' : 'lazy'}" />` : '<span>Cuộn Truyện</span>'}
         </a>
       </article>
     `;
@@ -289,7 +309,7 @@ export function createHomeRoute({
     return `
       <section class="desktop-community">
         <div class="desktop-community-head">
-          <h3>Bảng tin Cuốn Truyện</h3>
+          <h3>Bảng tin Cuộn Truyện</h3>
           <span>Chat chung của độc giả đã đăng nhập</span>
         </div>
         <div class="desktop-community-list">
@@ -465,10 +485,18 @@ export function createHomeRoute({
     app.innerHTML = `
       <main class="site-shell static-page">
         ${renderTopbar()}
-        ${renderDesktopComicPortal({ popular, updated, readingSeries, lastSeries })}
-        <section class="page-heading">
-          <h2>${escapeHtml(page.title)}</h2>
+        <section class="page-heading static-page-heading">
+          <h1>${escapeHtml(page.title)}</h1>
           <p>${escapeHtml(page.body)}</p>
+        </section>
+        <section class="static-info-panel">
+          <ul>
+            ${(page.items || []).map((item) => `<li>${escapeHtml(item)}</li>`).join('')}
+          </ul>
+          <div class="static-info-actions">
+            <a class="primary-btn inline-action" data-link href="/">Về trang chủ</a>
+            <a class="ghost-btn inline-action" data-link href="#/search">Tìm truyện</a>
+          </div>
         </section>
       </main>
     `;
