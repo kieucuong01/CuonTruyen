@@ -227,9 +227,9 @@ async function putObject(client, item) {
     headers: signed.headers,
     body
   }, {
-    retries: Number(env('S3_PUT_RETRIES', 'VIETNIX_S3_PUT_RETRIES') || env('S3_REQUEST_RETRIES', 'VIETNIX_S3_REQUEST_RETRIES') || 4),
-    delayMs: Number(env('S3_PUT_RETRY_DELAY_MS', 'VIETNIX_S3_PUT_RETRY_DELAY_MS') || env('S3_REQUEST_RETRY_DELAY_MS', 'VIETNIX_S3_REQUEST_RETRY_DELAY_MS') || 750),
-    timeoutMs: Number(env('S3_PUT_TIMEOUT_MS', 'VIETNIX_S3_PUT_TIMEOUT_MS') || env('S3_REQUEST_TIMEOUT_MS', 'VIETNIX_S3_REQUEST_TIMEOUT_MS') || 30000)
+    retries: Number(env('S3_PUT_RETRIES', 'VIETNIX_S3_PUT_RETRIES') || env('S3_REQUEST_RETRIES', 'VIETNIX_S3_REQUEST_RETRIES') || 6),
+    delayMs: Number(env('S3_PUT_RETRY_DELAY_MS', 'VIETNIX_S3_PUT_RETRY_DELAY_MS') || env('S3_REQUEST_RETRY_DELAY_MS', 'VIETNIX_S3_REQUEST_RETRY_DELAY_MS') || 1000),
+    timeoutMs: Number(env('S3_PUT_TIMEOUT_MS', 'VIETNIX_S3_PUT_TIMEOUT_MS') || env('S3_REQUEST_TIMEOUT_MS', 'VIETNIX_S3_REQUEST_TIMEOUT_MS') || 60000)
   });
   if (!response.ok) {
     const text = await response.text().catch(() => '');
@@ -347,8 +347,8 @@ async function runConcurrent(items, limit, task) {
 }
 
 async function fetchWithRetry(url, options, {
-  retries = Number(env('S3_REQUEST_RETRIES', 'VIETNIX_S3_REQUEST_RETRIES') || 3),
-  delayMs = Number(env('S3_REQUEST_RETRY_DELAY_MS', 'VIETNIX_S3_REQUEST_RETRY_DELAY_MS') || 750),
+  retries = Number(env('S3_REQUEST_RETRIES', 'VIETNIX_S3_REQUEST_RETRIES') || 5),
+  delayMs = Number(env('S3_REQUEST_RETRY_DELAY_MS', 'VIETNIX_S3_REQUEST_RETRY_DELAY_MS') || 1000),
   timeoutMs = Number(env('S3_REQUEST_TIMEOUT_MS', 'VIETNIX_S3_REQUEST_TIMEOUT_MS') || 15000)
 } = {}) {
   let lastError = null;
@@ -368,7 +368,7 @@ async function fetchWithRetry(url, options, {
     } finally {
       if (timeout) clearTimeout(timeout);
     }
-    await delay(delayMs * (attempt + 1));
+    await delay(backoffDelay(delayMs, attempt));
   }
   throw lastError;
 }
@@ -463,46 +463,42 @@ async function main() {
   let lastProgressAt = 0;
   let currentItem = null;
 
-  console.log(`[s3-sync] ${apply ? 'apply' : 'dry-run'} ${items.length} files to s3://${bucket} concurrency=${concurrency} state=${useState ? stateFile : 'off'}`);
-  await writeStatus({ status: 'running', message: 'Đang bắt đầu đồng bộ S3...' });
-  await runConcurrent(items, concurrency, async (item) => {
-    checked += 1;
-    currentItem = item;
-    try {
-      const stat = await fs.stat(item.filePath);
-      if (!force && useState && syncStateMatches(syncState[item.key], stat)) {
-        skipped += 1;
-        cachedSkipped += 1;
-        await maybePrintProgress(item);
-        return;
-      }
-      let remote = { exists: false, size: 0 };
-      if (!force) {
-        try {
-          remote = await headObject(client, item.key);
-        } catch (error) {
-          if (!apply || !isSoftHeadFailure(error)) throw error;
-          remote = { exists: false, size: 0, assumedMissing: true };
-        }
-      }
-      if (remote.exists && remote.size === stat.size) {
-        skipped += 1;
-        if (apply && useState) syncState[item.key] = syncStateEntry(stat);
-        await maybePrintProgress(item);
-        return;
-      }
-      if (apply) await putObject(client, item);
-      if (apply && useState) syncState[item.key] = syncStateEntry(stat);
-      uploaded += 1;
-      await maybePrintProgress(item);
-    } catch (error) {
-      failed += 1;
-      failedItems.push({ key: item.key, error: shortError(error) });
-      if (failedItems.length > 20) failedItems.shift();
-      console.log(`[s3-sync] failed key=${item.key} error=${shortError(error)} checked=${checked}/${items.length} uploaded=${uploaded} skipped=${skipped} failed=${failed}`);
-      await maybePrintProgress(item);
-    }
+  const retryRounds = Math.max(0, Number(env('S3_SYNC_RETRY_ROUNDS', 'VIETNIX_S3_SYNC_RETRY_ROUNDS') || 3));
+  const retryConcurrency = Math.max(1, Math.min(
+    concurrency,
+    Number(env('S3_SYNC_RETRY_CONCURRENCY', 'VIETNIX_S3_SYNC_RETRY_CONCURRENCY') || Math.min(2, concurrency))
+  ));
+  const retryRoundDelayMs = Math.max(0, Number(env('S3_SYNC_RETRY_ROUND_DELAY_MS', 'VIETNIX_S3_RETRY_ROUND_DELAY_MS') || 5000));
+  let failedAttempts = 0;
+  let recovered = 0;
+  let retryRound = 0;
+
+  console.log(`[s3-sync] ${apply ? 'apply' : 'dry-run'} ${items.length} files to s3://${bucket} concurrency=${concurrency} retryRounds=${retryRounds} retryConcurrency=${retryConcurrency} state=${useState ? stateFile : 'off'}`);
+  await writeStatus({ status: 'running', message: 'Dang bat dau dong bo S3...' });
+
+  let retryQueue = await runSyncPass(items, {
+    countChecked: true,
+    limit: concurrency,
+    message: 'Dang dong bo S3...'
   });
+
+  while (apply && retryQueue.length && retryRound < retryRounds) {
+    retryRound += 1;
+    failed = retryQueue.length;
+    console.log(`[s3-sync] retry round=${retryRound}/${retryRounds} files=${retryQueue.length} concurrency=${retryConcurrency}`);
+    await writeStatus({
+      status: 'running',
+      message: `Dang retry ${retryQueue.length} file loi tam thoi (lan ${retryRound}/${retryRounds})...`
+    });
+    await delay(retryRoundDelayMs * retryRound);
+    retryQueue = await runSyncPass(retryQueue, {
+      countChecked: false,
+      retrying: true,
+      limit: retryConcurrency,
+      message: `Dang retry file loi tam thoi (${retryRound}/${retryRounds})...`
+    });
+  }
+  failed = retryQueue.length;
 
   console.log(progressLine({ done: true }));
   if (apply && useState) await saveSyncState(stateFile, syncState);
@@ -510,12 +506,81 @@ async function main() {
     console.log(`[s3-sync] failed-items ${JSON.stringify(failedItems)}`);
   }
   if (failed > 0) {
-    await writeStatus({ status: 'failed', message: `Đồng bộ S3 lỗi ${failed} file. Chạy lại cùng lệnh để retry.` });
+    await writeStatus({ status: 'failed', message: `Dong bo S3 con loi ${failed} file sau ${retryRound} vong retry. Chay lai job de tiep tuc cac file con thieu.` });
     throw new Error(`S3 sync finished with ${failed} failed file(s). Re-run the same command to retry missing files.`);
   }
-  await writeStatus({ status: 'completed', message: 'Đã đồng bộ S3 xong.' });
+  await writeStatus({ status: 'completed', message: recovered ? `Da dong bo S3 xong, tu phuc hoi ${recovered} file loi tam thoi.` : 'Da dong bo S3 xong.' });
 
-  async function maybePrintProgress(item = currentItem) {
+  async function runSyncPass(passItems, { countChecked = true, retrying = false, limit = concurrency, message = '' } = {}) {
+    const roundFailures = [];
+    await runConcurrent(passItems, limit, async (item) => {
+      if (countChecked) checked += 1;
+      currentItem = item;
+      try {
+        await syncOneItem(item);
+        if (retrying) {
+          recovered += 1;
+          failed = Math.max(0, failed - 1);
+          forgetFailedItem(item);
+        }
+        await maybePrintProgress(item, message);
+      } catch (error) {
+        failedAttempts += 1;
+        if (!retrying) failed += 1;
+        roundFailures.push(item);
+        rememberFailedItem(item, error);
+        console.log(`[s3-sync] failed key=${item.key} error=${shortError(error)} checked=${checked}/${items.length} uploaded=${uploaded} skipped=${skipped} failed=${failed} attempts=${failedAttempts}`);
+        await maybePrintProgress(item, message);
+      }
+    });
+    return roundFailures;
+  }
+
+  async function syncOneItem(item) {
+    const stat = await fs.stat(item.filePath);
+    if (!force && useState && syncStateMatches(syncState[item.key], stat)) {
+      skipped += 1;
+      cachedSkipped += 1;
+      return;
+    }
+    let remote = { exists: false, size: 0 };
+    if (!force) {
+      try {
+        remote = await headObject(client, item.key);
+      } catch (error) {
+        if (!apply || !isSoftHeadFailure(error)) throw error;
+        remote = { exists: false, size: 0, assumedMissing: true };
+      }
+    }
+    if (remote.exists && remote.size === stat.size) {
+      skipped += 1;
+      if (apply && useState) syncState[item.key] = syncStateEntry(stat);
+      return;
+    }
+    if (apply) await putObject(client, item);
+    if (apply && useState) syncState[item.key] = syncStateEntry(stat);
+    uploaded += 1;
+  }
+
+  function rememberFailedItem(item, error) {
+    const existingIndex = failedItems.findIndex((failedItem) => failedItem.key === item.key);
+    const entry = {
+      key: item.key,
+      error: shortError(error),
+      attempts: failedAttempts,
+      retryRound
+    };
+    if (existingIndex >= 0) failedItems.splice(existingIndex, 1);
+    failedItems.push(entry);
+    if (failedItems.length > 20) failedItems.shift();
+  }
+
+  function forgetFailedItem(item) {
+    const existingIndex = failedItems.findIndex((failedItem) => failedItem.key === item.key);
+    if (existingIndex >= 0) failedItems.splice(existingIndex, 1);
+  }
+
+  async function maybePrintProgress(item = currentItem, message = '') {
     const now = Date.now();
     if (
       checked === items.length
@@ -525,7 +590,7 @@ async function main() {
     ) {
       lastProgressAt = now;
       console.log(progressLine());
-      await writeStatus({ status: 'running', item });
+      await writeStatus({ status: 'running', item, message });
     }
   }
 
@@ -548,11 +613,17 @@ async function main() {
       skipped,
       cachedSkipped,
       failed,
+      failedAttempts,
+      recovered,
+      pendingRetry: failed,
+      retryRound,
+      retryRounds,
       percent,
       ratePerMinute: roundOne(ratePerMinute),
       etaSeconds: Math.round(etaSeconds),
       eta: formatDuration(etaSeconds),
       concurrency,
+      retryConcurrency,
       currentKey: activeItem.key || '',
       currentChapter: chapterFromSyncKey(activeItem.key || ''),
       failedItems: failedItems.slice(-20),
@@ -567,10 +638,16 @@ async function main() {
     const remaining = Math.max(0, items.length - checked);
     const etaSeconds = checked > 0 ? remaining / (checked / elapsedSeconds) : 0;
     const label = done ? 'done' : 'progress';
-    return `[s3-sync] ${label} checked=${checked}/${items.length} uploaded=${uploaded} skipped=${skipped} cached=${cachedSkipped} failed=${failed} rate=${roundOne(ratePerMinute)} files/min eta=${formatDuration(etaSeconds)} concurrency=${concurrency}`;
+    return `[s3-sync] ${label} checked=${checked}/${items.length} uploaded=${uploaded} skipped=${skipped} cached=${cachedSkipped} failed=${failed} rate=${roundOne(ratePerMinute)} files/min eta=${formatDuration(etaSeconds)} concurrency=${concurrency} attempts=${failedAttempts} recovered=${recovered} retryRound=${retryRound}`;
   }
 }
 
+function backoffDelay(baseDelayMs, attempt) {
+  const base = Math.max(0, Number(baseDelayMs || 0));
+  const exponential = base * (2 ** Math.max(0, attempt));
+  const jitter = Math.floor(Math.random() * Math.max(1, base));
+  return Math.min(30000, exponential + jitter);
+}
 function shortError(error) {
   const causeCode = error?.cause?.code ? ` ${error.cause.code}` : '';
   return String(`${error?.name || 'Error'}${causeCode}: ${error?.message || error}`).replace(/\s+/g, ' ').slice(0, 220);

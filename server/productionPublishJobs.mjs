@@ -146,7 +146,9 @@ function runCommand(command, { s3Step = false, onOutput = null } = {}) {
       ...process.env,
       ...(s3Step ? {
         NODE_TLS_REJECT_UNAUTHORIZED: process.env.NODE_TLS_REJECT_UNAUTHORIZED || '0',
-        S3_SYNC_CONCURRENCY: process.env.S3_SYNC_CONCURRENCY || process.env.VIETNIX_S3_SYNC_CONCURRENCY || '8'
+        S3_SYNC_CONCURRENCY: process.env.S3_SYNC_CONCURRENCY || process.env.VIETNIX_S3_SYNC_CONCURRENCY || '6',
+        S3_SYNC_RETRY_CONCURRENCY: process.env.S3_SYNC_RETRY_CONCURRENCY || process.env.VIETNIX_S3_SYNC_RETRY_CONCURRENCY || '2',
+        S3_SYNC_RETRY_ROUNDS: process.env.S3_SYNC_RETRY_ROUNDS || process.env.VIETNIX_S3_SYNC_RETRY_ROUNDS || '3'
       } : {})
     };
     const child = spawn(bin, args, {
