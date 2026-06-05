@@ -9,7 +9,8 @@ import {
   saveProgress
 } from './readingProgress.mjs';
 import { hasReadableChapter } from './chapterState.mjs';
-import { apiUrl, createApiClient } from './apiClient.mjs';
+import { createApiClient } from './apiClient.mjs';
+import { apiUrl, getRuntimeConfig } from './runtimeConfig.mjs';
 import { sendAnalyticsEvent } from './analyticsClient.mjs';
 import { escapeAttr, escapeHtml, throttle } from './domUtils.mjs';
 import { STATIC_INFO_PAGES, createHomeRoute } from './routes/home.mjs';
