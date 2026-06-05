@@ -48,10 +48,45 @@ async function writeJson(root, relativePath, value) {
   await fs.writeFile(filePath, json(value), 'utf8');
 }
 
+async function removeOutputDir(outputDir) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    try {
+      await fs.rm(outputDir, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      if (!['EBUSY', 'EPERM', 'EACCES'].includes(error.code) || attempt === 7) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 80 * (attempt + 1)));
+    }
+  }
+}
+
 function searchSeriesShape(series) {
   return {
     ...series,
     chapters: Array.isArray(series.chapters) ? series.chapters.slice(0, 3) : []
+  };
+}
+
+function compactImportUrl(value = '', publicImportsBase = '') {
+  const url = String(value || '');
+  const base = trimTrailingSlash(publicImportsBase);
+  if (base && url.startsWith(`${base}/imports/`)) return url.slice(base.length);
+  return url;
+}
+
+function compactReaderPage(page = {}, publicImportsBase = '') {
+  return [
+    Number(page.order ?? page.index ?? 0),
+    compactImportUrl(page.imageUrl || page.src || '', publicImportsBase),
+    page.width || null,
+    page.height || null
+  ];
+}
+
+function compactReaderChapter(chapter = {}, publicImportsBase = '') {
+  return {
+    ...chapter,
+    pages: (chapter.pages || []).map((page) => compactReaderPage(page, publicImportsBase))
   };
 }
 
@@ -73,6 +108,7 @@ export async function main() {
     publicCatalog,
     publicChapterSummary,
     publicReaderChapter,
+    publicReaderSeriesSummary,
     publicSeriesDetail
   } = await import('../server/contentStore.mjs');
   const { readCatalog } = await import('../server/dataStore.mjs');
@@ -81,7 +117,7 @@ export async function main() {
   const publicData = publicCatalog(catalog);
   const home = buildHomeCollections(catalog);
 
-  await fs.rm(outputDir, { recursive: true, force: true });
+  await removeOutputDir(outputDir);
   await fs.mkdir(outputDir, { recursive: true });
   await writeJson(outputDir, 'home.json', home);
   await writeJson(outputDir, 'series.json', publicData);
@@ -102,7 +138,7 @@ export async function main() {
 
     const readerChapters = normalizeSeries(rawSeries).chapters
       .filter((chapter) => chapter.status === 'public' && Array.isArray(chapter.pages) && chapter.pages.length > 0);
-    const seriesSummary = publicSeriesDetail(rawSeries);
+    const seriesSummary = publicReaderSeriesSummary(rawSeries);
 
     for (let index = 0; index < readerChapters.length; index += 1) {
       const chapter = readerChapters[index];
@@ -110,31 +146,14 @@ export async function main() {
       const nextChapter = readerChapters[index + 1] || null;
       const payload = {
         series: seriesSummary,
-        chapter: publicReaderChapter(chapter),
-        chapters: readerChapters.slice(index, index + 2).map(publicReaderChapter),
+        chapter: compactReaderChapter(publicReaderChapter(chapter), publicImportsBase),
+        chapters: [compactReaderChapter(publicReaderChapter(chapter), publicImportsBase)],
         previousChapter: index > 0 ? publicChapterSummary(readerChapters[index - 1]) : null,
         nextChapter: nextChapter ? publicChapterSummary(nextChapter) : null
       };
       if (payload) {
         await writeJson(outputDir, path.join('reader', safeSegment(series.slug), `${safeSegment(chapterKey)}.json`), payload);
-        await writeJson(outputDir, path.join('reader', safeSegment(series.slug), `${safeSegment(chapter.id)}.json`), payload);
-        await writeJson(outputDir, path.join('reader', safeSegment(series.id), `${safeSegment(chapterKey)}.json`), payload);
-        await writeJson(outputDir, path.join('reader', safeSegment(series.id), `${safeSegment(chapter.id)}.json`), payload);
         chapterPayloadCount += 1;
-      }
-
-      const nextPayload = nextChapter ? {
-        series: seriesSummary,
-        chapter: publicReaderChapter(nextChapter),
-        chapters: [publicReaderChapter(nextChapter)],
-        previousChapter: publicChapterSummary(chapter),
-        nextChapter: readerChapters[index + 2] ? publicChapterSummary(readerChapters[index + 2]) : null
-      } : null;
-      if (nextPayload) {
-        await writeJson(outputDir, path.join('reader', safeSegment(series.slug), safeSegment(chapterKey), 'next.json'), nextPayload);
-        await writeJson(outputDir, path.join('reader', safeSegment(series.slug), safeSegment(chapter.id), 'next.json'), nextPayload);
-        await writeJson(outputDir, path.join('reader', safeSegment(series.id), safeSegment(chapterKey), 'next.json'), nextPayload);
-        await writeJson(outputDir, path.join('reader', safeSegment(series.id), safeSegment(chapter.id), 'next.json'), nextPayload);
       }
     }
   }

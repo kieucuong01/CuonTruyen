@@ -38,7 +38,7 @@ test('selectNewChaptersForImport falls back to id, slug, and label matching', ()
   assert.equal(result.skippedExistingChapterCount, 2);
 });
 
-test('resolveImportedChapterStatus publishes new chapters only for public series', () => {
+test('resolveImportedChapterStatus publishes imported chapters by default', () => {
   assert.equal(resolveImportedChapterStatus({
     mode: 'new-chapters',
     publishNewChapters: true,
@@ -48,10 +48,10 @@ test('resolveImportedChapterStatus publishes new chapters only for public series
     mode: 'new-chapters',
     publishNewChapters: true,
     existingSeries: { status: 'draft' }
-  }), 'draft');
+  }), 'public');
   assert.equal(resolveImportedChapterStatus({
     mode: 'full',
     publishNewChapters: true,
     existingSeries: { status: 'public' }
-  }), 'draft');
+  }), 'public');
 });

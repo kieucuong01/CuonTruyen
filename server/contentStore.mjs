@@ -47,9 +47,33 @@ function rawPages(chapter = {}) {
   return Array.isArray(chapter.pages) ? chapter.pages : [];
 }
 
+function localImportPath(value = '') {
+  const url = String(value || '');
+  if (url.startsWith('/imports/')) return url;
+  try {
+    const parsed = new URL(url);
+    const marker = '/imports/';
+    const markerIndex = parsed.pathname.indexOf(marker);
+    if (markerIndex >= 0) return decodeURI(parsed.pathname.slice(markerIndex));
+  } catch {
+    return url;
+  }
+  return url;
+}
+
 export function sanitizeReaderPages(pages = []) {
   if (!Array.isArray(pages) || pages.length < 3) return Array.isArray(pages) ? pages : [];
   return pages.filter((page, index) => !isStandaloneBoundaryAdPage(page, index, pages.length));
+}
+
+function publicReaderPage(page = {}, index = 0) {
+  const imageUrl = publicImportUrl(page.imageUrl || page.src || page.storageKey || page.sourceUrl || '');
+  return {
+    order: Number(page.order ?? page.index ?? index),
+    imageUrl,
+    width: page.width || null,
+    height: page.height || null
+  };
 }
 
 export function isStandaloneBoundaryAdPage(page = {}, index = 0, total = 0) {
@@ -120,7 +144,7 @@ export function normalizeChapter(chapter = {}) {
   const label = chapterLabel(chapter);
   const pages = rawPages(chapter).map((page, index) => {
     const imageUrl = publicImportUrl(page.imageUrl || page.src || page.sourceUrl || '');
-    const storageKey = publicImportUrl(page.storageKey || page.src || page.imageUrl || '');
+    const storageKey = localImportPath(page.storageKey || page.src || page.imageUrl || '');
     return {
       ...page,
       order: Number(page.order ?? page.index ?? index),
@@ -197,7 +221,7 @@ export function publicChapterSummary(chapter) {
 
 export function publicReaderChapter(chapter) {
   const normalized = normalizeChapter(chapter);
-  const pages = sanitizeReaderPages(normalized.pages);
+  const pages = sanitizeReaderPages(normalized.pages).map(publicReaderPage);
   return {
     ...publicChapterSummary({ ...normalized, pages, pageCount: pages.length }),
     pages
@@ -225,6 +249,11 @@ export function publicSeriesSummary(series, { chapterLimit = null } = {}) {
 
 export function publicSeriesDetail(series) {
   return publicSeriesSummary(series);
+}
+
+export function publicReaderSeriesSummary(series) {
+  const { chapters, ...summary } = publicSeriesSummary(series);
+  return summary;
 }
 
 export function publicCatalog(catalog) {
@@ -293,7 +322,7 @@ export function buildReaderChapterPayload(catalog, seriesSlug, chapterSlug, { wi
     .map(publicReaderChapter);
 
   return {
-    series: publicSeriesDetail(series),
+    series: publicReaderSeriesSummary(series),
     chapter: publicReaderChapter(chapter),
     chapters: windowChapters,
     previousChapter: startIndex > 0 ? publicChapterSummary(chapters[startIndex - 1]) : null,

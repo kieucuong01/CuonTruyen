@@ -21,7 +21,13 @@ function serializeConfig(config) {
 const config = {
   apiBaseUrl: trimTrailingSlash(process.env.API_BASE_URL || process.env.PUBLIC_API_BASE_URL || ''),
   staticApiMode: String(process.env.STATIC_API_MODE || '').toLowerCase() === 'true',
-  staticApiBaseUrl: trimTrailingSlash(process.env.STATIC_API_BASE_URL || process.env.PUBLIC_STATIC_API_BASE_URL || '')
+  staticApiBaseUrl: trimTrailingSlash(process.env.STATIC_API_BASE_URL || process.env.PUBLIC_STATIC_API_BASE_URL || ''),
+  importsBaseUrl: trimTrailingSlash(
+    process.env.PUBLIC_IMPORTS_BASE_URL
+    || process.env.S3_PUBLIC_BASE_URL
+    || process.env.VIETNIX_S3_PUBLIC_BASE_URL
+    || ''
+  )
 };
 
 function siteBaseUrl() {

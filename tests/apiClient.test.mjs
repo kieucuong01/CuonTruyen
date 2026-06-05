@@ -64,3 +64,31 @@ test('static API mode serves reader chapter payloads from static reader JSON', a
     else globalThis.COMIC_READER_CONFIG = originalConfig;
   }
 });
+
+test('static API mode prefers packaged Vercel reader JSON before remote S3', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalConfig = globalThis.COMIC_READER_CONFIG;
+  const requested = [];
+  globalThis.COMIC_READER_CONFIG = {
+    staticApiMode: true,
+    staticApiBaseUrl: 'https://s3.example.test/static-api'
+  };
+  globalThis.fetch = async (url) => {
+    requested.push(String(url));
+    return new Response(JSON.stringify({ chapter: { id: 'chuong-1' } }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' }
+    });
+  };
+
+  try {
+    const client = createApiClient();
+    const payload = await client.fetchJson('/api/series/demo-series/chapters/chuong-1?window=1');
+    assert.equal(payload.chapter.id, 'chuong-1');
+    assert.deepEqual(requested, ['/static-api/reader/demo-series/chuong-1.json']);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalConfig === undefined) delete globalThis.COMIC_READER_CONFIG;
+    else globalThis.COMIC_READER_CONFIG = originalConfig;
+  }
+});

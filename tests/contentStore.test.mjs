@@ -71,7 +71,9 @@ test('normalizes series into public production-shaped fields', () => {
 
 test('normalizes local imported image URLs through the configured public base URL', () => {
   const previousBaseUrl = process.env.PUBLIC_IMPORTS_BASE_URL;
+  const previousEnabled = process.env.PUBLIC_IMPORTS_BASE_URL_ENABLED;
   process.env.PUBLIC_IMPORTS_BASE_URL = 'https://comic-api.example.com/';
+  process.env.PUBLIC_IMPORTS_BASE_URL_ENABLED = 'true';
 
   try {
     const series = normalizeSeries(catalog.series[0]);
@@ -81,6 +83,8 @@ test('normalizes local imported image URLs through the configured public base UR
   } finally {
     if (previousBaseUrl === undefined) delete process.env.PUBLIC_IMPORTS_BASE_URL;
     else process.env.PUBLIC_IMPORTS_BASE_URL = previousBaseUrl;
+    if (previousEnabled === undefined) delete process.env.PUBLIC_IMPORTS_BASE_URL_ENABLED;
+    else process.env.PUBLIC_IMPORTS_BASE_URL_ENABLED = previousEnabled;
   }
 });
 
@@ -133,7 +137,7 @@ test('public series detail returns chapter summaries without page arrays', () =>
 test('reader chapter payload includes only the requested chapter window pages', () => {
   const payload = buildReaderChapterPayload(catalog, 'manh-nhat-lich-su', 'chapter-1', { window: 1 });
 
-  assert.equal(payload.series.chapters[0].pages, undefined);
+  assert.equal(payload.series.chapters, undefined);
   assert.equal(payload.chapter.id, 'chapter-1');
   assert.equal(payload.chapter.pages.length, 2);
   assert.equal(payload.chapters.length, 2);

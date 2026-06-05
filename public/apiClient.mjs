@@ -166,10 +166,13 @@ function staticApiPath(pathname) {
 function fetchStaticJson(path, config) {
   const cleanPath = path.replace(/^\/+/, '');
   const configuredBase = trimTrailingSlash(config.staticApiBaseUrl || '/static-api');
+  const localStaticBase = '/static-api';
   const fallbackBase = '/fallback-api';
-  const bases = fallbackApiShouldLead(cleanPath)
-    ? uniqueValues([fallbackBase, configuredBase])
-    : uniqueValues([configuredBase, fallbackBase]);
+  const bases = staticApiBaseOrder(cleanPath, {
+    configuredBase,
+    fallbackBase,
+    localStaticBase
+  });
   let lastError = null;
 
   return bases.reduce((chain, baseUrl) => chain.catch(async () => {
@@ -184,6 +187,16 @@ function fetchStaticJson(path, config) {
   });
 }
 
+function staticApiBaseOrder(path, { configuredBase, fallbackBase, localStaticBase }) {
+  if (fallbackApiShouldLead(path)) {
+    return uniqueValues([fallbackBase, localStaticBase, configuredBase]);
+  }
+  if (readerStaticApiShouldLead(path)) {
+    return uniqueValues([localStaticBase, configuredBase, fallbackBase]);
+  }
+  return uniqueValues([configuredBase, localStaticBase, fallbackBase]);
+}
+
 function fallbackApiShouldLead(path = '') {
   const cleanPath = String(path || '').replace(/^\/+/, '');
   return cleanPath === 'home.json'
@@ -194,9 +207,13 @@ function fallbackApiShouldLead(path = '') {
     || /^tags\/[^/]+\.json$/.test(cleanPath);
 }
 
+function readerStaticApiShouldLead(path = '') {
+  return /^reader\/[^/]+\/[^/]+(?:\.json|\/next\.json)$/.test(String(path || '').replace(/^\/+/, ''));
+}
+
 async function fetchStaticJsonFrom(url, path) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 8000);
+  const timeoutId = setTimeout(() => controller.abort(), staticFetchTimeoutMs(url));
   let response;
   try {
     response = await fetch(url, { signal: controller.signal });
@@ -213,6 +230,12 @@ async function fetchStaticJsonFrom(url, path) {
   if (!response.ok) throw new Error(data?.error || `Static API not found: ${path}`);
   if (!data) throw new Error(`Static API response is empty: ${path}`);
   return data;
+}
+
+function staticFetchTimeoutMs(url = '') {
+  const baseTimeout = 8000;
+  const localTimeout = 3500;
+  return /^\/(?:fallback-api|static-api)\//.test(String(url || '')) ? localTimeout : baseTimeout;
 }
 
 function uniqueValues(values = []) {

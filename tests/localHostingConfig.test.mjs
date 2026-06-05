@@ -6,7 +6,9 @@ import { corsHeaders } from '../server/utils.mjs';
 
 test('publicImportPath can emit absolute URLs for a public local image host', () => {
   const previousBaseUrl = process.env.PUBLIC_IMPORTS_BASE_URL;
+  const previousEnabled = process.env.PUBLIC_IMPORTS_BASE_URL_ENABLED;
   process.env.PUBLIC_IMPORTS_BASE_URL = 'https://comic-api.example.com/';
+  process.env.PUBLIC_IMPORTS_BASE_URL_ENABLED = 'true';
 
   try {
     assert.equal(
@@ -16,6 +18,8 @@ test('publicImportPath can emit absolute URLs for a public local image host', ()
   } finally {
     if (previousBaseUrl === undefined) delete process.env.PUBLIC_IMPORTS_BASE_URL;
     else process.env.PUBLIC_IMPORTS_BASE_URL = previousBaseUrl;
+    if (previousEnabled === undefined) delete process.env.PUBLIC_IMPORTS_BASE_URL_ENABLED;
+    else process.env.PUBLIC_IMPORTS_BASE_URL_ENABLED = previousEnabled;
   }
 });
 

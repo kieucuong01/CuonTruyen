@@ -55,3 +55,25 @@ test('publicReaderChapter reports sanitized page count for the reader payload', 
   assert.equal(chapter.pageCount, 1);
   assert.deepEqual(chapter.pages.map((page) => page.imageUrl), ['/002.webp']);
 });
+
+test('publicReaderChapter strips crawler-only page fields from reader payload', () => {
+  const chapter = publicReaderChapter({
+    id: 'chapter-1',
+    label: 'Chapter 1',
+    pages: [
+      {
+        imageUrl: '/imports/demo/chapter-1/001.webp',
+        src: '/imports/demo/chapter-1/001.webp',
+        storageKey: '/imports/demo/chapter-1/001.webp',
+        sourceUrl: 'https://source.example/001.jpg',
+        originalBytes: 123456,
+        storedBytes: 45678,
+        width: 900,
+        height: 1300
+      }
+    ]
+  });
+
+  assert.deepEqual(Object.keys(chapter.pages[0]).sort(), ['height', 'imageUrl', 'order', 'width']);
+  assert.equal(chapter.pages[0].imageUrl, '/imports/demo/chapter-1/001.webp');
+});

@@ -1,6 +1,7 @@
 window.COMIC_READER_CONFIG = {
   ...(window.COMIC_READER_CONFIG || {}),
   "apiBaseUrl": "",
-  "staticApiMode": false,
-  "staticApiBaseUrl": ""
+  "staticApiMode": true,
+  "staticApiBaseUrl": "https://s3.vn-hcm-1.vietnix.cloud/cuontruyen/static-api",
+  "importsBaseUrl": "https://s3.vn-hcm-1.vietnix.cloud/cuontruyen"
 };

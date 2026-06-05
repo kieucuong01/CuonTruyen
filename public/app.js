@@ -982,6 +982,7 @@ async function renderReader(seriesId) {
 
 async function renderReaderFromSlug(seriesSlug, chapterSlug) {
   const payload = await loadReaderChapter(seriesSlug, chapterSlug);
+  await ensureReaderSeriesDetail(payload, seriesSlug);
   const { series, chapter } = payload;
   applyReaderPayload(payload, { reset: true, currentChapterId: chapter.id });
   prepareReader({ chapterId: chapter.id });
@@ -993,26 +994,44 @@ async function renderReaderFromSlug(seriesSlug, chapterSlug) {
   sendEvent('pageview', { seriesSlug: state.series.slug, chapterSlug: chapter.slug });
 }
 
+async function ensureReaderSeriesDetail(payload, seriesSlug) {
+  if (Array.isArray(payload?.series?.chapters) && payload.series.chapters.length) return payload;
+  const seriesKey = payload?.series?.slug || seriesSlug;
+  const detail = await fetchJson(`/api/series/${encodeURIComponent(seriesKey)}`);
+  payload.series = {
+    ...(payload.series || {}),
+    ...detail,
+    chapters: detail.chapters || []
+  };
+  return payload;
+}
+
 async function loadReaderChapter(seriesSlug, chapterSlug) {
   try {
-    return await fetchJson(`/api/series/${encodeURIComponent(seriesSlug)}/chapters/${encodeURIComponent(chapterSlug)}?window=1`);
+    return await fetchJson(`/api/series/${encodeURIComponent(seriesSlug)}/chapters/${encodeURIComponent(chapterSlug)}?window=0`);
   } catch (error) {
     const series = await fetchJson(`/api/series/${encodeURIComponent(seriesSlug)}`);
     const chapter = findChapterByRoute(series.chapters, chapterSlug);
     if (chapter && hasReadableChapter(chapter)) {
-      return await fetchJson(`/api/series/${encodeURIComponent(series.slug)}/chapters/${chapterHrefSegment(chapter)}?window=1`);
+      return await fetchJson(`/api/series/${encodeURIComponent(series.slug)}/chapters/${chapterHrefSegment(chapter)}?window=0`);
     }
     const fallback = nearestReadableChapter(series.chapters, chapter);
     if (fallback) {
       history.replaceState({}, '', `/truyen/${series.slug}/${chapterHrefSegment(fallback)}`);
-      return await fetchJson(`/api/series/${encodeURIComponent(series.slug)}/chapters/${chapterHrefSegment(fallback)}?window=1`);
+      return await fetchJson(`/api/series/${encodeURIComponent(series.slug)}/chapters/${chapterHrefSegment(fallback)}?window=0`);
     }
     throw error;
   }
 }
 
 function applyReaderPayload(payload, { reset = false, currentChapterId = '' } = {}) {
-  state.series = payload.series;
+  const previousChapters = Array.isArray(state.series?.chapters) ? state.series.chapters : [];
+  state.series = {
+    ...(payload.series || state.series || {}),
+    chapters: Array.isArray(payload.series?.chapters) && payload.series.chapters.length
+      ? payload.series.chapters
+      : previousChapters
+  };
   const incoming = (payload.chapters?.length ? payload.chapters : [payload.chapter])
     .filter(Boolean)
     .map(sanitizeReaderChapter);
@@ -1039,8 +1058,40 @@ function sanitizeReaderChapter(chapter = {}) {
 }
 
 function sanitizeReaderPages(pages = []) {
-  if (!Array.isArray(pages) || pages.length < 3) return Array.isArray(pages) ? pages : [];
-  return pages.filter((page, index) => !isStandaloneBoundaryAdPage(page, index, pages.length));
+  if (!Array.isArray(pages)) return [];
+  const normalized = pages.map(normalizeReaderPage);
+  if (normalized.length < 3) return normalized;
+  return normalized.filter((page, index) => !isStandaloneBoundaryAdPage(page, index, normalized.length));
+}
+
+function normalizeReaderPage(page = {}, index = 0) {
+  if (Array.isArray(page)) {
+    return {
+      order: Number(page[0] ?? index),
+      imageUrl: resolveReaderImageUrl(page[1] || ''),
+      width: page[2] || null,
+      height: page[3] || null
+    };
+  }
+  return {
+    ...page,
+    order: Number(page.order ?? page.index ?? index),
+    imageUrl: resolveReaderImageUrl(page.imageUrl || page.src || '')
+  };
+}
+
+function resolveReaderImageUrl(value = '') {
+  const url = String(value || '');
+  if (!url || /^https?:\/\//i.test(url)) return url;
+  if (!url.startsWith('/imports/')) return url;
+  const config = getRuntimeConfig();
+  const importsBase = String(config.importsBaseUrl || '').replace(/\/$/, '')
+    || inferImportsBaseFromStaticApi(config.staticApiBaseUrl || '');
+  return importsBase ? `${importsBase}${url}` : url;
+}
+
+function inferImportsBaseFromStaticApi(staticApiBaseUrl = '') {
+  return String(staticApiBaseUrl || '').replace(/\/static-api\/?$/, '');
 }
 
 function isStandaloneBoundaryAdPage(page = {}, index = 0, total = 0) {
@@ -1820,13 +1871,12 @@ function bindContinueSlider() {
 
 async function loadNextReaderChapter() {
   if (state.loadingNextChapter) return;
-  const lastLoaded = state.readerChapters[state.readerChapters.length - 1];
   const next = nextSummaryAfterLastLoaded();
-  if (!lastLoaded || !next) return;
+  if (!next) return;
 
   state.loadingNextChapter = true;
   try {
-    const payload = await fetchJson(`/api/series/${encodeURIComponent(state.series.slug)}/chapters/${chapterHrefSegment(lastLoaded)}/next?window=0`);
+    const payload = await fetchJson(`/api/series/${encodeURIComponent(state.series.slug)}/chapters/${chapterHrefSegment(next)}?window=0`);
     const { added } = applyReaderPayload(payload);
     appendReaderChapters(added);
     releaseFarBehindReaderImages();
@@ -1856,9 +1906,9 @@ function chapterIndex(chapterId) {
 }
 
 function prefetchNextReaderChapter() {
-  const lastLoaded = state.readerChapters[state.readerChapters.length - 1];
-  if (!lastLoaded || !nextSummaryAfterLastLoaded()) return;
-  fetchJson(`/api/series/${encodeURIComponent(state.series.slug)}/chapters/${chapterHrefSegment(lastLoaded)}/next?window=0`).catch(() => {});
+  const next = nextSummaryAfterLastLoaded();
+  if (!next) return;
+  fetchJson(`/api/series/${encodeURIComponent(state.series.slug)}/chapters/${chapterHrefSegment(next)}?window=0`).catch(() => {});
 }
 
 function currentChapter() {
