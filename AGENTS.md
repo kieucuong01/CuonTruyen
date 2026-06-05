@@ -8,6 +8,7 @@ Use this file as the first stop for any future AI agent. Keep it short; put deta
 
 - Token-efficient map for AI agents: `docs/agent-playbooks/agent-token-map.md`
 - Current deployment/storage state: `docs/agent-playbooks/current-deployment.md`
+- Main branch auto-deploy flow: `docs/agent-playbooks/git-main-auto-deploy.md`
 - Vercel + Vietnix S3 publishing flow: `docs/agent-playbooks/vercel-s3-publishing.md`
 - Product and technical playbook: `docs/agent-playbooks/comic-reader.md`
 - Frontend map for AI agents: `docs/agent-playbooks/frontend-map.md`
