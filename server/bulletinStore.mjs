@@ -2,6 +2,8 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
+import { ensurePostgresSchema, queryPostgres, usesPostgresStorage } from './postgresStore.mjs';
+
 const ROOT = process.cwd();
 const BULLETIN_STORE_PATH = path.resolve(process.env.BULLETIN_STORE_PATH || path.join(ROOT, 'data', 'bulletin-messages.json'));
 const MAX_MESSAGES = Number(process.env.BULLETIN_MAX_MESSAGES || 200);
@@ -14,7 +16,12 @@ export function usesLibSqlBulletinStore() {
   return Boolean(libSqlDatabaseUrl());
 }
 
+export function usesPostgresBulletinStore() {
+  return usesPostgresStorage();
+}
+
 export async function listBulletinMessages({ limit = 30 } = {}) {
+  if (usesPostgresBulletinStore()) return listPostgresBulletinMessages({ limit });
   if (usesLibSqlBulletinStore()) return listLibSqlBulletinMessages({ limit });
   const store = await readBulletinStore();
   return sortMessages(store.messages)
@@ -45,6 +52,7 @@ export async function createAdminBulletinMessage({ text, adminEmail, pinned = fa
 }
 
 export async function setAdminBulletinPinned(id, pinned = false, { now = new Date().toISOString() } = {}) {
+  if (usesPostgresBulletinStore()) return setPostgresAdminBulletinPinned(id, pinned, { now });
   if (usesLibSqlBulletinStore()) return setLibSqlAdminBulletinPinned(id, pinned, { now });
   const store = await readBulletinStore();
   const message = store.messages.find((item) => item.id === id);
@@ -72,6 +80,10 @@ async function appendMessage({ text, now, authorRole, authorId, authorName, pinn
     createdAt: now,
     updatedAt: now
   };
+  if (usesPostgresBulletinStore()) {
+    await insertPostgresMessage(message);
+    return publicMessage(message);
+  }
   if (usesLibSqlBulletinStore()) {
     await insertLibSqlMessage(message);
     return publicMessage(message);
@@ -80,6 +92,60 @@ async function appendMessage({ text, now, authorRole, authorId, authorName, pinn
   store.messages = sortMessages([message, ...store.messages]).slice(0, MAX_MESSAGES);
   await writeBulletinStore(store);
   return publicMessage(message);
+}
+
+async function listPostgresBulletinMessages({ limit = 30 } = {}) {
+  await ensurePostgresSchema();
+  const result = await queryPostgres(
+    `select * from bulletin_messages
+     order by pinned desc,
+              coalesce(pinned_at, created_at) desc,
+              created_at desc
+     limit $1`,
+    [Math.max(1, Number(limit || 30))]
+  );
+  return result.rows.map(messageFromPostgresRow).map(publicMessage);
+}
+
+async function insertPostgresMessage(message) {
+  await ensurePostgresSchema();
+  await queryPostgres(
+    `insert into bulletin_messages (
+       id, text, author_role, author_id, author_name, pinned, pinned_at, created_at, updated_at
+     ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    [
+      message.id,
+      message.text,
+      message.authorRole,
+      message.authorId,
+      message.authorName,
+      message.pinned,
+      message.pinnedAt,
+      message.createdAt,
+      message.updatedAt
+    ]
+  );
+}
+
+async function setPostgresAdminBulletinPinned(id, pinned = false, { now = new Date().toISOString() } = {}) {
+  await ensurePostgresSchema();
+  const existing = await queryPostgres('select * from bulletin_messages where id = $1 limit 1', [id]);
+  const message = existing.rows[0] ? messageFromPostgresRow(existing.rows[0]) : null;
+  if (!message) throw Object.assign(new Error('Không tìm thấy tin nhắn.'), { status: 404 });
+  if (message.authorRole !== 'admin') {
+    throw Object.assign(new Error('Chỉ tin nhắn admin mới được ghim.'), { status: 400 });
+  }
+  const nextPinnedAt = pinned ? now : null;
+  await queryPostgres(
+    'update bulletin_messages set pinned = $1, pinned_at = $2, updated_at = $3 where id = $4',
+    [Boolean(pinned), nextPinnedAt, now, id]
+  );
+  return publicMessage({
+    ...message,
+    pinned: Boolean(pinned),
+    pinnedAt: nextPinnedAt,
+    updatedAt: now
+  });
 }
 
 async function listLibSqlBulletinMessages({ limit = 30 } = {}) {
@@ -190,6 +256,20 @@ function messageFromLibSqlRow(row = {}) {
     pinnedAt: row.pinned_at ?? row.pinnedAt ?? null,
     createdAt: row.created_at ?? row.createdAt,
     updatedAt: row.updated_at ?? row.updatedAt
+  });
+}
+
+function messageFromPostgresRow(row = {}) {
+  return normalizeMessage({
+    id: row.id,
+    text: row.text,
+    authorRole: row.author_role ?? row.authorRole,
+    authorId: row.author_id ?? row.authorId,
+    authorName: row.author_name ?? row.authorName,
+    pinned: Boolean(row.pinned),
+    pinnedAt: row.pinned_at ? new Date(row.pinned_at).toISOString() : null,
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : undefined,
+    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : undefined
   });
 }
 

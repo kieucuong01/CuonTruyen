@@ -2,6 +2,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
+import { ensurePostgresSchema, queryPostgres, usesPostgresStorage } from './postgresStore.mjs';
+
 const ROOT = process.cwd();
 const USER_STORE_PATH = path.resolve(process.env.USER_STORE_PATH || path.join(ROOT, 'data', 'users.json'));
 const SESSION_TTL_MS = Number(process.env.USER_SESSION_TTL_MS || 1000 * 60 * 60 * 24 * 30);
@@ -14,7 +16,12 @@ export function usesLibSqlUserStore() {
   return Boolean(libSqlDatabaseUrl());
 }
 
+export function usesPostgresUserStore() {
+  return usesPostgresStorage();
+}
+
 export async function readUserStore() {
+  if (usesPostgresUserStore()) return readPostgresUserStore();
   if (usesLibSqlUserStore()) return readLibSqlUserStore();
   return readJsonUserStore();
 }
@@ -27,6 +34,7 @@ export async function registerUser({ identifier, password, displayName } = {}) {
   const normalized = normalizeUserIdentifier(identifier);
   assertValidCredentials(normalized, password);
   assertPersistentUserStore();
+  if (usesPostgresUserStore()) return registerPostgresUser({ identifier: normalized, password, displayName });
   if (usesLibSqlUserStore()) return registerLibSqlUser({ identifier: normalized, password, displayName });
 
   const store = await readJsonUserStore();
@@ -55,6 +63,7 @@ export async function loginUser({ identifier, password } = {}) {
     throw Object.assign(new Error('Vui lòng nhập email/tên đăng nhập và mật khẩu.'), { status: 400 });
   }
   assertPersistentUserStore();
+  if (usesPostgresUserStore()) return loginPostgresUser({ identifier: normalized, password });
   if (usesLibSqlUserStore()) return loginLibSqlUser({ identifier: normalized, password });
 
   const store = await readJsonUserStore();
@@ -78,6 +87,7 @@ export async function authenticateGoogleUser({ email, emailVerified, name, sub }
     throw Object.assign(new Error('Email Google chưa được xác minh.'), { status: 401 });
   }
   assertPersistentUserStore();
+  if (usesPostgresUserStore()) return authenticatePostgresGoogleUser({ email: normalized, name, sub });
   if (usesLibSqlUserStore()) return authenticateLibSqlGoogleUser({ email: normalized, name, sub });
 
   const store = await readJsonUserStore();
@@ -106,6 +116,7 @@ export async function getSessionUser(token = '') {
   const rawToken = String(token || '').trim();
   if (!rawToken) return null;
   assertPersistentUserStore();
+  if (usesPostgresUserStore()) return getPostgresSessionUser(rawToken);
   if (usesLibSqlUserStore()) return getLibSqlSessionUser(rawToken);
 
   const store = await readJsonUserStore();
@@ -121,6 +132,7 @@ export async function logoutUser(token = '') {
   const rawToken = String(token || '').trim();
   if (!rawToken) return { ok: true };
   assertPersistentUserStore();
+  if (usesPostgresUserStore()) return logoutPostgresUser(rawToken);
   if (usesLibSqlUserStore()) return logoutLibSqlUser(rawToken);
 
   const store = await readJsonUserStore();
@@ -166,6 +178,127 @@ function normalizeStore(value = {}) {
     users: Array.isArray(value.users) ? value.users : [],
     sessions: Array.isArray(value.sessions) ? value.sessions : []
   };
+}
+
+async function registerPostgresUser({ identifier, password, displayName }) {
+  await ensurePostgresSchema();
+  const existing = await getPostgresUserByIdentifier(identifier);
+  if (existing) throw Object.assign(new Error('Tài khoản đã tồn tại.'), { status: 409 });
+
+  const now = new Date().toISOString();
+  const user = {
+    id: createUserId(identifier),
+    identifier,
+    displayName: String(displayName || displayNameFromIdentifier(identifier)).trim(),
+    passwordHash: await hashPassword(password),
+    createdAt: now,
+    updatedAt: now
+  };
+  await queryPostgres(
+    `insert into app_users (id, identifier, display_name, password_hash, created_at, updated_at)
+     values ($1, $2, $3, $4, $5, $6)`,
+    [user.id, user.identifier, user.displayName, user.passwordHash, user.createdAt, user.updatedAt]
+  );
+  const session = await createPostgresSession(user.id);
+  return publicSession(user, session.token);
+}
+
+async function loginPostgresUser({ identifier, password }) {
+  await ensurePostgresSchema();
+  const user = await getPostgresUserByIdentifier(identifier);
+  if (!user || !(await verifyPassword(password, user.passwordHash))) {
+    throw Object.assign(new Error('Tài khoản hoặc mật khẩu không đúng.'), { status: 401 });
+  }
+
+  const updatedAt = new Date().toISOString();
+  await queryPostgres('update app_users set updated_at = $1 where id = $2', [updatedAt, user.id]);
+  user.updatedAt = updatedAt;
+  const session = await createPostgresSession(user.id);
+  return publicSession(user, session.token);
+}
+
+async function authenticatePostgresGoogleUser({ email, name, sub }) {
+  await ensurePostgresSchema();
+  const now = new Date().toISOString();
+  let user = await getPostgresUserByIdentifier(email);
+  if (user) {
+    user.displayName = String(user.displayName || name || displayNameFromIdentifier(email)).trim();
+    user.updatedAt = now;
+    await queryPostgres(
+      'update app_users set display_name = $1, updated_at = $2 where id = $3',
+      [user.displayName, user.updatedAt, user.id]
+    );
+  } else {
+    user = {
+      id: createUserId(email),
+      identifier: email,
+      displayName: String(name || displayNameFromIdentifier(email)).trim(),
+      passwordHash: `oauth:google:${String(sub)}`,
+      createdAt: now,
+      updatedAt: now
+    };
+    await queryPostgres(
+      `insert into app_users (id, identifier, display_name, password_hash, created_at, updated_at)
+       values ($1, $2, $3, $4, $5, $6)`,
+      [user.id, user.identifier, user.displayName, user.passwordHash, user.createdAt, user.updatedAt]
+    );
+  }
+  const session = await createPostgresSession(user.id);
+  return publicSession(user, session.token);
+}
+
+async function getPostgresSessionUser(token) {
+  await ensurePostgresSchema();
+  const result = await queryPostgres(
+    `select u.id, u.identifier, u.display_name, u.created_at, u.updated_at
+     from app_sessions s
+     join app_users u on u.id = s.user_id
+     where s.token_hash = $1 and s.expires_at > $2
+     limit 1`,
+    [hashToken(token), new Date().toISOString()]
+  );
+  const row = result.rows[0];
+  return row ? publicUser(userFromPostgresRow(row)) : null;
+}
+
+async function logoutPostgresUser(token) {
+  await ensurePostgresSchema();
+  await queryPostgres('delete from app_sessions where token_hash = $1', [hashToken(token)]);
+  return { ok: true };
+}
+
+async function readPostgresUserStore() {
+  await ensurePostgresSchema();
+  const [usersResult, sessionsResult] = await Promise.all([
+    queryPostgres('select * from app_users order by created_at'),
+    queryPostgres('select * from app_sessions order by created_at')
+  ]);
+  return {
+    users: usersResult.rows.map(userFromPostgresRow),
+    sessions: sessionsResult.rows.map(sessionFromPostgresRow)
+  };
+}
+
+async function getPostgresUserByIdentifier(identifier) {
+  const result = await queryPostgres('select * from app_users where identifier = $1 limit 1', [identifier]);
+  return result.rows[0] ? userFromPostgresRow(result.rows[0]) : null;
+}
+
+async function createPostgresSession(userId) {
+  const token = crypto.randomBytes(32).toString('hex');
+  const now = Date.now();
+  const session = {
+    userId,
+    tokenHash: hashToken(token),
+    createdAt: new Date(now).toISOString(),
+    expiresAt: new Date(now + SESSION_TTL_MS).toISOString()
+  };
+  await queryPostgres('delete from app_sessions where expires_at <= $1', [new Date(now).toISOString()]);
+  await queryPostgres(
+    'insert into app_sessions (token_hash, user_id, created_at, expires_at) values ($1, $2, $3, $4)',
+    [session.tokenHash, session.userId, session.createdAt, session.expiresAt]
+  );
+  return { ...session, token };
 }
 
 async function registerLibSqlUser({ identifier, password, displayName }) {
@@ -354,13 +487,34 @@ function libSqlAuthToken() {
 }
 
 function assertPersistentUserStore() {
+  if (usesPostgresUserStore()) return;
   if (usesLibSqlUserStore()) return;
   if (process.env.VERCEL) {
     throw Object.assign(
-      new Error('User auth on Vercel requires LIBSQL_DATABASE_URL and LIBSQL_AUTH_TOKEN, or TURSO_DATABASE_URL and TURSO_AUTH_TOKEN.'),
+      new Error('User auth on Vercel requires DATABASE_URL/POSTGRES_URL for Supabase Postgres, or LIBSQL/TURSO env for legacy storage.'),
       { status: 503 }
     );
   }
+}
+
+function userFromPostgresRow(row = {}) {
+  return {
+    id: String(row.id || ''),
+    identifier: String(row.identifier || ''),
+    displayName: String(row.display_name ?? row.displayName ?? ''),
+    passwordHash: String(row.password_hash ?? row.passwordHash ?? ''),
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : '',
+    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : ''
+  };
+}
+
+function sessionFromPostgresRow(row = {}) {
+  return {
+    tokenHash: String(row.token_hash ?? row.tokenHash ?? ''),
+    userId: String(row.user_id ?? row.userId ?? ''),
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : '',
+    expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : ''
+  };
 }
 
 function userFromLibSqlRow(row = {}) {

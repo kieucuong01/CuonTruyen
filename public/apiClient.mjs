@@ -88,7 +88,7 @@ async function readJsonResponse(response) {
 
 function normalizePlainTextApiError(message = '', status = 0) {
   if (/^not found$/i.test(message)) {
-    return 'Kh\u00f4ng t\u00ecm th\u1ea5y API endpoint. N\u1ebfu \u0111ang m\u1edf admin tr\u00ean Vercel, h\u00e3y d\u00f9ng backend local/VPS cho admin v\u00e0 crawler.';
+    return 'Kh\u00f4ng t\u00ecm th\u1ea5y API endpoint. H\u00e3y ki\u1ec3m tra backend API \u0111ang ch\u1ea1y ho\u1eb7c Vercel Function \u0111\u00e3 deploy xong.';
   }
   return message || `Request failed (${status})`;
 }
@@ -104,12 +104,8 @@ function staticApiRequest(url, options = {}) {
     return Promise.resolve({ ok: true, static: true });
   }
 
-  if (parsed.pathname.startsWith('/api/admin') && isLocalAdminOrigin()) {
+  if (parsed.pathname.startsWith('/api/admin')) {
     return null;
-  }
-
-  if (parsed.pathname.startsWith('/api/admin') && !config.apiBaseUrl) {
-    return Promise.reject(new Error('Admin c\u1ea7n API_BASE_URL tr\u1ecf t\u1edbi backend local/VPS. Public Vercel static ch\u1ec9 d\u00f9ng \u0111\u1ec3 \u0111\u1ecdc truy\u1ec7n.'));
   }
 
   if (method !== 'GET') return null;

@@ -3,6 +3,7 @@ import { slugify } from './utils.mjs';
 
 const DATABASE_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL || '';
 let poolPromise = null;
+let schemaPromise = null;
 
 export const POSTGRES_SCHEMA_SQL = `
 create table if not exists series (
@@ -91,6 +92,34 @@ create table if not exists crawl_jobs (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists app_users (
+  id text primary key,
+  identifier text not null unique,
+  display_name text not null,
+  password_hash text not null,
+  created_at timestamptz not null,
+  updated_at timestamptz not null
+);
+
+create table if not exists app_sessions (
+  token_hash text primary key,
+  user_id text not null references app_users(id) on delete cascade,
+  created_at timestamptz not null,
+  expires_at timestamptz not null
+);
+
+create table if not exists bulletin_messages (
+  id text primary key,
+  text text not null,
+  author_role text not null,
+  author_id text not null,
+  author_name text not null,
+  pinned boolean not null default false,
+  pinned_at timestamptz,
+  created_at timestamptz not null,
+  updated_at timestamptz not null
+);
+
 alter table if exists crawl_jobs add column if not exists payload jsonb not null default '{}'::jsonb;
 alter table if exists crawl_jobs add column if not exists result jsonb not null default '{}'::jsonb;
 alter table if exists crawl_jobs add column if not exists series_id text;
@@ -111,6 +140,10 @@ create index if not exists idx_pages_chapter_order on pages(series_id, chapter_i
 create index if not exists idx_series_tags_tag on series_tags(tag_slug, series_id);
 create index if not exists idx_crawl_jobs_source_status on crawl_jobs(source_url, status);
 create index if not exists idx_crawl_jobs_queue on crawl_jobs(status, run_after, priority desc, created_at);
+create index if not exists idx_app_sessions_user_id on app_sessions(user_id);
+create index if not exists idx_app_sessions_expires_at on app_sessions(expires_at);
+create index if not exists idx_bulletin_messages_pinned on bulletin_messages(pinned, pinned_at);
+create index if not exists idx_bulletin_messages_created_at on bulletin_messages(created_at);
 `;
 
 export function usesPostgresStorage() {
@@ -119,8 +152,11 @@ export function usesPostgresStorage() {
 
 export async function ensurePostgresSchema() {
   if (!usesPostgresStorage()) return false;
-  await queryPostgres(POSTGRES_SCHEMA_SQL);
-  return true;
+  if (process.env.POSTGRES_SKIP_SCHEMA_INIT === 'true') return true;
+  if (!schemaPromise) {
+    schemaPromise = queryPostgres(POSTGRES_SCHEMA_SQL).then(() => true);
+  }
+  return schemaPromise;
 }
 
 export async function readCatalogFromPostgres({ includePages = true } = {}) {
@@ -224,6 +260,14 @@ async function getPool() {
 export async function queryPostgres(sql, params = []) {
   const pool = await getPool();
   return pool.query(sql, params);
+}
+
+export async function closePostgresPool() {
+  if (!poolPromise) return;
+  const pool = await poolPromise;
+  poolPromise = null;
+  schemaPromise = null;
+  await pool.end().catch(() => {});
 }
 
 export async function withPostgresTransaction(work) {
@@ -331,20 +375,23 @@ async function upsertSeriesRows(client, rawSeries) {
       json(chapter.raw)
     ]);
 
-    for (const [pageIndex, rawPage] of chapter.pages.entries()) {
-      const page = normalizePageForStorage(rawPage, pageIndex);
-      if (!page.imageUrl) continue;
-      await client.query(`
-        insert into pages (
-          series_id, chapter_id, page_order, image_url, storage_key,
-          source_url, width, height, raw
-        ) values (
-          $1, $2, $3, $4, $5,
-          $6, $7, $8, $9::jsonb
-        )
-      `, [
-        series.id,
-        chapter.id,
+    await insertChapterPages(client, series.id, chapter.id, chapter.pages);
+  }
+}
+
+async function insertChapterPages(client, seriesId, chapterId, rawPages = []) {
+  const pages = rawPages
+    .map((rawPage, pageIndex) => normalizePageForStorage(rawPage, pageIndex))
+    .filter((page) => page.imageUrl);
+  const chunkSize = 500;
+  for (let index = 0; index < pages.length; index += chunkSize) {
+    const chunk = pages.slice(index, index + chunkSize);
+    const values = [];
+    const placeholders = chunk.map((page, chunkIndex) => {
+      const offset = chunkIndex * 9;
+      values.push(
+        seriesId,
+        chapterId,
         page.order,
         page.imageUrl,
         page.storageKey,
@@ -352,8 +399,15 @@ async function upsertSeriesRows(client, rawSeries) {
         page.width,
         page.height,
         json(page.raw)
-      ]);
-    }
+      );
+      return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}::jsonb)`;
+    });
+    await client.query(`
+      insert into pages (
+        series_id, chapter_id, page_order, image_url, storage_key,
+        source_url, width, height, raw
+      ) values ${placeholders.join(', ')}
+    `, values);
   }
 }
 

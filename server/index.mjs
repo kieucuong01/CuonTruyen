@@ -78,11 +78,13 @@ const S3_SYNC_STATUS_FILE = path.resolve(process.env.S3_SYNC_STATUS_FILE || proc
 const API_CACHE_TTL_MS = 15_000;
 const apiResponseCache = createBoundedCache({ maxEntries: Number(process.env.API_CACHE_MAX_ENTRIES || 250) });
 const SPA_ROUTE_PATHS = new Set(['/admin']);
-const EMBEDDED_CRAWL_WORKER_ENABLED = process.env.CRAWL_EMBEDDED_WORKER !== 'false';
+const EMBEDDED_CRAWL_WORKER_ENABLED = !process.env.VERCEL && process.env.CRAWL_EMBEDDED_WORKER !== 'false';
 const EMBEDDED_CRAWL_WORKER_ID = `server-crawl-worker-${process.pid}`;
 const EMBEDDED_CRAWL_DRAIN_LIMIT = Math.max(1, Number(process.env.CRAWL_EMBEDDED_DRAIN_LIMIT || 50));
+const CRAWL_API_ENABLED = !process.env.VERCEL || process.env.CRAWL_API_ENABLED === 'true';
 let embeddedCrawlDrainPromise = null;
 let embeddedCrawlDrainRequested = false;
+let serverBootstrapPromise = null;
 
 function cleanRelativePath(urlPath, prefix = '') {
   const decoded = decodeURIComponent(urlPath.replace(prefix, ''));
@@ -174,6 +176,13 @@ function kickEmbeddedCrawlWorker(reason = 'manual') {
       embeddedCrawlDrainPromise = null;
       if (embeddedCrawlDrainRequested) kickEmbeddedCrawlWorker('queued-during-run');
     });
+}
+
+function crawlDisabledPayload() {
+  return {
+    error: 'Crawl chỉ chạy ở backend local/crawler. Production Vercel chỉ dùng cho admin nhẹ và đọc truyện.',
+    hint: 'Hãy mở admin local để crawl, rồi sync ảnh/static API lên Vietnix S3.'
+  };
 }
 
 async function readS3SyncStatus() {
@@ -551,6 +560,10 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === 'POST' && url.pathname.match(/^\/api\/admin\/series\/[^/]+\/update-chapters$/)) {
+    if (!CRAWL_API_ENABLED) {
+      jsonResponse(res, 503, crawlDisabledPayload());
+      return true;
+    }
     const id = decodeURIComponent(url.pathname.split('/')[4]);
     const catalog = await readCatalog({ includePages: false });
     const series = findSeriesBySlug(catalog, id, { includeDraft: true }) || await getSeries(id, { includePages: false, includeDraft: true });
@@ -617,6 +630,10 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === 'POST' && url.pathname === '/api/admin/import-jobs/wake') {
+    if (!CRAWL_API_ENABLED) {
+      jsonResponse(res, 503, crawlDisabledPayload());
+      return true;
+    }
     kickEmbeddedCrawlWorker('admin-wake');
     jsonResponse(res, 200, await buildImportQueueSummary({ wake: true }));
     return true;
@@ -631,6 +648,10 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === 'POST' && url.pathname === '/api/import') {
+    if (!CRAWL_API_ENABLED) {
+      jsonResponse(res, 503, crawlDisabledPayload());
+      return true;
+    }
     try {
       const body = await readJsonBody(req);
       if (!body.url || !/^https?:\/\//i.test(body.url)) {
@@ -647,6 +668,10 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === 'POST' && url.pathname === '/api/admin/import-jobs') {
+    if (!CRAWL_API_ENABLED) {
+      jsonResponse(res, 503, crawlDisabledPayload());
+      return true;
+    }
     try {
       const body = await readJsonBody(req);
       const payloads = normalizeImportBatchPayload(body);
@@ -748,8 +773,19 @@ async function handleSeoRoute(req, res, url) {
   return false;
 }
 
-const server = http.createServer(async (req, res) => {
+export async function bootstrapServerStorage() {
+  if (!serverBootstrapPromise) {
+    serverBootstrapPromise = (async () => {
+      await ensureStorageSchema();
+      await ensureCrawlQueueStorage();
+    })();
+  }
+  return serverBootstrapPromise;
+}
+
+export async function handleNodeRequest(req, res) {
   try {
+    await bootstrapServerStorage();
     const url = new URL(req.url, `http://${req.headers.host}`);
     if (req.method === 'OPTIONS') {
       res.writeHead(204, corsHeaders());
@@ -777,16 +813,22 @@ const server = http.createServer(async (req, res) => {
     console.error(error);
     jsonResponse(res, 500, { error: 'Server error', detail: error.message });
   }
-});
+}
 
-await ensureStorageSchema();
-await ensureCrawlQueueStorage();
-kickEmbeddedCrawlWorker('startup');
+export async function startServer() {
+  await bootstrapServerStorage();
+  kickEmbeddedCrawlWorker('startup');
+  const server = http.createServer(handleNodeRequest);
+  server.listen(PORT, () => {
+    const storageMode = usesPostgresStorage() ? 'PostgreSQL' : 'local JSON';
+    console.log(`Comic reader running at http://localhost:${PORT} (${storageMode} catalog)`);
+    if (EMBEDDED_CRAWL_WORKER_ENABLED) {
+      console.log('Embedded crawl worker is enabled. Set CRAWL_EMBEDDED_WORKER=false to use a separate worker only.');
+    }
+  });
+  return server;
+}
 
-server.listen(PORT, () => {
-  const storageMode = usesPostgresStorage() ? 'PostgreSQL' : 'local JSON';
-  console.log(`Comic reader running at http://localhost:${PORT} (${storageMode} catalog)`);
-  if (EMBEDDED_CRAWL_WORKER_ENABLED) {
-    console.log('Embedded crawl worker is enabled. Set CRAWL_EMBEDDED_WORKER=false to use a separate worker only.');
-  }
-});
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  await startServer();
+}

@@ -43,6 +43,11 @@ const adminLimiter = createRateLimiter({
   max: numberFromEnv('RATE_LIMIT_ADMIN_MAX', 60)
 });
 
+const adminStatusLimiter = createRateLimiter({
+  windowMs: numberFromEnv('RATE_LIMIT_WINDOW_MS', DEFAULT_WINDOW_MS),
+  max: numberFromEnv('RATE_LIMIT_ADMIN_STATUS_MAX', 600)
+});
+
 const eventsLimiter = createRateLimiter({
   windowMs: numberFromEnv('RATE_LIMIT_WINDOW_MS', DEFAULT_WINDOW_MS),
   max: numberFromEnv('RATE_LIMIT_EVENTS_MAX', 240)
@@ -54,7 +59,15 @@ export function isRateLimitedPath(pathname = '') {
     || pathname.startsWith('/api/admin/');
 }
 
-export function rateLimitBucket(pathname = '') {
+export function isAdminStatusPath(pathname = '', method = 'GET') {
+  if (String(method || 'GET').toUpperCase() !== 'GET') return false;
+  return pathname === '/api/admin/import-jobs/summary'
+    || pathname === '/api/admin/s3-sync/status'
+    || pathname.startsWith('/api/admin/production-jobs/');
+}
+
+export function rateLimitBucket(pathname = '', method = 'GET') {
+  if (isAdminStatusPath(pathname, method)) return 'admin-status';
   return pathname === '/api/events' ? 'events' : 'admin';
 }
 
@@ -70,8 +83,12 @@ export function clientIp(req = {}) {
 
 export function checkApiRateLimit(req, pathname) {
   if (!isRateLimitedPath(pathname)) return { allowed: true };
-  const bucket = rateLimitBucket(pathname);
-  const limiter = bucket === 'events' ? eventsLimiter : adminLimiter;
+  const bucket = rateLimitBucket(pathname, req.method);
+  const limiter = bucket === 'events'
+    ? eventsLimiter
+    : bucket === 'admin-status'
+      ? adminStatusLimiter
+      : adminLimiter;
   return {
     bucket,
     ...limiter.check(`${bucket}:${clientIp(req)}`)
