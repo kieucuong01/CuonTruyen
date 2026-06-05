@@ -538,7 +538,8 @@ export function createAdminRoute({
             <label>Trạng thái${renderStatusSelect('status', stats.status)}</label>
             <label>Cover URL<input name="coverUrl" value="${escapeAttr(series.coverUrl || '')}" /></label>
             <label>Aliases<input name="aliases" value="${escapeAttr((series.aliases || []).join(', '))}" placeholder="Tên khác, cách nhau bởi dấu phẩy" /></label>
-            <label>Tags<input name="tags" value="${escapeAttr((series.tags || []).map((tag) => tag.name || tag).join(', '))}" placeholder="Manhua, Action" /></label>
+            <label>Tags<input name="tags" value="${escapeAttr(getManualTagNames(series).join(', '))}" placeholder="Action, Fantasy, School Life" /></label>
+            ${renderOriginTagPicker(series)}
             <label class="admin-wide">Mô tả SEO<textarea name="description" aria-label="Mô tả" placeholder="Mô tả SEO">${escapeHtml(series.description || '')}</textarea></label>
             <label class="toggle-row"><input name="scheduleEnabled" type="checkbox" ${schedule.enabled ? 'checked' : ''} /> Auto crawl</label>
             <label>Interval giờ<input name="intervalHours" type="number" min="1" value="${Number(schedule.intervalHours || 24)}" /></label>
@@ -696,6 +697,89 @@ export function createAdminRoute({
     `;
   }
 
+  function renderOriginTagPicker(series = {}) {
+    const currentOrigin = detectOriginType(getSeriesTagNames(series));
+    return `
+      <div class="admin-origin-picker admin-wide">
+        <div>
+          <strong>Phân loại quốc gia</strong>
+          <span>Quản lý tag hiển thị ở trang chủ: Truyện Hàn / Truyện Trung.</span>
+        </div>
+        <div class="admin-origin-options">
+          ${getOriginTagOptions().map((option) => `
+            <label class="admin-origin-option ${currentOrigin === option.value ? 'active' : ''}">
+              <input type="radio" name="originType" value="${escapeAttr(option.value)}" ${currentOrigin === option.value ? 'checked' : ''} />
+              <span>
+                <strong>${escapeHtml(option.label)}</strong>
+                <small>${escapeHtml(option.hint)}</small>
+              </span>
+            </label>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  function getOriginTagOptions() {
+    return [
+      { value: '', label: 'Chưa rõ', hint: 'Không gắn tag quốc gia', tags: [] },
+      { value: 'manhwa', label: 'Truyện Hàn', hint: 'Gắn Manhwa + Truyện Hàn', tags: ['Manhwa', 'Truyện Hàn'] },
+      { value: 'manhua', label: 'Truyện Trung', hint: 'Gắn Manhua + Truyện Trung', tags: ['Manhua', 'Truyện Trung'] }
+    ];
+  }
+
+  function getSeriesTagNames(series = {}) {
+    return (series.tags || [])
+      .map((tag) => String(typeof tag === 'string' ? tag : tag?.name || tag?.slug || '').trim())
+      .filter(Boolean);
+  }
+
+  function getManualTagNames(series = {}) {
+    return getSeriesTagNames(series).filter((tag) => !isOriginTagName(tag));
+  }
+
+  function mergeTagsWithOrigin(tags = [], originType = '') {
+    const option = getOriginTagOptions().find((item) => item.value === originType) || getOriginTagOptions()[0];
+    return uniqueTagNames([
+      ...(tags || []).filter((tag) => !isOriginTagName(tag)),
+      ...option.tags
+    ]);
+  }
+
+  function uniqueTagNames(tags = []) {
+    const seen = new Set();
+    const unique = [];
+    for (const tag of tags) {
+      const name = String(tag || '').trim();
+      const key = normalizeAdminTagName(name);
+      if (!name || seen.has(key)) continue;
+      seen.add(key);
+      unique.push(name);
+    }
+    return unique;
+  }
+
+  function detectOriginType(tags = []) {
+    const normalized = new Set(tags.map((tag) => normalizeAdminTagName(tag)));
+    if (normalized.has('manhua') || normalized.has('truyen-trung')) return 'manhua';
+    if (normalized.has('manhwa') || normalized.has('truyen-han')) return 'manhwa';
+    return '';
+  }
+
+  function isOriginTagName(tag = '') {
+    return ['manhwa', 'manhua', 'truyen-han', 'truyen-trung'].includes(normalizeAdminTagName(tag));
+  }
+
+  function normalizeAdminTagName(value = '') {
+    return String(value)
+      .toLowerCase()
+      .replace(/đ/g, 'd')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  }
+
   async function handleAdminSave(event) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -706,7 +790,7 @@ export function createAdminRoute({
       slug: formData.get('slug'),
       coverUrl: formData.get('coverUrl'),
       aliases: splitList(formData.get('aliases')),
-      tags: splitList(formData.get('tags')),
+      tags: mergeTagsWithOrigin(splitList(formData.get('tags')), formData.get('originType')),
       description: formData.get('description'),
       status: formData.get('status'),
       crawlSchedule: {

@@ -98,8 +98,8 @@ export function createHomeRoute({
     const updated = home.updated.length ? home.updated : homeSeries;
     const mobileGenreSource = uniqueSeriesById([...updated, ...popular, ...homeSeries]);
     const featuredTags = buildFeaturedTags(home.tags, mobileGenreSource);
-    const manhwaSeries = pickGenreSeries(mobileGenreSource, 'manhwa').slice(0, 9);
-    const manhuaSeries = pickGenreSeries(mobileGenreSource, 'manhua').slice(0, 9);
+    const koreanSeries = pickOriginSeries(mobileGenreSource, 'manhwa').slice(0, 9);
+    const chineseSeries = pickOriginSeries(mobileGenreSource, 'manhua').slice(0, 9);
 
     app.innerHTML = `
       <main class="site-shell home-shell app-home-shell">
@@ -135,16 +135,16 @@ export function createHomeRoute({
           </div>
           <div class="desktop-genre-stack" aria-label="Truyện theo quốc gia">
             ${renderDesktopGenreShowcase({
-              title: 'TRUYỆN MANHWA',
-              eyebrow: 'Hàn Quốc',
-              seriesList: manhwaSeries,
-              moreHref: '/the-loai/manhwa'
+              title: 'TRUYỆN HÀN',
+              eyebrow: 'Manhwa / Webtoon',
+              seriesList: koreanSeries,
+              moreHref: '/the-loai/truyen-han'
             })}
             ${renderDesktopGenreShowcase({
-              title: 'TRUYỆN MANHUA',
-              eyebrow: 'Trung Quốc',
-              seriesList: manhuaSeries,
-              moreHref: '/the-loai/manhua'
+              title: 'TRUYỆN TRUNG',
+              eyebrow: 'Manhua',
+              seriesList: chineseSeries,
+              moreHref: '/the-loai/truyen-trung'
             })}
           </div>
           <div class="mobile-series-stack" aria-label="Danh sách truyện mobile">
@@ -154,16 +154,16 @@ export function createHomeRoute({
               seriesList: updated.slice(0, 9)
             })}
             ${renderMobileSeriesShowcase({
-              title: 'TRUYỆN MANHWA',
-              eyebrow: 'Hàn Quốc',
-              seriesList: manhwaSeries,
-              moreHref: '/the-loai/manhwa'
+              title: 'TRUYỆN HÀN',
+              eyebrow: 'Manhwa / Webtoon',
+              seriesList: koreanSeries,
+              moreHref: '/the-loai/truyen-han'
             })}
             ${renderMobileSeriesShowcase({
-              title: 'TRUYỆN MANHUA',
-              eyebrow: 'Trung Quốc',
-              seriesList: manhuaSeries,
-              moreHref: '/the-loai/manhua'
+              title: 'TRUYỆN TRUNG',
+              eyebrow: 'Manhua',
+              seriesList: chineseSeries,
+              moreHref: '/the-loai/truyen-trung'
             })}
           </div>
           <section class="tag-cloud app-tag-cloud app-featured-tags" id="genres">
@@ -562,6 +562,17 @@ export function createHomeRoute({
     return seriesList.filter((series) => (series.tags || []).some((tag) => {
       const value = typeof tag === 'string' ? tag : `${tag.slug || ''} ${tag.name || ''}`;
       return normalizeTag(value).includes(wanted);
+    }));
+  }
+
+  function pickOriginSeries(seriesList = [], originType = '') {
+    const needles = originType === 'manhua'
+      ? ['manhua', 'truyen-trung']
+      : ['manhwa', 'truyen-han'];
+    return seriesList.filter((series) => (series.tags || []).some((tag) => {
+      const value = typeof tag === 'string' ? tag : `${tag.slug || ''} ${tag.name || ''}`;
+      const normalized = normalizeTag(value);
+      return needles.some((needle) => normalized.includes(needle));
     }));
   }
 

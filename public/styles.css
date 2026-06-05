@@ -6248,6 +6248,78 @@ button:disabled,
   color: #111827;
 }
 
+.admin-origin-picker {
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(249, 115, 22, 0.18);
+  border-radius: 18px;
+  padding: 14px;
+  background: linear-gradient(135deg, rgba(255, 247, 237, 0.9), rgba(255, 255, 255, 0.82));
+}
+
+.admin-origin-picker > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.admin-origin-picker > div:first-child strong {
+  color: #111827;
+}
+
+.admin-origin-picker > div:first-child span {
+  color: #667085;
+  font-size: 13px;
+}
+
+.admin-origin-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.admin-origin-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  min-height: 74px;
+  border: 1px solid rgba(24, 32, 51, 0.12);
+  border-radius: 15px;
+  padding: 11px;
+  background: rgba(255, 255, 255, 0.78);
+  cursor: pointer;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.admin-origin-option:hover,
+.admin-origin-option:focus-within,
+.admin-origin-option.active {
+  border-color: rgba(249, 115, 22, 0.5);
+  box-shadow: 0 12px 26px rgba(249, 115, 22, 0.12);
+  transform: translateY(-1px);
+}
+
+.admin-origin-option input {
+  margin-top: 3px;
+  accent-color: #f97316;
+}
+
+.admin-origin-option span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.admin-origin-option strong {
+  color: #111827;
+  font-size: 14px;
+}
+
+.admin-origin-option small {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 @media (max-width: 720px) {
   .app-featured-tags {
     border-radius: 22px;
@@ -6271,5 +6343,9 @@ button:disabled,
 
   .featured-tag-chip strong {
     font-size: 14px;
+  }
+
+  .admin-origin-options {
+    grid-template-columns: 1fr;
   }
 }
