@@ -19,6 +19,7 @@ Vercel
 - Static frontend from public/
 - No crawler
 - No image storage
+- Production deploys from GitHub when `main` is pushed
 ```
 
 ## Current Live Defaults
@@ -85,6 +86,33 @@ Bucket requirements:
 
 ## Publish Flow
 
+### Frontend code deploy
+
+Vercel Git Integration is connected to:
+
+```text
+kieucuong01/CuonTruyen
+```
+
+Pushes to `main` create production deployments automatically. Normal deploy
+flow is:
+
+```powershell
+git add <changed files>
+git commit -m "<message>"
+git push origin main
+```
+
+Avoid local `vercel deploy` as the normal path. This repo can contain many
+generated static files, and local CLI upload can hit Vercel's free upload request
+limit. If a manual CLI fallback is unavoidable, use archive upload:
+
+```powershell
+npx vercel@latest deploy --prod --yes --archive=tgz
+```
+
+### Content/static API publish
+
 After crawling or updating chapters locally:
 
 ```powershell
@@ -104,6 +132,9 @@ node scripts/sync-vietnix-s3.mjs --static-api-only --apply --force
 Use `npm run sync:s3:force` only when you intentionally want to re-upload everything. Full image sync can take a long time because the current image library is tens of thousands of files.
 
 Dry-run is the safe default for `scripts/sync-vietnix-s3.mjs`. Use `npm run sync:s3` only after the dry-run count looks reasonable.
+
+If only images or static JSON changed, S3 sync is enough; no Vercel deploy is
+needed unless frontend code also changed.
 
 ## Vercel Environment
 

@@ -25,6 +25,22 @@ Project config file: vercel.json
 Ignored deploy paths: .vercelignore
 ```
 
+Git auto deploy:
+
+```text
+GitHub repo: kieucuong01/CuonTruyen
+Production branch: main
+Behavior: push to main triggers a Vercel production deployment automatically.
+```
+
+Do not use local Vercel CLI as the normal deployment path. The project has many
+generated static files, so direct CLI upload can hit Vercel's free upload request
+limit. If CLI deploy is ever needed as a fallback, use:
+
+```powershell
+npx vercel@latest deploy --prod --yes --archive=tgz
+```
+
 Production environment variables on Vercel:
 
 ```text
@@ -119,10 +135,13 @@ After importing or updating chapters locally:
 npm run export:static-api
 npm run sync:s3:dry-run
 npm run sync:s3
-npx vercel@latest deploy --prod --yes
 ```
 
-If only images/static JSON changed and frontend code did not change, a Vercel redeploy is usually not required. The browser reads S3 JSON directly.
+If only images/static JSON changed and frontend code did not change, a Vercel
+redeploy is usually not required. The browser reads S3 JSON directly.
+
+If frontend code changed, commit and push to `main`; Vercel deploys production
+from Git automatically.
 
 ## Known Operational Notes
 
