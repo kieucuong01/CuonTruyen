@@ -60,6 +60,7 @@ export function createAdminRoute({
 }) {
   let adminFlashMessage = '';
   let s3SyncPollTimer = null;
+  let crawlQueuePollTimer = null;
 
   async function loadAdminCatalog() {
     return fetchJson('/api/admin/series', { headers: adminHeaders() });
@@ -113,6 +114,7 @@ export function createAdminRoute({
             </select>
             <button class="primary-btn" type="submit">Crawl</button>
           </form>
+          ${renderCrawlQueuePanel()}
           ${renderAdminBulletinPanel(bulletin.messages || [])}
           ${renderS3SyncPanel()}
           <div class="status-line" data-status></div>
@@ -134,6 +136,7 @@ export function createAdminRoute({
     bindAdminImageFallbacks();
     app.querySelector('[data-import-form]').addEventListener('submit', handleImport);
     bindAdminBulletinActions();
+    bindCrawlQueueStatus();
     bindS3SyncStatus();
     app.querySelectorAll('[data-update-chapters]').forEach((button) => button.addEventListener('click', handleUpdateChapters));
     app.querySelectorAll('[data-publish-production]').forEach((button) => button.addEventListener('click', handleProductionPublish));
@@ -222,6 +225,21 @@ export function createAdminRoute({
     `;
   }
 
+  function renderCrawlQueuePanel() {
+    return `
+      <section class="admin-panel crawl-queue-panel">
+        <div class="admin-bulletin-head">
+          <div>
+            <h2>Trạng thái crawl</h2>
+            <p class="muted">Server local sẽ tự đánh thức crawler khi còn job đang chờ. Bảng này giúp biết crawl đang chạy, đang chờ hay đang lỗi.</p>
+          </div>
+          <button class="ghost-btn" type="button" data-crawl-queue-wake>Đánh thức crawler</button>
+        </div>
+        <div class="status-line crawl-queue-status" data-crawl-queue-status>Đang kiểm tra queue crawl...</div>
+      </section>
+    `;
+  }
+
   function renderAdminBulletinMessage(message = {}) {
     const isAdmin = message.authorRole === 'admin';
     return `
@@ -269,6 +287,120 @@ export function createAdminRoute({
     };
     refresh();
     s3SyncPollTimer = setInterval(refresh, 2500);
+  }
+
+  function bindCrawlQueueStatus() {
+    const target = app.querySelector('[data-crawl-queue-status]');
+    const wakeButton = app.querySelector('[data-crawl-queue-wake]');
+    if (!target) return;
+    if (crawlQueuePollTimer) clearInterval(crawlQueuePollTimer);
+
+    const refresh = async () => {
+      if (!target.isConnected) {
+        clearInterval(crawlQueuePollTimer);
+        crawlQueuePollTimer = null;
+        return;
+      }
+      try {
+        const summary = await fetchJson('/api/admin/import-jobs/summary', { headers: adminHeaders() });
+        renderCrawlQueueStatus(target, summary);
+      } catch (error) {
+        target.className = 'status-line crawl-queue-status error';
+        target.textContent = `Không đọc được queue crawl: ${error.message}`;
+      }
+    };
+
+    wakeButton?.addEventListener('click', async () => {
+      wakeButton.disabled = true;
+      wakeButton.textContent = 'Đang đánh thức...';
+      try {
+        const summary = await fetchJson('/api/admin/import-jobs/wake', {
+          method: 'POST',
+          headers: adminHeaders()
+        });
+        renderCrawlQueueStatus(target, summary);
+      } catch (error) {
+        target.className = 'status-line crawl-queue-status error';
+        target.textContent = `Không đánh thức được crawler: ${error.message}`;
+      } finally {
+        wakeButton.disabled = false;
+        wakeButton.textContent = 'Đánh thức crawler';
+      }
+    });
+
+    refresh();
+    crawlQueuePollTimer = setInterval(refresh, 3000);
+  }
+
+  function renderCrawlQueueStatus(target, summary = {}) {
+    const counts = summary.counts || {};
+    const runningJob = Array.isArray(summary.running) ? summary.running[0] : null;
+    const queuedJobs = Array.isArray(summary.queued) ? summary.queued : [];
+    const retryingJobs = Array.isArray(summary.retrying) ? summary.retrying : [];
+    const failedJobs = Array.isArray(summary.failed) ? summary.failed : [];
+    const totalWaiting = Number(counts.queued || 0) + Number(counts.retrying || 0);
+    const worker = summary.worker || {};
+    const workerText = worker.embeddedEnabled
+      ? worker.active ? 'Crawler local đang xử lý queue.' : 'Crawler local sẵn sàng tự chạy khi có job chờ.'
+      : 'Crawler embedded đang tắt; cần chạy worker riêng.';
+
+    target.className = `status-line crawl-queue-status${failedJobs.length ? ' warning' : ''}`;
+    target.innerHTML = `
+      <div class="progress-copy">
+        <strong>${runningJob ? escapeHtml(runningJob.progress?.message || 'Đang crawl...') : totalWaiting ? 'Có job đang chờ crawler nhận' : 'Queue crawl đang rảnh'}</strong>
+        <span>${escapeHtml(workerText)}</span>
+      </div>
+      <div class="progress-grid">
+        <span>Đang chạy: ${Number(counts.running || 0)}</span>
+        <span>Đang chờ: ${Number(counts.queued || 0)}</span>
+        <span>Retry: ${Number(counts.retrying || 0)}</span>
+        <span>Lỗi: ${Number(counts.failed || 0)}</span>
+      </div>
+      ${summary.staleResetCount ? `<p class="muted">Đã tự mở khóa ${Number(summary.staleResetCount)} job bị kẹt.</p>` : ''}
+      ${runningJob ? renderCrawlQueueRunningJob(runningJob) : ''}
+      ${queuedJobs.length ? renderCrawlQueueWaitingList('Job chờ tiếp theo', queuedJobs) : ''}
+      ${retryingJobs.length ? renderCrawlQueueWaitingList('Job sẽ retry', retryingJobs) : ''}
+      ${failedJobs.length ? renderCrawlQueueWaitingList('Job lỗi gần nhất', failedJobs) : ''}
+    `;
+  }
+
+  function renderCrawlQueueRunningJob(job = {}) {
+    const progress = job.progress || {};
+    const chapterTotal = Number(progress.totalChapters || 0);
+    const chapterDone = Number(progress.processedChapters || 0);
+    const imageTotal = Number(progress.totalImages || 0);
+    const imageDone = Number(progress.processedImages || progress.downloadedImages || 0);
+    const imagePercent = imageTotal ? Math.min(100, Math.round((imageDone / imageTotal) * 100)) : 0;
+    const eta = progress.etaSeconds != null ? formatCrawlDuration(progress.etaSeconds) : 'đang tính';
+    return `
+      <div class="crawl-queue-current">
+        <div class="crawl-meter" aria-label="Tiến trình crawl">
+          <span style="width:${imagePercent}%"></span>
+        </div>
+        <div class="progress-grid">
+          <span>Chapter: ${chapterDone}/${chapterTotal || '?'}</span>
+          <span>Ảnh: ${imageDone}/${imageTotal || '?'}</span>
+          <span>Tốc độ: ${formatCrawlRate(progress.imagesPerMinute, 'ảnh/phút')}</span>
+          <span>ETA: ${eta}</span>
+        </div>
+        <p class="muted">${escapeHtml(job.payload?.url || '')}</p>
+      </div>
+    `;
+  }
+
+  function renderCrawlQueueWaitingList(title, jobs = []) {
+    return `
+      <div class="crawl-queue-list">
+        <strong>${escapeHtml(title)}</strong>
+        ${jobs.slice(0, 4).map((job) => `
+          <p>
+            <span>${escapeHtml(job.payload?.mode || 'full')}</span>
+            <span>${escapeHtml(job.payload?.url || job.payload?.seriesId || job.id || '')}</span>
+            ${job.error ? `<small>${escapeHtml(job.error)}</small>` : ''}
+          </p>
+        `).join('')}
+      </div>
+    `;
   }
 
   function renderS3SyncStatus(target, status = {}) {

@@ -193,10 +193,31 @@ export async function resetStaleRunningImportJobs({
   return resetCount;
 }
 
-export async function updateImportJobProgress(id, patch = {}, { log = null, now = new Date().toISOString() } = {}) {
+export async function updateImportJobProgress(id, patch = {}, { log = null, now = new Date().toISOString(), workerId = '' } = {}) {
   await ensureCrawlQueueStorage();
   if (usesPostgresStorage()) {
     const logsPatch = log ? [jobLog(log, now)] : [];
+    if (workerId) {
+      const result = await queryPostgres(
+        `update crawl_jobs
+         set progress = progress || $2::jsonb,
+             logs = logs || $3::jsonb,
+             updated_at = $4,
+             locked_at = $4,
+             locked_by = coalesce(locked_by, $5),
+             started_at = coalesce(started_at, $4),
+             status = case
+               when status in ('queued', 'retrying') and locked_by is null then 'running'
+               else status
+             end
+         where id = $1
+           and status = any($6::text[])
+           and (locked_by = $5 or locked_by is null)
+         returning *`,
+        [id, JSON.stringify({ ...patch, updatedAt: now }), JSON.stringify(logsPatch), now, workerId, ['running', 'queued', 'retrying']]
+      );
+      return publicJob(jobFromRow(result.rows[0]));
+    }
     const result = await queryPostgres(
       `update crawl_jobs
        set progress = progress || $2::jsonb,
@@ -208,12 +229,17 @@ export async function updateImportJobProgress(id, patch = {}, { log = null, now 
     );
     return publicJob(jobFromRow(result.rows[0]));
   }
-  return updateJsonJob(id, (job) => ({
-    ...job,
-    progress: mergeProgress(job, patch, now),
-    logs: log ? [...(job.logs || []), jobLog(log, now)] : job.logs || [],
-    updatedAt: now
-  }));
+  return updateJsonJob(id, (job) => {
+    const ownership = resolveProgressOwnership(job, workerId, now);
+    if (ownership.blocked) return job;
+    return {
+      ...job,
+      ...ownership.fields,
+      progress: mergeProgress(job, patch, now),
+      logs: log ? [...(job.logs || []), jobLog(log, now)] : job.logs || [],
+      updatedAt: now
+    };
+  });
 }
 
 export async function completeImportJob(id, series, { now = new Date().toISOString() } = {}) {
@@ -393,6 +419,32 @@ async function insertPostgresJob(job) {
       job.updatedAt
     ]
   );
+}
+
+function resolveProgressOwnership(job = {}, workerId = '', now = new Date().toISOString()) {
+  if (!workerId) return { fields: {} };
+  if (job.status === 'running') {
+    if (job.lockedBy && job.lockedBy !== workerId) return { blocked: true };
+    return {
+      fields: {
+        lockedBy: job.lockedBy || workerId,
+        lockedAt: now,
+        startedAt: job.startedAt || now
+      }
+    };
+  }
+  if (['queued', 'retrying'].includes(job.status) && !job.lockedBy) {
+    return {
+      fields: {
+        status: 'running',
+        lockedBy: workerId,
+        lockedAt: now,
+        startedAt: job.startedAt || now,
+        runAfter: job.runAfter || now
+      }
+    };
+  }
+  return { blocked: true };
 }
 
 async function getInternalJob(id) {

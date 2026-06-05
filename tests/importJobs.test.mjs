@@ -72,6 +72,52 @@ test('claim, progress, complete lifecycle is durable through getImportJob', asyn
   assert.equal((await getImportJob(claimed.id)).progress.downloadedImages, 4);
 });
 
+test('worker progress restores a retrying job when the original worker is still active', async () => {
+  const created = await createImportJob({ url: 'https://example.test/resume-comic' });
+  const claimedAt = new Date(Date.parse(created.job.runAfter)).toISOString();
+  const staleAt = new Date(Date.parse(claimedAt) + 30 * 60 * 1000).toISOString();
+  const resumedAt = new Date(Date.parse(staleAt) + 1_000).toISOString();
+  const workerId = 'test-worker-resume';
+  const claimed = await claimNextImportJob({ workerId, now: claimedAt });
+
+  await resetStaleRunningImportJobs({
+    now: staleAt,
+    staleMs: 5 * 60 * 1000
+  });
+  assert.equal((await getImportJob(claimed.id)).status, 'retrying');
+
+  await updateImportJobProgress(claimed.id, {
+    phase: 'downloading-images',
+    processedImages: 12
+  }, {
+    workerId,
+    now: resumedAt
+  });
+
+  const restored = await getImportJob(claimed.id);
+  assert.equal(restored.status, 'running');
+  assert.equal(restored.progress.phase, 'downloading-images');
+  assert.equal(restored.progress.processedImages, 12);
+});
+
+test('worker progress from a different owner does not overwrite a running job', async () => {
+  const created = await createImportJob({ url: 'https://example.test/owned-comic' });
+  const claimed = await claimNextImportJob({ workerId: 'owner-worker', now: created.job.runAfter });
+
+  await updateImportJobProgress(claimed.id, {
+    phase: 'wrong-worker-update',
+    processedImages: 99
+  }, {
+    workerId: 'other-worker',
+    now: '2026-05-24T10:01:00.000Z'
+  });
+
+  const job = await getImportJob(claimed.id);
+  assert.equal(job.status, 'running');
+  assert.equal(job.progress.phase, 'running');
+  assert.notEqual(job.progress.processedImages, 99);
+});
+
 test('failImportJob retries until max attempts, then marks failed', async () => {
   const created = await createImportJob({
     url: 'https://example.test/comic',

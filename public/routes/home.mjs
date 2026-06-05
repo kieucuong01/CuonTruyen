@@ -97,6 +97,7 @@ export function createHomeRoute({
     const popular = home.hot.length ? home.hot : homeSeries;
     const updated = home.updated.length ? home.updated : homeSeries;
     const mobileGenreSource = uniqueSeriesById([...updated, ...popular, ...homeSeries]);
+    const featuredTags = buildFeaturedTags(home.tags, mobileGenreSource);
     const manhwaSeries = pickGenreSeries(mobileGenreSource, 'manhwa').slice(0, 9);
     const manhuaSeries = pickGenreSeries(mobileGenreSource, 'manhua').slice(0, 9);
 
@@ -117,7 +118,7 @@ export function createHomeRoute({
           <div class="app-home-stats" aria-label="Thống kê nhanh">
             <span><strong>${homeSeries.length}</strong><small>truyện</small></span>
             <span><strong>${updated.length}</strong><small>mới cập nhật</small></span>
-            <span><strong>${home.tags.length}</strong><small>thể loại</small></span>
+            <span><strong>${featuredTags.length}</strong><small>thể loại</small></span>
           </div>
         </section>
         <section class="app-quick-actions" aria-label="Lối tắt">
@@ -131,6 +132,20 @@ export function createHomeRoute({
           ${renderTrendingSection(popular.slice(0, 8))}
           <div class="desktop-updated-feed">
             ${renderUpdatedSection(updated)}
+          </div>
+          <div class="desktop-genre-stack" aria-label="Truyện theo quốc gia">
+            ${renderDesktopGenreShowcase({
+              title: 'TRUYỆN MANHWA',
+              eyebrow: 'Hàn Quốc',
+              seriesList: manhwaSeries,
+              moreHref: '/the-loai/manhwa'
+            })}
+            ${renderDesktopGenreShowcase({
+              title: 'TRUYỆN MANHUA',
+              eyebrow: 'Trung Quốc',
+              seriesList: manhuaSeries,
+              moreHref: '/the-loai/manhua'
+            })}
           </div>
           <div class="mobile-series-stack" aria-label="Danh sách truyện mobile">
             ${renderMobileSeriesShowcase({
@@ -151,9 +166,27 @@ export function createHomeRoute({
               moreHref: '/the-loai/manhua'
             })}
           </div>
-          <section class="tag-cloud app-tag-cloud" id="genres">
-            <h2 class="section-title">Thể loại nổi bật</h2>
-            <div>${home.tags.length ? home.tags.map((tag) => `<a data-link href="/the-loai/${tag.slug}">${escapeHtml(tag.name)} <small>${tag.seriesCount}</small></a>`).join('') : '<span class="muted">Chưa có tag.</span>'}</div>
+          <section class="tag-cloud app-tag-cloud app-featured-tags" id="genres">
+            <div class="featured-tags-head">
+              <div>
+                <p class="eyebrow">Khám phá nhanh</p>
+                <h2 class="section-title">Thể loại nổi bật</h2>
+              </div>
+              <span>${featuredTags.length} tag</span>
+            </div>
+            <div class="featured-tags-grid">
+              ${featuredTags.length ? featuredTags.map((tag) => `
+                <a data-link href="/the-loai/${escapeAttr(tag.slug)}" class="featured-tag-chip">
+                  <strong>${escapeHtml(tag.name)}</strong>
+                  <small>${tag.seriesCount || 0} truyện</small>
+                </a>
+              `).join('') : `
+                <div class="featured-tags-empty">
+                  <strong>Đang cập nhật thể loại</strong>
+                  <span>Hãy gán tag cho truyện trong admin, khu này sẽ tự hiện các thể loại nổi bật.</span>
+                </div>
+              `}
+            </div>
           </section>
           ${renderMonetizationPanel('home')}
         </section>
@@ -296,6 +329,37 @@ export function createHomeRoute({
     `;
   }
 
+  function renderDesktopGenreShowcase({ title, eyebrow, seriesList = [], moreHref = '' } = {}) {
+    return `
+      <section class="desktop-genre-section">
+        <div class="desktop-genre-head">
+          <div>
+            <p>${escapeHtml(eyebrow || 'Thể loại')}</p>
+            <h2>${escapeHtml(title || 'Truyện')}</h2>
+          </div>
+          ${moreHref ? `<a data-link href="${escapeAttr(moreHref)}">Xem thêm</a>` : ''}
+        </div>
+        <div class="desktop-genre-grid">
+          ${seriesList.length ? seriesList.slice(0, 9).map(renderDesktopGenreCard).join('') : '<div class="empty-state">Chưa có truyện phù hợp.</div>'}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderDesktopGenreCard(series = {}) {
+    const cover = coverUrl(series);
+    const chapters = (series.chapters || []).filter((chapter) => chapter.imported || chapter.pageCount > 0);
+    return `
+      <a class="desktop-genre-card" data-link href="/truyen/${escapeAttr(series.slug)}">
+        <span class="desktop-genre-cover">
+          ${cover ? `<img src="${escapeAttr(cover)}" alt="${escapeAttr(series.title)}" loading="lazy" />` : '<span>CT</span>'}
+        </span>
+        <strong>${escapeHtml(series.title || 'Truyện đang cập nhật')}</strong>
+        <small>${chapters.length ? `${chapters.length} chương` : renderInlineTags(series) || 'Đang cập nhật'}</small>
+      </a>
+    `;
+  }
+
   function renderDesktopCommunity(messages = [], latest = [], user = null) {
     const fallbackMessages = latest.map((series) => ({
       id: `latest-${series.id}`,
@@ -425,6 +489,36 @@ export function createHomeRoute({
       .join(', ');
   }
 
+  function buildFeaturedTags(apiTags = [], seriesList = [], limit = 18) {
+    const tagMap = new Map();
+    const normalizedApiTags = Array.isArray(apiTags) ? apiTags : [];
+    if (normalizedApiTags.length) {
+      for (const tag of normalizedApiTags) {
+        addFeaturedTag(tagMap, tag, tag?.seriesCount || tag?.count || 0);
+      }
+    } else {
+      for (const series of seriesList || []) {
+        for (const tag of series.tags || []) {
+          addFeaturedTag(tagMap, tag, 1);
+        }
+      }
+    }
+    return [...tagMap.values()]
+      .filter((tag) => tag.name && tag.slug)
+      .sort((a, b) => (b.seriesCount - a.seriesCount) || a.name.localeCompare(b.name, 'vi'))
+      .slice(0, limit);
+  }
+
+  function addFeaturedTag(tagMap, tag, count = 0) {
+    const name = String(typeof tag === 'string' ? tag : tag?.name || tag?.slug || '').trim();
+    const slug = String(typeof tag === 'string' ? normalizeTag(name) : tag?.slug || normalizeTag(name)).trim();
+    if (!name || !slug) return;
+    const current = tagMap.get(slug) || { slug, name, seriesCount: 0 };
+    current.name = current.name || name;
+    current.seriesCount += Number.isFinite(Number(count)) ? Number(count) : 0;
+    tagMap.set(slug, current);
+  }
+
   function ratingFor(series = {}, index = 0) {
     const base = 5 - (index * 0.06);
     const views = Number(series.stats?.views || 0);
@@ -474,6 +568,7 @@ export function createHomeRoute({
   function normalizeTag(value = '') {
     return String(value)
       .toLowerCase()
+      .replace(/đ/g, 'd')
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9]+/g, '-');

@@ -47,7 +47,8 @@ import {
   createImportJobs,
   ensureCrawlQueueStorage,
   getImportJob,
-  listImportJobs
+  listImportJobs,
+  resetStaleRunningImportJobs
 } from './importJobs.mjs';
 import {
   createProductionPublishJob,
@@ -77,7 +78,7 @@ const S3_SYNC_STATUS_FILE = path.resolve(process.env.S3_SYNC_STATUS_FILE || proc
 const API_CACHE_TTL_MS = 15_000;
 const apiResponseCache = createBoundedCache({ maxEntries: Number(process.env.API_CACHE_MAX_ENTRIES || 250) });
 const SPA_ROUTE_PATHS = new Set(['/admin']);
-const EMBEDDED_CRAWL_WORKER_ENABLED = process.env.CRAWL_EMBEDDED_WORKER === 'true';
+const EMBEDDED_CRAWL_WORKER_ENABLED = process.env.CRAWL_EMBEDDED_WORKER !== 'false';
 const EMBEDDED_CRAWL_WORKER_ID = `server-crawl-worker-${process.pid}`;
 const EMBEDDED_CRAWL_DRAIN_LIMIT = Math.max(1, Number(process.env.CRAWL_EMBEDDED_DRAIN_LIMIT || 50));
 let embeddedCrawlDrainPromise = null;
@@ -177,7 +178,8 @@ function kickEmbeddedCrawlWorker(reason = 'manual') {
 
 async function readS3SyncStatus() {
   try {
-    const status = JSON.parse(await fs.readFile(S3_SYNC_STATUS_FILE, 'utf8'));
+    const rawStatus = await fs.readFile(S3_SYNC_STATUS_FILE, 'utf8');
+    const status = JSON.parse(rawStatus.replace(/^\uFEFF/, ''));
     return {
       status: 'idle',
       ...status,
@@ -215,6 +217,76 @@ async function drainEmbeddedCrawlQueue(reason) {
       clearApiCache();
     }
   }
+}
+
+function compactImportJob(job = {}) {
+  const payload = job.payload || {};
+  return {
+    id: job.id,
+    status: job.status,
+    attempts: job.attempts || 0,
+    error: job.error || '',
+    createdAt: job.createdAt || '',
+    updatedAt: job.updatedAt || '',
+    startedAt: job.startedAt || '',
+    completedAt: job.completedAt || '',
+    lockedBy: job.lockedBy || '',
+    progress: job.progress || {},
+    payload: {
+      url: payload.url || '',
+      mode: payload.mode || 'full',
+      seriesId: payload.seriesId || '',
+      maxChapters: payload.maxChapters,
+      maxPages: payload.maxPages,
+      publish: payload.publish,
+      publishNewChapters: payload.publishNewChapters
+    }
+  };
+}
+
+function summarizeImportJobs(jobs = []) {
+  const counts = {
+    queued: 0,
+    retrying: 0,
+    running: 0,
+    completed: 0,
+    failed: 0
+  };
+  for (const job of jobs) {
+    counts[job.status] = (counts[job.status] || 0) + 1;
+  }
+  const byStatus = (status, limit) => jobs
+    .filter((job) => job.status === status)
+    .slice(0, limit)
+    .map(compactImportJob);
+  return {
+    generatedAt: new Date().toISOString(),
+    counts,
+    running: byStatus('running', 3),
+    queued: byStatus('queued', 10),
+    retrying: byStatus('retrying', 5),
+    failed: byStatus('failed', 5),
+    worker: {
+      embeddedEnabled: EMBEDDED_CRAWL_WORKER_ENABLED,
+      active: Boolean(embeddedCrawlDrainPromise),
+      wakeRequested: embeddedCrawlDrainRequested,
+      id: EMBEDDED_CRAWL_WORKER_ID,
+      drainLimit: EMBEDDED_CRAWL_DRAIN_LIMIT
+    }
+  };
+}
+
+async function buildImportQueueSummary({ wake = false } = {}) {
+  const resetCount = await resetStaleRunningImportJobs();
+  const jobs = await listImportJobs({ limit: 100 });
+  const hasWaitingJobs = jobs.some((job) => job.status === 'queued' || job.status === 'retrying');
+  if (wake && hasWaitingJobs) {
+    kickEmbeddedCrawlWorker('admin-import-summary');
+  }
+  return {
+    ...summarizeImportJobs(jobs),
+    staleResetCount: Number(resetCount || 0)
+  };
 }
 
 function getBaseUrl(req) {
@@ -536,6 +608,17 @@ async function handleApi(req, res, url) {
 
   if (req.method === 'GET' && url.pathname === '/api/admin/import-jobs') {
     jsonResponse(res, 200, { jobs: await listImportJobs({ limit: Number(url.searchParams.get('limit') || 50) }) });
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/admin/import-jobs/summary') {
+    jsonResponse(res, 200, await buildImportQueueSummary({ wake: true }));
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/admin/import-jobs/wake') {
+    kickEmbeddedCrawlWorker('admin-wake');
+    jsonResponse(res, 200, await buildImportQueueSummary({ wake: true }));
     return true;
   }
 

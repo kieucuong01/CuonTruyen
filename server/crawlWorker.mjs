@@ -57,7 +57,7 @@ export async function runClaimedImportJob(job, { workerId = DEFAULT_WORKER_ID } 
       imageDomainDelayMs: Number(payload.imageDomainDelayMs ?? process.env.CRAWL_IMAGE_DOMAIN_DELAY_MS ?? 80),
       optimizeDuringCrawl: payload.optimizeDuringCrawl ?? process.env.CRAWL_OPTIMIZE_DURING_CRAWL === 'true',
       domainDelayMs: Number(payload.domainDelayMs ?? process.env.CRAWL_DOMAIN_DELAY_MS ?? 650)
-    }, (patch) => updateImportJobProgress(job.id, patch));
+    }, (patch) => updateImportJobProgress(job.id, patch, { workerId }));
     await completeImportJob(job.id, series);
     return series;
   } catch (error) {
@@ -147,20 +147,22 @@ async function withWorkerLock(workerId, callback) {
 
 export async function acquireWorkerLock(workerId) {
   await fs.mkdir(path.dirname(WORKER_LOCK_PATH), { recursive: true });
-  const payload = JSON.stringify({
+  const startedAt = new Date().toISOString();
+  const payload = () => JSON.stringify({
     workerId,
     pid: process.pid,
-    startedAt: new Date().toISOString()
+    startedAt,
+    updatedAt: new Date().toISOString()
   }, null, 2);
   try {
-    await fs.writeFile(WORKER_LOCK_PATH, payload, { flag: 'wx' });
+    await fs.writeFile(WORKER_LOCK_PATH, payload(), { flag: 'wx' });
   } catch (error) {
     if (error.code !== 'EEXIST') throw error;
     const isStale = await isWorkerLockStale();
     if (!isStale) return null;
     await fs.rm(WORKER_LOCK_PATH, { force: true }).catch(() => {});
     try {
-      await fs.writeFile(WORKER_LOCK_PATH, payload, { flag: 'wx' });
+      await fs.writeFile(WORKER_LOCK_PATH, payload(), { flag: 'wx' });
     } catch (retryError) {
       if (retryError.code === 'EEXIST') return null;
       throw retryError;
@@ -168,8 +170,7 @@ export async function acquireWorkerLock(workerId) {
   }
 
   const heartbeat = setInterval(() => {
-    const now = new Date();
-    fs.utimes(WORKER_LOCK_PATH, now, now).catch(() => {});
+    fs.writeFile(WORKER_LOCK_PATH, payload()).catch(() => {});
   }, WORKER_LOCK_HEARTBEAT_MS);
   heartbeat.unref?.();
   return {
