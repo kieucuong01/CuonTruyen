@@ -59,6 +59,7 @@ export function createAdminRoute({
   stopReaderRuntime
 }) {
   let adminFlashMessage = '';
+  let s3SyncPollTimer = null;
 
   async function loadAdminCatalog() {
     return fetchJson('/api/admin/series', { headers: adminHeaders() });
@@ -113,6 +114,7 @@ export function createAdminRoute({
             <button class="primary-btn" type="submit">Crawl</button>
           </form>
           ${renderAdminBulletinPanel(bulletin.messages || [])}
+          ${renderS3SyncPanel()}
           <div class="status-line" data-status></div>
         </section>
         ${adminFlashMessage ? `<div class="status-line success">${escapeHtml(adminFlashMessage)}</div>` : ''}
@@ -132,6 +134,7 @@ export function createAdminRoute({
     bindAdminImageFallbacks();
     app.querySelector('[data-import-form]').addEventListener('submit', handleImport);
     bindAdminBulletinActions();
+    bindS3SyncStatus();
     app.querySelectorAll('[data-update-chapters]').forEach((button) => button.addEventListener('click', handleUpdateChapters));
     app.querySelectorAll('[data-publish-production]').forEach((button) => button.addEventListener('click', handleProductionPublish));
   }
@@ -205,6 +208,20 @@ export function createAdminRoute({
     `;
   }
 
+  function renderS3SyncPanel() {
+    return `
+      <section class="admin-panel s3-sync-panel">
+        <div class="admin-bulletin-head">
+          <div>
+            <h2>Đồng bộ ảnh S3</h2>
+            <p class="muted">Theo dõi tiến trình upload ảnh lên Vietnix S3 từ máy local.</p>
+          </div>
+        </div>
+        <div class="status-line s3-sync-status" data-s3-sync-status>Đang kiểm tra tiến trình S3...</div>
+      </section>
+    `;
+  }
+
   function renderAdminBulletinMessage(message = {}) {
     const isAdmin = message.authorRole === 'admin';
     return `
@@ -230,6 +247,59 @@ export function createAdminRoute({
       clearAdminSession();
       route();
     });
+  }
+
+  function bindS3SyncStatus() {
+    const target = app.querySelector('[data-s3-sync-status]');
+    if (!target) return;
+    if (s3SyncPollTimer) clearInterval(s3SyncPollTimer);
+    const refresh = async () => {
+      if (!target.isConnected) {
+        clearInterval(s3SyncPollTimer);
+        s3SyncPollTimer = null;
+        return;
+      }
+      try {
+        const status = await fetchJson('/api/admin/s3-sync/status', { headers: adminHeaders() });
+        renderS3SyncStatus(target, status);
+      } catch (error) {
+        target.className = 'status-line s3-sync-status error';
+        target.textContent = `Không đọc được tiến trình S3: ${error.message}`;
+      }
+    };
+    refresh();
+    s3SyncPollTimer = setInterval(refresh, 2500);
+  }
+
+  function renderS3SyncStatus(target, status = {}) {
+    const total = Number(status.total || 0);
+    const checked = Number(status.checked || 0);
+    const percent = total ? Math.max(0, Math.min(100, Number(status.percent || ((checked / total) * 100)))) : 0;
+    const title = status.message || (status.status === 'running' ? 'Đang đồng bộ ảnh lên S3...' : status.exists ? 'Tiến trình S3 gần nhất' : 'Chưa có tiến trình S3');
+    target.className = `status-line s3-sync-status${status.status === 'failed' ? ' error' : status.status === 'completed' ? ' success' : ''}`;
+    target.innerHTML = `
+      <div class="progress-copy">
+        <strong>${escapeHtml(title)}</strong>
+        <span>${total ? `${percent.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}% - ${checked.toLocaleString('vi-VN')}/${total.toLocaleString('vi-VN')} file` : 'Chưa có job sync đang ghi trạng thái.'}</span>
+      </div>
+      <div class="crawl-meter" aria-label="Tiến độ đồng bộ S3">
+        <div style="width:${Math.max(total ? 4 : 0, Math.min(100, percent))}%"></div>
+      </div>
+      <div class="progress-grid">
+        <span>Trạng thái: ${escapeHtml(status.status || 'idle')}</span>
+        <span>Series: ${escapeHtml(status.seriesId || 'tất cả')}</span>
+        <span>Chapter hiện tại: ${escapeHtml(status.currentChapter || 'đang tính')}</span>
+        <span>Upload: ${Number(status.uploaded || 0).toLocaleString('vi-VN')}</span>
+        <span>Skip S3: ${Number(status.skipped || 0).toLocaleString('vi-VN')}</span>
+        <span>Skip cache local: ${Number(status.cachedSkipped || 0).toLocaleString('vi-VN')}</span>
+        <span>Lỗi: ${Number(status.failed || 0).toLocaleString('vi-VN')}</span>
+        <span>Tốc độ: ${Number(status.ratePerMinute || 0).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} file/phút</span>
+        <span>ETA: ${escapeHtml(status.eta || 'đang tính')}</span>
+        <span>Luồng: ${Number(status.concurrency || 0) || '?'}</span>
+      </div>
+      ${status.currentKey ? `<div class="production-log"><span>${escapeHtml(status.currentKey)}</span></div>` : ''}
+      ${Array.isArray(status.failedItems) && status.failedItems.length ? `<div class="progress-errors">${status.failedItems.slice(-3).map((item) => `<span>${escapeHtml(item.key || '')}: ${escapeHtml(item.error || '')}</span>`).join('')}</div>` : ''}
+    `;
   }
 
   function bindAdminImageFallbacks() {
@@ -292,9 +362,11 @@ export function createAdminRoute({
         <div class="admin-series-card-actions">
           <a class="primary-btn" data-link href="/admin/series/${escapeAttr(series.id)}">Quản lý</a>
           <button class="ghost-btn" type="button" data-update-chapters="${escapeAttr(series.id)}" ${sourceUrl ? '' : 'disabled'}>Cập nhật chapter mới</button>
+          <button class="ghost-btn production-quick-btn" type="button" data-publish-production="${escapeAttr(series.id)}">Tối ưu + sync S3</button>
           ${series.slug ? `<a class="ghost-btn" data-link href="/truyen/${escapeAttr(series.slug)}">Mở public</a>` : ''}
         </div>
         <div class="status-line admin-update-status" data-update-chapters-status="${escapeAttr(series.id)}"></div>
+        <div class="status-line production-publish-status" data-production-publish-status="${escapeAttr(series.id)}"></div>
       </article>
     `;
   }
@@ -363,17 +435,17 @@ export function createAdminRoute({
         <div class="section-head admin-editor-section-head">
           <div>
             <p class="eyebrow">Production workflow</p>
-            <h2>Đưa truyện này lên production</h2>
-            <p>Tự chạy tuần tự: tối ưu ảnh, dọn file thừa, export static API, sync ảnh lên S3 rồi sync dữ liệu public.</p>
+            <h2>Tối ưu ảnh và đưa truyện lên production</h2>
+            <p>Bấm một lần trên UI: tối ưu ảnh, relink catalog sang WebP, dọn ảnh gốc thừa, export static API, sync ảnh catalog lên S3 rồi sync dữ liệu public. Không cần chạy CMD.</p>
           </div>
-          <button class="primary-btn" type="button" data-publish-production="${escapeAttr(series.id)}">Chạy workflow</button>
+          <button class="primary-btn" type="button" data-publish-production="${escapeAttr(series.id)}">Tối ưu + sync production</button>
         </div>
         <div class="production-flow-grid" aria-label="Các bước publish production">
           ${[
-            'Tối ưu ảnh',
-            'Relink + cleanup',
+            'Tối ưu JPG/PNG sang WebP',
+            'Relink catalog + cleanup',
             'Export static API',
-            'Sync ảnh S3',
+            'Sync ảnh catalog lên S3',
             'Sync dữ liệu S3',
             'Mở production kiểm tra'
           ].map((label, index) => `
@@ -384,7 +456,7 @@ export function createAdminRoute({
           `).join('')}
         </div>
         <div class="production-publish-note">
-          <span>Chạy trên máy local/admin, không chạy trong Vercel.</span>
+          <span>Chạy trên máy local/admin. Sync ảnh chỉ lấy file catalog đang dùng, không đẩy ảnh gốc thừa.</span>
           ${productionUrl ? `<a href="${escapeAttr(productionUrl)}" target="_blank" rel="noopener noreferrer">Mở production</a>` : '<span>Truyện chưa có slug public để mở production.</span>'}
         </div>
         <div class="status-line admin-wide production-publish-status" data-production-publish-status="${escapeAttr(series.id)}"></div>
@@ -868,6 +940,7 @@ export function createAdminRoute({
           <span>Đã kiểm tra: ${checked}/${total}</span>
           <span>Upload: ${Number(progress.uploaded || 0)}</span>
           <span>Skip: ${Number(progress.skipped || 0)}</span>
+          <span>Skip cache local: ${Number(progress.cached || progress.cachedSkipped || 0)}</span>
           <span>Lỗi: ${Number(progress.failed || 0)}</span>
           <span>Tốc độ: ${Number(progress.ratePerMinute || 0).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} file/phút</span>
           <span>ETA: ${escapeHtml(progress.eta || 'đang tính')}</span>

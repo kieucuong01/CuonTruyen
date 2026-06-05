@@ -73,7 +73,7 @@ function buildSteps(seriesId) {
       key: 'sync-images',
       label: 'Sync ảnh truyện lên S3',
       description: 'Đẩy riêng thư mục ảnh của truyện lên Vietnix S3.',
-      command: [process.execPath, 'scripts/sync-vietnix-s3.mjs', '--images-only', '--series-id', seriesId, '--apply'],
+      command: [process.execPath, 'scripts/sync-vietnix-s3.mjs', '--images-only', '--catalog-only', '--series-id', seriesId, '--apply'],
       s3Step: true
     },
     {
@@ -185,7 +185,7 @@ function handleStepOutput(job, step, text) {
 }
 
 function parseS3ProgressLine(line) {
-  const progress = String(line || '').match(/^\[s3-sync\]\s+(progress|done)\s+checked=(\d+)\/(\d+)\s+uploaded=(\d+)\s+skipped=(\d+)(?:\s+failed=(\d+))?\s+rate=([\d.]+)\s+files\/min\s+eta=([^\s]+)\s+concurrency=(\d+)/);
+  const progress = String(line || '').match(/^\[s3-sync\]\s+(progress|done)\s+checked=(\d+)\/(\d+)\s+uploaded=(\d+)\s+skipped=(\d+)(?:\s+cached=(\d+))?(?:\s+failed=(\d+))?\s+rate=([\d.]+)\s+files\/min\s+eta=([^\s]+)\s+concurrency=(\d+)/);
   if (progress) {
     return {
       phase: progress[1],
@@ -193,10 +193,11 @@ function parseS3ProgressLine(line) {
       total: Number(progress[3]),
       uploaded: Number(progress[4]),
       skipped: Number(progress[5]),
-      failed: Number(progress[6] || 0),
-      ratePerMinute: Number(progress[7]),
-      eta: progress[8],
-      concurrency: Number(progress[9])
+      cached: Number(progress[6] || 0),
+      failed: Number(progress[7] || 0),
+      ratePerMinute: Number(progress[8]),
+      eta: progress[9],
+      concurrency: Number(progress[10])
     };
   }
   const start = String(line || '').match(/^\[s3-sync\]\s+(\S+)\s+(\d+)\s+files\b.*\bconcurrency=(\d+)/);

@@ -73,6 +73,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const PUBLIC_DIR = path.join(ROOT, 'public');
 const PORT = Number(process.env.PORT || 4173);
+const S3_SYNC_STATUS_FILE = path.resolve(process.env.S3_SYNC_STATUS_FILE || process.env.VIETNIX_S3_SYNC_STATUS_FILE || path.join(ROOT, '.runtime', 's3-sync-status.json'));
 const API_CACHE_TTL_MS = 15_000;
 const apiResponseCache = createBoundedCache({ maxEntries: Number(process.env.API_CACHE_MAX_ENTRIES || 250) });
 const SPA_ROUTE_PATHS = new Set(['/admin']);
@@ -172,6 +173,33 @@ function kickEmbeddedCrawlWorker(reason = 'manual') {
       embeddedCrawlDrainPromise = null;
       if (embeddedCrawlDrainRequested) kickEmbeddedCrawlWorker('queued-during-run');
     });
+}
+
+async function readS3SyncStatus() {
+  try {
+    const status = JSON.parse(await fs.readFile(S3_SYNC_STATUS_FILE, 'utf8'));
+    return {
+      status: 'idle',
+      ...status,
+      exists: true
+    };
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return {
+        exists: false,
+        status: 'idle',
+        message: 'Chưa có job đồng bộ S3 nào ghi trạng thái.',
+        total: 0,
+        checked: 0,
+        uploaded: 0,
+        skipped: 0,
+        cachedSkipped: 0,
+        failed: 0,
+        percent: 0
+      };
+    }
+    throw error;
+  }
 }
 
 async function drainEmbeddedCrawlQueue(reason) {
@@ -366,6 +394,11 @@ async function handleApi(req, res, url) {
 
   if (req.method === 'GET' && url.pathname === '/api/admin/series') {
     jsonResponse(res, 200, await readAdminCatalog());
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/admin/s3-sync/status') {
+    jsonResponse(res, 200, await readS3SyncStatus());
     return true;
   }
 

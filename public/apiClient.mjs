@@ -199,12 +199,7 @@ function staticApiBaseOrder(path, { configuredBase, fallbackBase, localStaticBas
 
 function fallbackApiShouldLead(path = '') {
   const cleanPath = String(path || '').replace(/^\/+/, '');
-  return cleanPath === 'home.json'
-    || cleanPath === 'series.json'
-    || cleanPath === 'search-index.json'
-    || cleanPath === 'manifest.json'
-    || /^series\/[^/]+\.json$/.test(cleanPath)
-    || /^tags\/[^/]+\.json$/.test(cleanPath);
+  return cleanPath === 'manifest.json';
 }
 
 function readerStaticApiShouldLead(path = '') {
@@ -233,7 +228,7 @@ async function fetchStaticJsonFrom(url, path) {
 }
 
 function staticFetchTimeoutMs(url = '') {
-  const baseTimeout = 8000;
+  const baseTimeout = 3000;
   const localTimeout = 3500;
   return /^\/(?:fallback-api|static-api)\//.test(String(url || '')) ? localTimeout : baseTimeout;
 }
