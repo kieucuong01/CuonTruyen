@@ -15,7 +15,9 @@ async function main() {
   const config = coverThumbnailConfig(process.env);
   const mode = args.apply ? 'apply' : 'dry-run';
   const catalog = await readCatalog();
-  const seriesList = (catalog.series || []).slice(0, args.limit || undefined);
+  const seriesList = (catalog.series || [])
+    .filter((series) => matchesSeriesFilter(series, args.seriesId))
+    .slice(0, args.limit || undefined);
   const summary = {
     mode,
     root,
@@ -166,6 +168,7 @@ function parseArgs(args) {
     json: false,
     overwrite: false,
     limit: 0,
+    seriesId: '',
     root: ''
   };
   for (let index = 0; index < args.length; index += 1) {
@@ -174,9 +177,16 @@ function parseArgs(args) {
     else if (arg === '--json') parsed.json = true;
     else if (arg === '--overwrite') parsed.overwrite = true;
     else if (arg === '--limit') parsed.limit = Number(args[index += 1] || 0);
+    else if (arg === '--series-id') parsed.seriesId = args[index += 1] || '';
     else if (arg === '--root') parsed.root = args[index += 1] || '';
   }
   return parsed;
+}
+
+function matchesSeriesFilter(series = {}, seriesId = '') {
+  const target = String(seriesId || '').trim();
+  if (!target) return true;
+  return series.id === target || series.slug === target;
 }
 
 function printSummary(summary, { json = false } = {}) {

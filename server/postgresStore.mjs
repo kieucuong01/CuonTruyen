@@ -12,6 +12,8 @@ create table if not exists series (
   slug text not null,
   aliases jsonb not null default '[]'::jsonb,
   cover_url text,
+  thumbnail_url text,
+  cover_thumbnail jsonb,
   description text,
   status text not null default 'draft',
   source_mappings jsonb not null default '[]'::jsonb,
@@ -144,6 +146,8 @@ alter table if exists crawl_jobs add column if not exists run_after timestamptz 
 alter table if exists crawl_jobs add column if not exists locked_by text;
 alter table if exists crawl_jobs add column if not exists locked_at timestamptz;
 alter table if exists crawl_jobs add column if not exists last_error text;
+alter table if exists series add column if not exists thumbnail_url text;
+alter table if exists series add column if not exists cover_thumbnail jsonb;
 
 create index if not exists idx_series_slug on series(slug);
 create index if not exists idx_series_status_updated on series(status, updated_at desc);
@@ -311,17 +315,19 @@ async function upsertSeriesRows(client, rawSeries) {
   const series = normalizeSeriesForStorage(rawSeries);
   await client.query(`
     insert into series (
-      id, title, slug, aliases, cover_url, description, status, source_mappings,
+      id, title, slug, aliases, cover_url, thumbnail_url, cover_thumbnail, description, status, source_mappings,
       tags, stats, crawl_schedule, source_url, adapter, imported_at, updated_at
     ) values (
-      $1, $2, $3, $4::jsonb, $5, $6, $7, $8::jsonb,
-      $9::jsonb, $10::jsonb, $11::jsonb, $12, $13, $14, $15
+      $1, $2, $3, $4::jsonb, $5, $6, $7::jsonb, $8, $9, $10::jsonb,
+      $11::jsonb, $12::jsonb, $13::jsonb, $14, $15, $16, $17
     )
     on conflict (id) do update set
       title = excluded.title,
       slug = excluded.slug,
       aliases = excluded.aliases,
       cover_url = excluded.cover_url,
+      thumbnail_url = excluded.thumbnail_url,
+      cover_thumbnail = excluded.cover_thumbnail,
       description = excluded.description,
       status = excluded.status,
       source_mappings = excluded.source_mappings,
@@ -338,6 +344,8 @@ async function upsertSeriesRows(client, rawSeries) {
     series.slug,
     json(series.aliases),
     series.coverUrl,
+    series.thumbnailUrl,
+    json(series.coverThumbnail),
     series.description,
     series.status,
     json(series.sourceMappings),
@@ -465,6 +473,8 @@ function seriesFromRow(row, chapters, tags) {
     slug: row.slug,
     aliases: row.aliases || [],
     coverUrl: row.cover_url || '',
+    thumbnailUrl: row.thumbnail_url || '',
+    coverThumbnail: row.cover_thumbnail || null,
     description: row.description || '',
     status: row.status || 'draft',
     sourceMappings: row.source_mappings || [],

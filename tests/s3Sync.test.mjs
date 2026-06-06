@@ -39,6 +39,16 @@ test('S3 retry-failed mode is allowed without a series id', () => {
   }), false);
 });
 
+test('S3 image sync allows explicit image file targets without a series id', () => {
+  assert.equal(shouldRefuseFullImageSync({
+    includesImages: true,
+    seriesId: '',
+    allowFull: false,
+    retryFailed: false,
+    explicitImageFiles: true
+  }), false);
+});
+
 test('S3 sync treats RequestTimeTooSkewed as retryable and actionable', () => {
   const text = '<Error><Code>RequestTimeTooSkewed</Code><Message>The difference between the request time and current time is too large.</Message></Error>';
   assert.equal(isRetryableS3Failure({ status: 403, text }), true);

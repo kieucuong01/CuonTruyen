@@ -21,6 +21,14 @@ function argValue(name, fallback = '') {
   return index >= 0 ? process.argv[index + 1] || fallback : fallback;
 }
 
+function argValues(name) {
+  const values = [];
+  for (let index = 0; index < process.argv.length; index += 1) {
+    if (process.argv[index] === name && process.argv[index + 1]) values.push(process.argv[index + 1]);
+  }
+  return values;
+}
+
 function env(...names) {
   for (const name of names) {
     const value = process.env[name];
@@ -251,11 +259,15 @@ async function mapUploadItems() {
   const staticApiOnly = arg('--static-api-only');
   const catalogOnly = arg('--catalog-only');
   const seriesId = argValue('--series-id', '').trim();
+  const explicitImageFiles = argValues('--image-file');
+  const explicitStaticFiles = argValues('--static-file');
   const items = [];
 
   if (!staticApiOnly) {
     const imageRoot = seriesId ? path.join(importRoot, seriesId) : importRoot;
-    const imageFiles = catalogOnly
+    const imageFiles = explicitImageFiles.length
+      ? await collectExplicitImageFiles(importRoot, explicitImageFiles)
+      : catalogOnly
       ? await collectCatalogImageFiles(importRoot, seriesId)
       : await walkFiles(imageRoot, (filePath) => IMAGE_EXTENSIONS.has(path.extname(filePath).toLowerCase()));
     for (const filePath of imageFiles) {
@@ -271,7 +283,9 @@ async function mapUploadItems() {
   }
 
   if (!imagesOnly) {
-    const staticFiles = await walkFiles(staticApiRoot);
+    const staticFiles = explicitStaticFiles.length
+      ? await collectExplicitStaticFiles(staticApiRoot, explicitStaticFiles)
+      : await walkFiles(staticApiRoot);
     for (const filePath of staticFiles) {
       const relative = path.relative(staticApiRoot, filePath).replace(/\\/g, '/');
       items.push({
@@ -287,22 +301,70 @@ async function mapUploadItems() {
   return items;
 }
 
+async function collectExplicitStaticFiles(staticApiRoot, values = []) {
+  const root = path.resolve(staticApiRoot);
+  const files = new Set();
+  for (const value of values) {
+    const raw = String(value || '').replace(/\\/g, '/').replace(/^\/+/, '');
+    const normalized = path.posix.normalize(raw);
+    const filePath = path.isAbsolute(value)
+      ? path.resolve(value)
+      : path.resolve(root, ...normalized.split('/'));
+    if (!isInsideDirectory(filePath, root)) continue;
+    try {
+      const stat = await fs.stat(filePath);
+      if (stat.isFile()) files.add(filePath);
+    } catch {}
+  }
+  return [...files].sort((a, b) => a.localeCompare(b));
+}
+
+async function collectExplicitImageFiles(importRoot, values = []) {
+  const root = path.resolve(importRoot);
+  const files = new Set();
+  for (const value of values) {
+    const relative = importRelativePath(value);
+    const filePath = relative
+      ? path.resolve(root, ...relative.split('/').map((part) => decodeURIComponent(part)))
+      : path.resolve(value);
+    if (!isInsideDirectory(filePath, root)) continue;
+    if (!IMAGE_EXTENSIONS.has(path.extname(filePath).toLowerCase())) continue;
+    try {
+      const stat = await fs.stat(filePath);
+      if (stat.isFile()) files.add(filePath);
+    } catch {}
+  }
+  return [...files].sort((a, b) => a.localeCompare(b));
+}
+
 async function collectCatalogImageFiles(importRoot, seriesId = '') {
   const catalog = await readCatalog();
   const root = path.resolve(importRoot);
   const candidates = new Set();
   const wantedSeriesId = String(seriesId || '').trim();
+  const addCandidateValue = (value) => {
+    const relative = importRelativePath(value);
+    if (!relative) return;
+    if (wantedSeriesId && !relative.startsWith(`${wantedSeriesId}/`)) return;
+    const filePath = path.resolve(root, ...relative.split('/').map((part) => decodeURIComponent(part)));
+    if (!isInsideDirectory(filePath, root)) return;
+    if (IMAGE_EXTENSIONS.has(path.extname(filePath).toLowerCase())) candidates.add(filePath);
+  };
   for (const series of catalog.series || []) {
     if (wantedSeriesId && series.id !== wantedSeriesId && series.slug !== wantedSeriesId) continue;
+    for (const value of [
+      series.thumbnailUrl,
+      series.coverThumbnailUrl,
+      series.coverThumb,
+      series.coverUrl,
+      series.imageUrl
+    ]) {
+      addCandidateValue(value);
+    }
     for (const chapter of series.chapters || []) {
       for (const page of chapter.pages || []) {
         for (const value of [page.src, page.imageUrl, page.storageKey]) {
-          const relative = importRelativePath(value);
-          if (!relative) continue;
-          if (wantedSeriesId && !relative.startsWith(`${wantedSeriesId}/`)) continue;
-          const filePath = path.resolve(root, ...relative.split('/').map((part) => decodeURIComponent(part)));
-          if (!isInsideDirectory(filePath, root)) continue;
-          if (IMAGE_EXTENSIONS.has(path.extname(filePath).toLowerCase())) candidates.add(filePath);
+          addCandidateValue(value);
         }
       }
     }
@@ -462,8 +524,9 @@ async function main() {
   if (!endpoint || !bucket || !accessKeyId || !secretAccessKey) {
     throw new Error('Missing S3 config. Required: S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY.');
   }
-  if (shouldRefuseFullImageSync({ includesImages, seriesId, allowFull, retryFailed })) {
-    throw new Error('Refusing full image S3 sync without --series-id. Use --series-id <series-id> for normal publish, --retry-failed to retry missing files, or --all / S3_SYNC_ALLOW_FULL=true when you intentionally want a full image sync.');
+  const explicitImageFiles = argValues('--image-file').length > 0;
+  if (shouldRefuseFullImageSync({ includesImages, seriesId, allowFull, retryFailed, explicitImageFiles })) {
+    throw new Error('Refusing full image S3 sync without --series-id. Use --series-id <series-id> for normal publish, --image-file <imports path> for targeted files, --retry-failed to retry missing files, or --all / S3_SYNC_ALLOW_FULL=true when you intentionally want a full image sync.');
   }
 
   const client = { endpoint, bucket, region, accessKeyId, secretAccessKey, pathStyle };
@@ -695,8 +758,14 @@ function backoffDelay(baseDelayMs, attempt) {
   return Math.min(30000, exponential + jitter);
 }
 
-export function shouldRefuseFullImageSync({ includesImages, seriesId = '', allowFull = false, retryFailed = false } = {}) {
-  return Boolean(includesImages && !String(seriesId || '').trim() && !allowFull && !retryFailed);
+export function shouldRefuseFullImageSync({
+  includesImages,
+  seriesId = '',
+  allowFull = false,
+  retryFailed = false,
+  explicitImageFiles = false
+} = {}) {
+  return Boolean(includesImages && !String(seriesId || '').trim() && !allowFull && !retryFailed && !explicitImageFiles);
 }
 
 export function isRetryableS3Failure({ status = 0, text = '' } = {}) {
