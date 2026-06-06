@@ -1,4 +1,4 @@
-import {
+﻿import {
   canSaveReaderProgress,
   createProgressSnapshot,
   createResumeLoadPlan,
@@ -46,6 +46,7 @@ import {
   toggleFollowSeries
 } from './userState.mjs';
 import {
+  renderAdSlotHtml,
   normalizeMonetizationConfig,
   shouldShowAds
 } from './monetization.mjs';
@@ -65,6 +66,58 @@ function adsAreVisible() {
 
 function getDonateUrl() {
   return getMonetizationConfig().donateUrl || '#/support';
+}
+
+let adsenseScriptPromise = null;
+
+function loadAdsenseScript(clientId = '') {
+  const client = String(clientId || '').trim();
+  if (!client || typeof document === 'undefined') return Promise.resolve(false);
+  const existing = [...document.querySelectorAll('script[data-adsense-client]')]
+    .find((script) => script.dataset.adsenseClient === client);
+  if (existing) return Promise.resolve(true);
+  if (adsenseScriptPromise) return adsenseScriptPromise;
+  adsenseScriptPromise = new Promise((resolve) => {
+    const script = document.createElement('script');
+    script.async = true;
+    script.crossOrigin = 'anonymous';
+    script.dataset.adsenseClient = client;
+    script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${encodeURIComponent(client)}`;
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.head.appendChild(script);
+  });
+  return adsenseScriptPromise;
+}
+
+function hydrateAdSlots(root = document) {
+  const config = getMonetizationConfig();
+  if (config.adsProvider !== 'adsense' || !config.adsenseClient || typeof root?.querySelectorAll !== 'function') return;
+  const adUnits = [...root.querySelectorAll('ins.adsbygoogle')]
+    .filter((unit) => unit.dataset.adPushed !== 'true');
+  if (!adUnits.length) return;
+  loadAdsenseScript(config.adsenseClient).then((loaded) => {
+    if (!loaded) return;
+    globalThis.adsbygoogle = globalThis.adsbygoogle || [];
+    adUnits.forEach((unit) => {
+      if (unit.dataset.adPushed === 'true') return;
+      unit.dataset.adPushed = 'true';
+      try {
+        globalThis.adsbygoogle.push({});
+      } catch {
+        unit.dataset.adPushed = 'failed';
+      }
+    });
+  });
+}
+
+function renderAdSlot(placement, options = {}) {
+  if (!adsAreVisible()) return '';
+  return renderAdSlotHtml({
+    config: getMonetizationConfig(),
+    placement,
+    ...options
+  });
 }
 
 const app = document.querySelector('#app');
@@ -341,16 +394,17 @@ async function loadHome() {
 
 
 function renderMonetizationPanel(placement = 'home') {
-  const adSlot = adsAreVisible()
-    ? '<section class="ad-slot home-ad" data-ad-slot="home-top">Quảng cáo nhẹ, không chen vào lúc đọc.</section>'
-    : '';
+  const adSlot = renderAdSlot('home', {
+    className: 'home-ad',
+    label: 'Quảng cáo'
+  });
 
   return `
     ${adSlot}
     <section class="monetization-panel" aria-label="Ung ho Cuon Truyen">
       <div>
         <p class="eyebrow">Ủng hộ dự án</p>
-        <h2>Đọc miễn phí, ủng hộ bằng donate và click quảng cáo</h2>
+        <h2>Đọc miễn phí, ủng hộ bằng donate và quảng cáo nhẹ</h2>
         <p class="support-note">Cuộn Truyện không bán gói trả phí nữa. Nếu thấy hữu ích, bạn có thể donate hoặc để quảng cáo nhẹ hỗ trợ chi phí vận hành.</p>
       </div>
       <div class="support-actions">
@@ -360,22 +414,64 @@ function renderMonetizationPanel(placement = 'home') {
   `;
 }
 
-function renderReaderAdBreak(index) {
-  if (index <= 0) return '';
-  if (!adsAreVisible()) return '<section class="reader-break">Nghỉ mắt một chút rồi đọc tiếp</section>';
-  return '<section class="ad-slot reader-ad" data-ad-slot="chapter-break">Quảng cáo nhẹ - giúp Cuộn Truyện tiếp tục vận hành</section>';
+function renderReaderAdBreak(chapter) {
+  return renderAdSlot('chapter-end', {
+    className: 'reader-ad',
+    seriesSlug: state.series?.slug || '',
+    chapterSlug: chapter?.id || state.currentChapterId || '',
+    label: 'Quảng cáo cuối chapter'
+  });
 }
 
 function reportVisibleAdSlots() {
-  document.querySelectorAll('[data-ad-slot]').forEach((slot) => {
-    if (slot.dataset.reported === 'true') return;
-    slot.dataset.reported = 'true';
-    sendEvent('ad_impression', {
-      placement: slot.dataset.adSlot || '',
-      seriesSlug: state.series?.slug,
-      chapterId: state.currentChapterId
-    });
+  return observeVisibleAdSlots(document);
+}
+
+function reportAdImpression(slot) {
+  if (!slot || slot.dataset.reported === 'true') return;
+  slot.dataset.reported = 'true';
+  sendEvent('ad_impression', {
+    placement: slot.dataset.adPlacement || '',
+    slotId: slot.dataset.adSlotId || '',
+    provider: slot.dataset.adProvider || '',
+    seriesSlug: slot.dataset.seriesSlug || state.series?.slug,
+    chapterId: slot.dataset.chapterSlug || state.currentChapterId
   });
+}
+
+function observeVisibleAdSlots(root = document) {
+  hydrateAdSlots(root);
+  if (typeof root?.querySelectorAll !== 'function') return null;
+  const slots = [...root.querySelectorAll('[data-ad-placement]')];
+  if (!slots.length) return null;
+  if (typeof IntersectionObserver === 'undefined') {
+    slots.forEach(reportAdImpression);
+    return null;
+  }
+  const timers = new WeakMap();
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      const slot = entry.target;
+      if (slot.dataset.reported === 'true') return;
+      if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+        if (timers.has(slot)) return;
+        const timer = setTimeout(() => {
+          timers.delete(slot);
+          reportAdImpression(slot);
+          observer.unobserve(slot);
+        }, 800);
+        timers.set(slot, timer);
+        return;
+      }
+      const timer = timers.get(slot);
+      if (timer) {
+        clearTimeout(timer);
+        timers.delete(slot);
+      }
+    });
+  }, { threshold: [0, 0.5, 0.75] });
+  slots.forEach((slot) => observer.observe(slot));
+  return observer;
 }
 
 function renderTopbar() {
@@ -654,6 +750,11 @@ async function renderSeriesDetailLegacy(slug) {
           </div>
         </div>
       </section>
+      ${renderAdSlot('series', {
+        className: 'series-ad',
+        seriesSlug: series.slug,
+        label: 'Quảng cáo trang truyện'
+      })}
       ${renderSeriesContinueCard(series)}
       <section class="chapter-panel">
         <h2 class="section-title">Danh sách chapter</h2>
@@ -696,6 +797,11 @@ async function renderSeriesDetail(slug) {
           </div>
         </div>
       </section>
+      ${renderAdSlot('series', {
+        className: 'series-ad',
+        seriesSlug: series.slug,
+        label: 'Quảng cáo trang truyện'
+      })}
       ${renderSeriesContinueCard(series)}
       <section class="chapter-panel">
         <h2 class="section-title">Danh sách chapter</h2>
@@ -1263,7 +1369,6 @@ function renderChapter(chapter, index) {
   const pages = chapter.pages || [];
   return `
     <article class="chapter-block" data-chapter-id="${chapter.id}">
-      ${renderReaderAdBreak(index)}
       <div class="chapter-heading">${escapeHtml(chapter.label)}</div>
       ${pages.length ? pages.map((page, pagePosition) => {
         const imageIndex = readerImageIndex(index, pagePosition);
@@ -1274,6 +1379,8 @@ function renderChapter(chapter, index) {
         <img class="page-image" loading="${eager ? 'eager' : 'lazy'}" fetchpriority="${imageIndex < 4 ? 'high' : 'auto'}" decoding="async" data-reader-image data-reader-src="${escapeAttr(page.imageUrl)}" data-reader-image-index="${imageIndex}" data-page-index="${page.order}" src="${escapeAttr(page.imageUrl)}" width="${width}" height="${height}" alt="${escapeHtml(chapter.label)} trang ${Number(page.order) + 1}" />
       `;
       }).join('') : '<div class=\"page-missing\">Chapter này chưa có ảnh trong cache. Crawl thêm để đọc tiếp.</div>'}
+      ${renderReaderChapterFooter(chapter)}
+      ${renderReaderAdBreak(chapter)}
     </article>
   `;
 }
@@ -1355,15 +1462,8 @@ function attachReaderObservers() {
   if (loader) loadObserver.observe(loader);
   state.readerObservers.push(loadObserver);
 
-  const adObserver = new IntersectionObserver((entries) => {
-    entries.filter((entry) => entry.isIntersecting).forEach((entry) => {
-      if (entry.target.dataset.reported) return;
-      entry.target.dataset.reported = 'true';
-      sendEvent('ad_impression', { placement: entry.target.dataset.adSlot || 'reader', seriesSlug: state.series.slug, chapterId: state.currentChapterId });
-    });
-  }, { threshold: 0.5 });
-  document.querySelectorAll('[data-ad-slot]').forEach((slot) => adObserver.observe(slot));
-  state.readerObservers.push(adObserver);
+  const adObserver = observeVisibleAdSlots(document);
+  if (adObserver) state.readerObservers.push(adObserver);
 
   const imageObserver = new IntersectionObserver((entries) => {
     entries
@@ -1410,7 +1510,7 @@ function startReaderToolbarControls() {
     window.addEventListener(eventName, state.readerInteractionHandler, { passive: true });
   });
   state.readerTapHandler = (event) => {
-    if (event.target?.closest?.('a, button, input, select, textarea, [data-ad-slot]')) return;
+    if (event.target?.closest?.('a, button, input, select, textarea, [data-ad-placement]')) return;
     toggleReaderToolbarFromTap();
   };
   document.querySelector('.chapter-stream')?.addEventListener('click', state.readerTapHandler, { passive: true });
@@ -1939,4 +2039,5 @@ function splitList(value) {
     .map((item) => item.trim())
     .filter(Boolean);
 }
+
 

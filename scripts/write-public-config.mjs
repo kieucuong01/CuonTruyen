@@ -18,17 +18,48 @@ function serializeConfig(config) {
 };\n`;
 }
 
+const publicSiteUrl = siteBaseUrl();
+const staticApiMode = resolveStaticApiMode();
+
 const config = {
-  apiBaseUrl: trimTrailingSlash(process.env.API_BASE_URL || process.env.PUBLIC_API_BASE_URL || ''),
-  staticApiMode: String(process.env.STATIC_API_MODE || '').toLowerCase() === 'true',
+  apiBaseUrl: trimTrailingSlash(
+    process.env.API_BASE_URL
+    || process.env.PUBLIC_API_BASE_URL
+    || (!staticApiMode && process.env.VERCEL === '1' ? publicSiteUrl : '')
+  ),
+  staticApiMode,
   staticApiBaseUrl: trimTrailingSlash(process.env.STATIC_API_BASE_URL || process.env.PUBLIC_STATIC_API_BASE_URL || ''),
   importsBaseUrl: trimTrailingSlash(
     process.env.PUBLIC_IMPORTS_BASE_URL
     || process.env.S3_PUBLIC_BASE_URL
     || process.env.VIETNIX_S3_PUBLIC_BASE_URL
     || ''
-  )
+  ),
+  monetization: {
+    adsEnabled: process.env.ADS_ENABLED !== 'false',
+    donateUrl: process.env.DONATE_URL || '',
+    adsProvider: process.env.ADS_PROVIDER || (process.env.ADSENSE_CLIENT ? 'adsense' : ''),
+    adsenseClient: process.env.ADSENSE_CLIENT || '',
+    adsenseSlots: {
+      home: process.env.ADSENSE_SLOT_HOME || '',
+      series: process.env.ADSENSE_SLOT_SERIES || '',
+      chapterEnd: process.env.ADSENSE_SLOT_CHAPTER_END || ''
+    },
+    adsenseTestMode: String(process.env.ADSENSE_TEST_MODE || '').toLowerCase() === 'true'
+  },
+  publicSiteUrl,
+  productionBaseUrl: trimTrailingSlash(process.env.PRODUCTION_BASE_URL || process.env.PUBLIC_SITE_URL || publicSiteUrl),
+  enableLocalCrawlerUi: String(process.env.ENABLE_LOCAL_CRAWLER_UI || '').toLowerCase() === 'true'
 };
+
+function resolveStaticApiMode() {
+  const hasLiveDatabase = Boolean(process.env.DATABASE_URL || process.env.POSTGRES_URL);
+  if (process.env.FORCE_STATIC_API_MODE) {
+    return String(process.env.FORCE_STATIC_API_MODE || '').toLowerCase() === 'true';
+  }
+  if (process.env.VERCEL === '1' && hasLiveDatabase) return false;
+  return String(process.env.STATIC_API_MODE || '').toLowerCase() === 'true';
+}
 
 function siteBaseUrl() {
   return trimTrailingSlash(
@@ -74,7 +105,7 @@ async function writeRouteIndex(routePath, html) {
 }
 
 async function writeStaticInfoPages() {
-  const { STATIC_PAGES, renderHtmlShell, renderStaticPageShell, seriesJsonLd, chapterJsonLd } = await import('../server/seo.mjs');
+  const { STATIC_PAGES, renderHtmlShell, renderStaticPageShell, seriesJsonLd, chapterJsonLd, tagPageJsonLd } = await import('../server/seo.mjs');
   const baseUrl = siteBaseUrl();
   for (const page of STATIC_PAGES) {
     await writeRouteIndex(page.path, renderStaticPageShell(page.path, baseUrl));
@@ -129,6 +160,7 @@ async function writeStaticInfoPages() {
       title,
       description: `Đọc truyện tranh thể loại ${tag.name || tag.slug} trên Cuộn Truyện.`,
       canonicalUrl: `${baseUrl}/the-loai/${tagSlug}`,
+      jsonLd: tagPageJsonLd({ tag: { ...tag, slug: tagSlug }, series: [] }, baseUrl),
       bodyHtml: `<main id="app" class="site-shell static-page"><section class="page-heading static-page-heading"><h1>${escapeHtml(title)}</h1></section></main>`
     }))) {
       tagPageCount += 1;

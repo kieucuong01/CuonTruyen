@@ -1,4 +1,5 @@
 import { hasReadableChapter } from '../chapterState.mjs';
+import { localOperationsEnabled } from '../runtimeConfig.mjs';
 
 const ADMIN_TOKEN_KEY = 'comic-admin-token';
 const ADMIN_EMAIL_KEY = 'comic-admin-email';
@@ -62,6 +63,10 @@ export function createAdminRoute({
   let s3SyncPollTimer = null;
   let crawlQueuePollTimer = null;
 
+  function canRunLocalOperations() {
+    return localOperationsEnabled();
+  }
+
   async function loadAdminCatalog() {
     return fetchJson('/api/admin/series', { headers: adminHeaders() });
   }
@@ -69,6 +74,11 @@ export function createAdminRoute({
   async function loadAdminBulletin() {
     return fetchJson('/api/admin/bulletin/messages?limit=40', { headers: adminHeaders() })
       .catch(() => ({ messages: [] }));
+  }
+
+  async function loadAdminAnalytics(range = '30d') {
+    return fetchJson(`/api/admin/analytics/summary?range=${encodeURIComponent(range)}`, { headers: adminHeaders() })
+      .catch(() => null);
   }
 
   async function renderAdmin() {
@@ -79,10 +89,12 @@ export function createAdminRoute({
     }
     let catalog;
     let bulletin;
+    let analytics;
     try {
-      [catalog, bulletin] = await Promise.all([
+      [catalog, bulletin, analytics] = await Promise.all([
         loadAdminCatalog(),
-        loadAdminBulletin()
+        loadAdminBulletin(),
+        loadAdminAnalytics()
       ]);
     } catch (error) {
       if (isAdminAuthError(error)) {
@@ -92,12 +104,13 @@ export function createAdminRoute({
       }
       throw error;
     }
+    const localOps = canRunLocalOperations();
     app.innerHTML = `
       <main class="site-shell admin-shell">
         ${renderTopbar()}
         ${renderAdminSessionBar()}
         <section class="admin-grid">
-          <form class="import-panel admin-panel" data-import-form>
+          ${localOps ? `<form class="import-panel admin-panel" data-import-form>
             <h2>Crawl truyện</h2>
             <textarea name="url" required rows="4" placeholder="Dán mỗi URL truyện trên một dòng...">https://truyenqqko.com/truyen-tranh/manh-nhat-lich-su-5968</textarea>
             <select name="maxChapters" aria-label="Số chapter tải trước">
@@ -113,12 +126,13 @@ export function createAdminRoute({
               <option value="20">20 ảnh/chapter</option>
             </select>
             <button class="primary-btn" type="submit">Crawl</button>
-          </form>
-          ${renderCrawlQueuePanel()}
+          </form>` : renderProductionAdminNotice()}
+          ${localOps ? renderCrawlQueuePanel() : ''}
           ${renderAdminBulletinPanel(bulletin.messages || [])}
-          ${renderS3SyncPanel()}
+          ${localOps ? renderS3SyncPanel() : ''}
           <div class="status-line" data-status></div>
         </section>
+        ${renderRevenueDashboard(analytics)}
         ${adminFlashMessage ? `<div class="status-line success">${escapeHtml(adminFlashMessage)}</div>` : ''}
         <section class="admin-list">
           <div class="admin-list-head">
@@ -134,12 +148,14 @@ export function createAdminRoute({
     adminFlashMessage = '';
     bindAdminCommonActions();
     bindAdminImageFallbacks();
-    app.querySelector('[data-import-form]').addEventListener('submit', handleImport);
+    bindRevenueDashboard();
+    app.querySelector('[data-import-form]')?.addEventListener('submit', handleImport);
     bindAdminBulletinActions();
-    bindCrawlQueueStatus();
-    bindS3SyncStatus();
-    app.querySelectorAll('[data-update-chapters]').forEach((button) => button.addEventListener('click', handleUpdateChapters));
-    app.querySelectorAll('[data-publish-production]').forEach((button) => button.addEventListener('click', handleProductionPublish));
+    if (localOps) {
+      bindCrawlQueueStatus();
+      bindS3SyncStatus();
+    }
+    bindProductionPipelineActions();
   }
 
   async function renderAdminSeriesDetail(seriesId) {
@@ -160,6 +176,7 @@ export function createAdminRoute({
       throw error;
     }
     const series = findAdminSeries(catalog, seriesId);
+    const localOps = canRunLocalOperations();
     app.innerHTML = `
       <main class="site-shell admin-shell admin-detail-shell">
         ${renderTopbar()}
@@ -169,15 +186,109 @@ export function createAdminRoute({
           ${series?.slug ? `<a class="ghost-btn" data-link href="/truyen/${escapeAttr(series.slug)}">Mở trang public</a>` : ''}
         </div>
         ${adminFlashMessage ? `<div class="status-line success">${escapeHtml(adminFlashMessage)}</div>` : ''}
-        ${series ? renderAdminSeriesEditor(series) : '<section class="empty-state">Không tìm thấy truyện trong catalog admin.</section>'}
+        ${!localOps ? renderProductionAdminNotice() : ''}
+        ${series ? renderAdminSeriesEditor(series, { localOps }) : '<section class="empty-state">Không tìm thấy truyện trong catalog admin.</section>'}
       </main>
     `;
     adminFlashMessage = '';
     bindAdminCommonActions();
     bindAdminImageFallbacks();
     app.querySelectorAll('[data-admin-series]').forEach((form) => form.addEventListener('submit', handleAdminSave));
-    app.querySelectorAll('[data-update-chapters]').forEach((button) => button.addEventListener('click', handleUpdateChapters));
-    app.querySelectorAll('[data-publish-production]').forEach((button) => button.addEventListener('click', handleProductionPublish));
+    bindProductionPipelineActions();
+  }
+
+  function formatNumber(value = 0) {
+    return Number(value || 0).toLocaleString('vi-VN');
+  }
+
+  function formatPercent(value = 0) {
+    return `${(Number(value || 0) * 100).toFixed(2)}%`;
+  }
+
+  function renderRevenueDashboard(summary) {
+    if (!summary) {
+      return `
+        <section class="admin-panel revenue-dashboard">
+          <div class="admin-list-head">
+            <div>
+              <h2 class="section-title">Doanh thu & tương tác</h2>
+              <p class="muted">Chưa đọc được analytics. Dashboard sẽ tự hiện khi API sẵn sàng.</p>
+            </div>
+          </div>
+        </section>
+      `;
+    }
+    const totals = summary.totals || {};
+    const rows = summary.topSeries || [];
+    return `
+      <section class="admin-panel revenue-dashboard" data-revenue-dashboard>
+        <div class="admin-list-head">
+          <div>
+            <h2 class="section-title">Doanh thu & tương tác</h2>
+            <p class="muted">Theo dõi view, impression quảng cáo, CTR nội bộ và donate click theo truyện.</p>
+          </div>
+          <div class="revenue-range-tabs" role="group" aria-label="Khoảng thời gian analytics">
+            ${['7d', '30d', 'all'].map((range) => `
+              <button class="ghost-btn ${summary.range === range ? 'active' : ''}" type="button" data-analytics-range="${range}">
+                ${range === 'all' ? 'Tất cả' : range.replace('d', ' ngày')}
+              </button>
+            `).join('')}
+          </div>
+        </div>
+        <div class="revenue-metrics">
+          <article><span>Views</span><strong>${formatNumber(totals.views)}</strong></article>
+          <article><span>Ad impressions</span><strong>${formatNumber(totals.adImpressions)}</strong></article>
+          <article><span>CTR quảng cáo</span><strong>${formatPercent(totals.adCtr)}</strong></article>
+          <article><span>Donate clicks</span><strong>${formatNumber(totals.donateClicks)}</strong></article>
+        </div>
+        <div class="revenue-table-wrap">
+          <table class="revenue-table">
+            <thead>
+              <tr>
+                <th>Truyện</th>
+                <th>Views</th>
+                <th>Ad impressions</th>
+                <th>CTR</th>
+                <th>Donate</th>
+                <th>Read depth</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.length ? rows.map((row) => `
+                <tr>
+                  <td><a data-link href="/admin/series/${encodeURIComponent(row.seriesId || row.seriesSlug)}">${escapeHtml(row.title)}</a></td>
+                  <td>${formatNumber(row.views)}</td>
+                  <td>${formatNumber(row.adImpressions)}</td>
+                  <td>${formatPercent(row.adCtr)}</td>
+                  <td>${formatNumber(row.donateClicks)}</td>
+                  <td>${formatNumber(row.readDepth)}%</td>
+                </tr>
+              `).join('') : '<tr><td colspan="6">Chưa có dữ liệu tracking trong khoảng này.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    `;
+  }
+
+  function bindRevenueDashboard() {
+    const dashboard = app.querySelector('[data-revenue-dashboard]');
+    if (!dashboard) return;
+    dashboard.querySelectorAll('[data-analytics-range]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const range = button.dataset.analyticsRange || '30d';
+        button.disabled = true;
+        try {
+          const summary = await loadAdminAnalytics(range);
+          dashboard.outerHTML = renderRevenueDashboard(summary);
+          bindRevenueDashboard();
+        } catch (error) {
+          dashboard.insertAdjacentHTML('afterbegin', `<div class="status-line error">Không tải được analytics: ${escapeHtml(error.message)}</div>`);
+        } finally {
+          button.disabled = false;
+        }
+      });
+    });
   }
 
   function renderAdminSessionBar() {
@@ -206,6 +317,19 @@ export function createAdminRoute({
         <div class="status-line" data-admin-bulletin-status></div>
         <div class="admin-bulletin-list">
           ${messages.length ? messages.map(renderAdminBulletinMessage).join('') : '<p class="muted">Chưa có tin nhắn bảng tin.</p>'}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderProductionAdminNotice() {
+    return `
+      <section class="admin-panel production-admin-notice">
+        <div class="admin-bulletin-head">
+          <div>
+            <h2>Production admin</h2>
+            <p class="muted">Chế độ production chỉ dùng để quản lý nội dung: sửa metadata, duyệt chapter, public/draft/removed và xem dữ liệu. Crawl, optimize ảnh, sync S3 và production pipeline chỉ mở ở local.</p>
+          </div>
         </div>
       </section>
     `;
@@ -260,6 +384,62 @@ export function createAdminRoute({
     app.querySelectorAll('[data-admin-bulletin-pin]').forEach((button) => button.addEventListener('click', handleAdminBulletinPin));
   }
 
+  async function handleAdminBulletinSubmit(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const status = app.querySelector('[data-admin-bulletin-status]');
+    const button = form.querySelector('button[type="submit"]');
+    const formData = new FormData(form);
+    setControlPending(button);
+    if (status) {
+      status.className = 'status-line';
+      status.textContent = 'Dang gui tin admin...';
+    }
+    try {
+      await fetchJson('/api/admin/bulletin/messages', {
+        method: 'POST',
+        headers: adminHeaders(),
+        body: JSON.stringify({
+          text: formData.get('text'),
+          pinned: formData.get('pinned') === 'on'
+        })
+      });
+      form.reset();
+      adminFlashMessage = 'Da gui tin admin.';
+      await renderAdmin();
+    } catch (error) {
+      if (status) {
+        status.className = 'status-line error';
+        status.textContent = error.message;
+      }
+    } finally {
+      clearControlPending();
+    }
+  }
+
+  async function handleAdminBulletinPin(event) {
+    const button = event.currentTarget;
+    const messageId = button.dataset.adminBulletinPin;
+    const pinned = button.dataset.pinned !== 'true';
+    const status = app.querySelector('[data-admin-bulletin-status]');
+    button.disabled = true;
+    try {
+      await fetchJson(`/api/admin/bulletin/messages/${encodeURIComponent(messageId)}`, {
+        method: 'PATCH',
+        headers: adminHeaders(),
+        body: JSON.stringify({ pinned })
+      });
+      adminFlashMessage = pinned ? 'Da ghim tin admin.' : 'Da bo ghim tin admin.';
+      await renderAdmin();
+    } catch (error) {
+      if (status) {
+        status.className = 'status-line error';
+        status.textContent = error.message;
+      }
+      button.disabled = false;
+    }
+  }
+
   function bindAdminCommonActions() {
     app.querySelector('[data-admin-logout]')?.addEventListener('click', () => {
       clearAdminSession();
@@ -280,6 +460,7 @@ export function createAdminRoute({
       try {
         const status = await fetchJson('/api/admin/s3-sync/status', { headers: adminHeaders() });
         renderS3SyncStatus(target, status);
+        bindS3RetryFailed(target, refresh);
       } catch (error) {
         target.className = 'status-line s3-sync-status error';
         target.textContent = `Không đọc được tiến trình S3: ${error.message}`;
@@ -287,6 +468,30 @@ export function createAdminRoute({
     };
     refresh();
     s3SyncPollTimer = setInterval(refresh, 2500);
+  }
+
+  function bindS3RetryFailed(target, refresh) {
+    const button = target.querySelector('[data-s3-retry-failed]');
+    if (!button) return;
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      button.textContent = 'Đang tạo retry...';
+      try {
+        const result = await fetchJson('/api/admin/s3-sync/retry-failed', {
+          method: 'POST',
+          headers: adminHeaders()
+        });
+        target.className = 'status-line s3-sync-status success';
+        target.insertAdjacentHTML('afterbegin', `<p class="muted">Đã tạo job retry ${Number(result.retryCount || 0)} file thiếu/lỗi trên S3.</p>`);
+        await refresh();
+      } catch (error) {
+        target.className = 'status-line s3-sync-status error';
+        target.insertAdjacentHTML('afterbegin', `<p class="muted">Không thể retry file thiếu: ${escapeHtml(error.message)}</p>`);
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Retry file thiếu';
+      }
+    });
   }
 
   function bindCrawlQueueStatus() {
@@ -345,6 +550,7 @@ export function createAdminRoute({
       : 'Crawler embedded đang tắt; cần chạy worker riêng.';
 
     target.className = `status-line crawl-queue-status${failedJobs.length ? ' warning' : ''}`;
+    const failedItems = Array.isArray(status.failedItems) ? status.failedItems : [];
     target.innerHTML = `
       <div class="progress-copy">
         <strong>${runningJob ? escapeHtml(runningJob.progress?.message || 'Đang crawl...') : totalWaiting ? 'Có job đang chờ crawler nhận' : 'Queue crawl đang rảnh'}</strong>
@@ -407,13 +613,24 @@ export function createAdminRoute({
     const total = Number(status.total || 0);
     const checked = Number(status.checked || 0);
     const percent = total ? Math.max(0, Math.min(100, Number(status.percent || ((checked / total) * 100)))) : 0;
+    const updatedAtMs = Date.parse(status.updatedAt || '');
+    const statusAgeSeconds = Number.isFinite(updatedAtMs) ? Math.max(0, Math.round((Date.now() - updatedAtMs) / 1000)) : null;
+    const staleRunning = status.status === 'running' && statusAgeSeconds != null && statusAgeSeconds > 90;
+    const statusClass = status.status === 'failed'
+      ? ' error'
+      : status.status === 'completed'
+        ? ' success'
+        : staleRunning
+          ? ' warning'
+          : '';
     const title = status.message || (status.status === 'running' ? 'Đang đồng bộ ảnh lên S3...' : status.exists ? 'Tiến trình S3 gần nhất' : 'Chưa có tiến trình S3');
-    target.className = `status-line s3-sync-status${status.status === 'failed' ? ' error' : status.status === 'completed' ? ' success' : ''}`;
+    target.className = `status-line s3-sync-status${statusClass}`;
     target.innerHTML = `
       <div class="progress-copy">
         <strong>${escapeHtml(title)}</strong>
         <span>${total ? `${percent.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}% - ${checked.toLocaleString('vi-VN')}/${total.toLocaleString('vi-VN')} file` : 'Chưa có job sync đang ghi trạng thái.'}</span>
       </div>
+      ${staleRunning ? '<p class="muted">Status S3 sync da hon 90 giay chua cap nhat. Job co the dang ket request S3; nen dung/retry thay vi doi vo han.</p>' : ''}
       <div class="crawl-meter" aria-label="Tiến độ đồng bộ S3">
         <div style="width:${Math.max(total ? 4 : 0, Math.min(100, percent))}%"></div>
       </div>
@@ -430,7 +647,23 @@ export function createAdminRoute({
         <span>Luồng: ${Number(status.concurrency || 0) || '?'}</span>
       </div>
       ${status.currentKey ? `<div class="production-log"><span>${escapeHtml(status.currentKey)}</span></div>` : ''}
-      ${Array.isArray(status.failedItems) && status.failedItems.length ? `<div class="progress-errors">${status.failedItems.slice(-3).map((item) => `<span>${escapeHtml(item.key || '')}: ${escapeHtml(item.error || '')}</span>`).join('')}</div>` : ''}
+      ${failedItems.length ? renderS3FailedItems(failedItems) : ''}
+      ${failedItems.length ? '<button class="ghost-btn" type="button" data-s3-retry-failed>Retry file thiếu</button>' : ''}
+    `;
+  }
+
+  function renderS3FailedItems(failedItems = []) {
+    return `
+      <div class="progress-errors">
+        <strong>File S3 lỗi gần nhất</strong>
+        ${failedItems.slice(-8).map((item) => {
+          const error = String(item.error || '');
+          const clockHint = /RequestTimeTooSkewed|request time|clock skew/i.test(error)
+            ? ' - Gợi ý: bật đồng bộ giờ Windows rồi bấm retry.'
+            : '';
+          return `<span>${escapeHtml(item.key || '')}: ${escapeHtml(error)}${escapeHtml(clockHint)}</span>`;
+        }).join('')}
+      </div>
     `;
   }
 
@@ -481,6 +714,7 @@ export function createAdminRoute({
   function renderAdminSeriesCard(series) {
     const sourceUrl = sourceUrlForAdminSeries(series);
     const stats = adminSeriesStats(series);
+    const localOps = canRunLocalOperations();
     return `
       <article class="admin-series-card admin-series-list-card">
         <div class="admin-series-summary">
@@ -493,17 +727,17 @@ export function createAdminRoute({
         </div>
         <div class="admin-series-card-actions">
           <a class="primary-btn" data-link href="/admin/series/${escapeAttr(series.id)}">Quản lý</a>
-          <button class="ghost-btn" type="button" data-update-chapters="${escapeAttr(series.id)}" ${sourceUrl ? '' : 'disabled'}>Cập nhật chapter mới</button>
-          <button class="ghost-btn production-quick-btn" type="button" data-publish-production="${escapeAttr(series.id)}">Tối ưu + sync S3</button>
+          ${localOps ? `<button class="ghost-btn" type="button" data-update-chapters="${escapeAttr(series.id)}" ${sourceUrl ? '' : 'disabled'}>Cập nhật chapter mới</button>` : ''}
+          ${localOps ? `<button class="ghost-btn production-quick-btn" type="button" data-publish-production="${escapeAttr(series.id)}">Tối ưu + sync S3</button>` : ''}
           ${series.slug ? `<a class="ghost-btn" data-link href="/truyen/${escapeAttr(series.slug)}">Mở public</a>` : ''}
         </div>
-        <div class="status-line admin-update-status" data-update-chapters-status="${escapeAttr(series.id)}"></div>
-        <div class="status-line production-publish-status" data-production-publish-status="${escapeAttr(series.id)}"></div>
+        ${localOps ? `<div class="status-line admin-update-status" data-update-chapters-status="${escapeAttr(series.id)}"></div>` : ''}
+        ${localOps ? `<div class="status-line production-publish-status" data-production-publish-status="${escapeAttr(series.id)}"></div>` : ''}
       </article>
     `;
   }
 
-  function renderAdminSeriesEditor(series) {
+  function renderAdminSeriesEditor(series, { localOps = canRunLocalOperations() } = {}) {
     const schedule = series.crawlSchedule || {};
     const sourceUrl = sourceUrlForAdminSeries(series);
     const chapters = Array.isArray(series.chapters) ? series.chapters : [];
@@ -518,13 +752,13 @@ export function createAdminRoute({
             <p>${stats.importedChapterCount}/${stats.chapterCount} chapter - ${stats.pageCount} ảnh - ${escapeHtml(statusLabel(stats.status))}</p>
             ${renderAdminSeriesBadges(stats)}
           </div>
-          <div class="admin-detail-actions">
+          ${localOps ? `<div class="admin-detail-actions">
             <button class="ghost-btn" type="button" data-update-chapters="${escapeAttr(series.id)}" ${sourceUrl ? '' : 'disabled'}>Cập nhật chapter mới</button>
             <span class="muted">${sourceUrl ? 'Chỉ tải chapter chưa có, không tải lại ảnh cũ.' : 'Chưa có source URL để cập nhật.'}</span>
-          </div>
+          </div>` : `<div class="admin-detail-actions"><span class="muted">Production admin chỉ quản lý nội dung; crawl và sync chạy ở local.</span></div>`}
         </section>
-        <div class="status-line admin-wide admin-update-status" data-update-chapters-status="${escapeAttr(series.id)}"></div>
-        ${renderProductionPublishPanel(series)}
+        ${localOps ? `<div class="status-line admin-wide admin-update-status" data-update-chapters-status="${escapeAttr(series.id)}"></div>` : ''}
+        ${localOps ? renderProductionPublishPanel(series) : ''}
         <section class="admin-editor-section">
           <div class="section-head admin-editor-section-head">
             <div>
@@ -541,8 +775,8 @@ export function createAdminRoute({
             <label>Tags<input name="tags" value="${escapeAttr(getManualTagNames(series).join(', '))}" placeholder="Action, Fantasy, School Life" /></label>
             ${renderOriginTagPicker(series)}
             <label class="admin-wide">Mô tả SEO<textarea name="description" aria-label="Mô tả" placeholder="Mô tả SEO">${escapeHtml(series.description || '')}</textarea></label>
-            <label class="toggle-row"><input name="scheduleEnabled" type="checkbox" ${schedule.enabled ? 'checked' : ''} /> Auto crawl</label>
-            <label>Interval giờ<input name="intervalHours" type="number" min="1" value="${Number(schedule.intervalHours || 24)}" /></label>
+            ${localOps ? `<label class="toggle-row"><input name="scheduleEnabled" type="checkbox" ${schedule.enabled ? 'checked' : ''} /> Auto crawl</label>` : ''}
+            ${localOps ? `<label>Interval giờ<input name="intervalHours" type="number" min="1" value="${Number(schedule.intervalHours || 24)}" /></label>` : ''}
           </div>
         </section>
         <section class="admin-editor-section">
@@ -563,33 +797,68 @@ export function createAdminRoute({
 
   function renderProductionPublishPanel(series) {
     const productionUrl = productionSeriesUrl(series);
+    const sourceUrl = sourceUrlForAdminSeries(series);
+    const steps = [
+      {
+        key: 'update-chapters',
+        label: '1. Crawl chapter mới',
+        description: sourceUrl ? 'Chỉ tải chapter chưa có, không tải lại ảnh cũ.' : 'Cần source URL trước khi cập nhật chapter.',
+        button: 'Cập nhật chapter mới',
+        disabled: !sourceUrl,
+        buttonAttr: `data-update-chapters="${escapeAttr(series.id)}"`
+      },
+      {
+        key: 'optimize',
+        label: '2. Optimize ảnh',
+        description: 'Tối ưu nhanh ảnh mới/chưa tối ưu. Không cleanup sâu mặc định.',
+        button: 'Chạy optimize',
+        steps: ['optimize']
+      },
+      {
+        key: 'sync-images',
+        label: '3. Sync ảnh S3',
+        description: 'Chỉ sync ảnh của truyện đang chọn, có retry và resume checkpoint.',
+        button: 'Sync S3',
+        steps: ['sync-images']
+      },
+      {
+        key: 'export-static-api',
+        label: '4. Export static API',
+        description: 'Sinh lại static API sau khi ảnh/catalog đã sẵn sàng.',
+        button: 'Export API',
+        steps: ['export-static-api']
+      },
+      {
+        key: 'sync-static-api',
+        label: '5. Sync static API',
+        description: 'Đẩy riêng JSON static API lên S3 để production cập nhật.',
+        button: 'Sync static API',
+        steps: ['sync-static-api']
+      },
+      {
+        key: 'production-check',
+        label: '6. Kiểm tra production',
+        description: 'Mở/check URL production của truyện sau khi sync xong.',
+        button: 'Check production',
+        check: true,
+        disabled: !productionUrl
+      }
+    ];
     return `
       <section class="admin-editor-section production-publish-panel">
         <div class="section-head admin-editor-section-head">
           <div>
-            <p class="eyebrow">Production workflow</p>
+            <p class="eyebrow">Production pipeline</p>
             <h2>Tối ưu ảnh và đưa truyện lên production</h2>
-            <p>Bấm một lần trên UI: tối ưu ảnh, relink catalog sang WebP, dọn ảnh gốc thừa, export static API, sync ảnh catalog lên S3 rồi sync dữ liệu public. Không cần chạy CMD.</p>
+            <p>Chạy từng bước để dễ theo dõi và retry riêng khi kẹt. Nếu S3 lỗi thì chỉ bấm lại bước Sync S3, không cần chạy lại toàn bộ.</p>
           </div>
-          <button class="primary-btn" type="button" data-publish-production="${escapeAttr(series.id)}">Tối ưu + sync production</button>
+          <button class="primary-btn" type="button" data-publish-production="${escapeAttr(series.id)}">Chạy nhanh: optimize + sync + export</button>
         </div>
-        <div class="production-flow-grid" aria-label="Các bước publish production">
-          ${[
-            'Tối ưu JPG/PNG sang WebP',
-            'Relink catalog + cleanup',
-            'Export static API',
-            'Sync ảnh catalog lên S3',
-            'Sync dữ liệu S3',
-            'Mở production kiểm tra'
-          ].map((label, index) => `
-            <span>
-              <b>${index + 1}</b>
-              ${escapeHtml(label)}
-            </span>
-          `).join('')}
+        <div class="production-pipeline-list" aria-label="Production pipeline steps">
+          ${steps.map((step) => renderProductionPipelineStep(series, step, productionUrl)).join('')}
         </div>
         <div class="production-publish-note">
-          <span>Chạy trên máy local/admin. Sync ảnh chỉ lấy file catalog đang dùng, không đẩy ảnh gốc thừa.</span>
+          <span>Khuyến nghị: crawl mới -> optimize -> sync ảnh S3 -> export API -> sync static API -> check production.</span>
           ${productionUrl ? `<a href="${escapeAttr(productionUrl)}" target="_blank" rel="noopener noreferrer">Mở production</a>` : '<span>Truyện chưa có slug public để mở production.</span>'}
         </div>
         <div class="status-line admin-wide production-publish-status" data-production-publish-status="${escapeAttr(series.id)}"></div>
@@ -597,6 +866,20 @@ export function createAdminRoute({
     `;
   }
 
+  function renderProductionPipelineStep(series, step, productionUrl) {
+    const action = step.check
+      ? `data-production-check="${escapeAttr(series.id)}" data-production-url="${escapeAttr(productionUrl)}"`
+      : step.buttonAttr || `data-production-step="${escapeAttr(series.id)}" data-steps="${escapeAttr((step.steps || []).join(','))}"`;
+    return `
+      <article class="production-pipeline-step is-${escapeAttr(step.key)}">
+        <div>
+          <strong>${escapeHtml(step.label)}</strong>
+          <p>${escapeHtml(step.description)}</p>
+        </div>
+        <button class="ghost-btn" type="button" ${action} ${step.disabled ? 'disabled' : ''}>${escapeHtml(step.button)}</button>
+      </article>
+    `;
+  }
   function productionSeriesUrl(series) {
     if (!series?.slug) return '';
     const configuredBase = window.COMIC_READER_CONFIG?.productionBaseUrl || window.COMIC_READER_CONFIG?.publicSiteUrl || '';
@@ -780,6 +1063,59 @@ export function createAdminRoute({
       .replace(/^-+|-+$/g, '');
   }
 
+  async function handleImport(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const status = app.querySelector('[data-status]');
+    const button = form.querySelector('button[type="submit"]');
+    const formData = new FormData(form);
+    const urls = splitList(String(formData.get('url') || '').replace(/\r?\n/g, ','));
+    if (!urls.length) {
+      if (status) {
+        status.className = 'status-line error';
+        status.textContent = 'Vui long nhap URL truyen hop le.';
+      }
+      return;
+    }
+
+    setControlPending(button);
+    if (status) {
+      status.className = 'status-line';
+      status.textContent = urls.length > 1 ? `Dang tao ${urls.length} job crawl...` : 'Dang tao job crawl...';
+    }
+
+    try {
+      const payload = {
+        urls,
+        maxChapters: Number(formData.get('maxChapters') || 0),
+        maxPages: Number(formData.get('maxPages') || 0),
+        publish: true
+      };
+      const result = await fetchJson('/api/admin/import-jobs', {
+        method: 'POST',
+        headers: adminHeaders(),
+        body: JSON.stringify(payload)
+      });
+      const jobs = Array.isArray(result.jobs) ? result.jobs : result.job ? [{ job: result.job, reused: result.reused }] : [];
+      if (!jobs.length) throw new Error('Khong tao duoc job crawl.');
+      if (jobs.length === 1) {
+        const series = await pollImportJob(jobs[0].job.id, status, { navigateOnComplete: false });
+        adminFlashMessage = `Da crawl xong ${series.title || 'truyen'}.`;
+      } else {
+        if (status) status.textContent = `Đã tạo ${jobs.length} job crawl. Theo dõi trong bảng Trạng thái crawl.`;
+        adminFlashMessage = `Đã tạo ${jobs.length} job crawl.`;
+      }
+      invalidateContentCache();
+      await renderAdmin();
+    } catch (error) {
+      if (status) {
+        status.className = 'status-line error';
+        status.textContent = error.message;
+      }
+    } finally {
+      clearControlPending();
+    }
+  }
   async function handleAdminSave(event) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -792,12 +1128,14 @@ export function createAdminRoute({
       aliases: splitList(formData.get('aliases')),
       tags: mergeTagsWithOrigin(splitList(formData.get('tags')), formData.get('originType')),
       description: formData.get('description'),
-      status: formData.get('status'),
-      crawlSchedule: {
+      status: formData.get('status')
+    };
+    if (canRunLocalOperations()) {
+      patch.crawlSchedule = {
         enabled: formData.get('scheduleEnabled') === 'on',
         intervalHours: Number(formData.get('intervalHours') || 24)
-      }
-    };
+      };
+    }
 
     setControlPending(form.querySelector('button[type="submit"]'));
     await fetchJson(`/api/admin/series/${encodeURIComponent(seriesId)}`, {
@@ -894,208 +1232,117 @@ export function createAdminRoute({
     }
   }
 
-  async function handleProductionPublish(event) {
-    event.preventDefault();
-    const button = event.currentTarget;
-    const seriesId = button.dataset.publishProduction;
-    const status = app.querySelector(`[data-production-publish-status="${CSS.escape(seriesId)}"]`);
-    button.disabled = true;
-    button.textContent = 'Đang chạy...';
-    if (status) {
-      status.className = 'status-line admin-wide production-publish-status';
-      status.textContent = 'Đang tạo workflow production...';
-    }
+  function bindProductionPipelineActions() {
+    app.querySelectorAll('[data-update-chapters]').forEach((button) => button.addEventListener('click', handleUpdateChapters));
+    app.querySelectorAll('[data-publish-production]').forEach((button) => button.addEventListener('click', handleProductionPublish));
+    app.querySelectorAll('[data-production-step]').forEach((button) => button.addEventListener('click', handleProductionStep));
+    app.querySelectorAll('[data-production-check]').forEach((button) => button.addEventListener('click', handleProductionCheck));
+  }
 
+  async function handleProductionPublish(event) {
+    await runProductionPipelineJob(event.currentTarget, {
+      seriesId: event.currentTarget.dataset.publishProduction,
+      steps: []
+    });
+  }
+
+  async function handleProductionStep(event) {
+    const button = event.currentTarget;
+    const steps = String(button.dataset.steps || '')
+      .split(',')
+      .map((step) => step.trim())
+      .filter(Boolean);
+    await runProductionPipelineJob(button, {
+      seriesId: button.dataset.productionStep,
+      steps
+    });
+  }
+
+  async function runProductionPipelineJob(button, { seriesId, steps = [] } = {}) {
+    const status = app.querySelector(`[data-production-publish-status="${CSS.escape(seriesId)}"]`);
+    const originalText = button.textContent;
+    button.disabled = true;
+    button.textContent = steps.length ? 'Dang chay buoc...' : 'Dang chay pipeline...';
     try {
+      if (status) {
+        status.className = 'status-line admin-wide production-publish-status';
+        status.textContent = steps.length ? 'Dang tao job cho buoc da chon...' : 'Dang tao workflow production...';
+      }
       const result = await fetchJson(`/api/admin/series/${encodeURIComponent(seriesId)}/publish-production`, {
         method: 'POST',
         headers: adminHeaders(),
-        body: JSON.stringify({})
+        body: JSON.stringify({ steps })
       });
-      if (result.reused && status) status.textContent = 'Workflow của truyện này đang chạy, đang theo dõi job hiện tại...';
+      if (result.reused && status) {
+        status.textContent = 'Dang dung lai job production dang chay cho buoc nay...';
+      }
       const job = await pollProductionJob(result.job.id, status);
       if (status) renderProductionProgress(status, job);
-      invalidateContentCache();
-      button.textContent = 'Sync lại production';
+      if (job.status === 'completed') button.textContent = steps.length ? 'Chay lai buoc nay' : 'Sync lai production';
     } catch (error) {
       if (status) {
         status.className = 'status-line admin-wide production-publish-status error';
         status.textContent = error.message;
       }
-      button.textContent = 'Chạy workflow';
+      button.textContent = originalText;
     } finally {
       button.disabled = false;
     }
   }
 
-  async function handleAdminBulletinSubmit(event) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const status = app.querySelector('[data-admin-bulletin-status]');
-    const button = form.querySelector('button[type="submit"]');
-    const formData = new FormData(form);
-    button.disabled = true;
-    if (status) {
-      status.className = 'status-line';
-      status.textContent = 'Đang gửi tin admin...';
-    }
-    try {
-      await fetchJson('/api/admin/bulletin/messages', {
-        method: 'POST',
-        headers: adminHeaders(),
-        body: JSON.stringify({
-          text: formData.get('text'),
-          pinned: formData.get('pinned') === 'on'
-        })
-      });
-      adminFlashMessage = 'Đã gửi tin lên bảng tin.';
-      await renderAdmin();
-    } catch (error) {
-      if (status) {
-        status.className = 'status-line error';
-        status.textContent = error.message;
-      }
-    } finally {
-      button.disabled = false;
-    }
-  }
-
-  async function handleAdminBulletinPin(event) {
-    event.preventDefault();
+  async function handleProductionCheck(event) {
     const button = event.currentTarget;
-    const status = app.querySelector('[data-admin-bulletin-status]');
-    const id = button.dataset.adminBulletinPin;
-    const pinned = button.dataset.pinned !== 'true';
+    const seriesId = button.dataset.productionCheck;
+    const url = button.dataset.productionUrl || '';
+    const status = app.querySelector(`[data-production-publish-status="${CSS.escape(seriesId)}"]`);
+    const originalText = button.textContent;
     button.disabled = true;
-    if (status) {
-      status.className = 'status-line';
-      status.textContent = pinned ? 'Đang ghim tin...' : 'Đang bỏ ghim...';
-    }
+    button.textContent = 'Dang check...';
     try {
-      await fetchJson(`/api/admin/bulletin/messages/${encodeURIComponent(id)}`, {
-        method: 'PATCH',
-        headers: adminHeaders(),
-        body: JSON.stringify({ pinned })
-      });
-      adminFlashMessage = pinned ? 'Đã ghim tin admin.' : 'Đã bỏ ghim tin admin.';
-      await renderAdmin();
-    } catch (error) {
+      if (!url) throw new Error('Truyen chua co production URL de kiem tra.');
       if (status) {
-        status.className = 'status-line error';
-        status.textContent = error.message;
+        status.className = 'status-line admin-wide production-publish-status';
+        status.textContent = 'Dang kiem tra production URL...';
       }
-    } finally {
-      button.disabled = false;
-    }
-  }
-
-  async function handleImport(event) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const status = app.querySelector('[data-status]');
-    const button = form.querySelector('button[type="submit"]');
-    const formData = new FormData(form);
-    const urls = parseImportUrls(formData.get('url'));
-    status.className = 'status-line';
-    status.textContent = urls.length > 1 ? `Đang tạo ${urls.length} job crawl...` : 'Đang tạo job crawl...';
-    button.disabled = true;
-    button.textContent = 'Đang tạo job';
-  
-    try {
-      if (!urls.length) throw new Error('Vui lòng nhập ít nhất 1 URL truyện.');
-      const result = await fetchJson('/api/admin/import-jobs', {
+      const result = await fetchJson('/api/admin/production-check', {
         method: 'POST',
         headers: adminHeaders(),
-        body: JSON.stringify({
-          url: urls.join('\n'),
-          urls,
-          maxChapters: Number(formData.get('maxChapters')),
-          maxPages: Number(formData.get('maxPages'))
-        })
+        body: JSON.stringify({ url })
       });
-      const jobs = normalizeJobResults(result);
-      if (jobs.length === 1) {
-        if (jobs[0].reused) status.textContent = 'URL này đang có job chạy, đang theo dõi job cũ...';
-        await pollImportJob(jobs[0].job.id, status, { navigateOnComplete: true });
-        return;
+      if (!result.ok) throw new Error(result.error || `Production tra ve HTTP ${result.status || '?'}.`);
+      if (status) {
+        status.className = 'status-line admin-wide production-publish-status success';
+        status.innerHTML = `Production OK (${Number(result.status || 200)}): <a href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(url)}</a>`;
       }
-      renderImportBatch(status, jobs);
-      const settled = await Promise.allSettled(jobs.map(({ job }) => pollImportJob(
-        job.id,
-        status.querySelector(`[data-job-status="${CSS.escape(job.id)}"]`),
-        { navigateOnComplete: false }
-      )));
-      const failed = settled.filter((item) => item.status === 'rejected');
-      if (failed.length) {
-        status.classList.add('error');
-        const summary = status.querySelector('[data-batch-summary]');
-        if (summary) summary.textContent = `Hoàn tất ${jobs.length - failed.length}/${jobs.length} job, ${failed.length} job lỗi.`;
-        return;
-      }
-      await loadCatalog();
-      invalidateContentCache();
-      const summary = status.querySelector('[data-batch-summary]');
-      if (summary) summary.textContent = `Đã crawl xong ${jobs.length}/${jobs.length} URL. Vào CMS hoặc trang chủ để đọc.`;
+      window.open(url, '_blank', 'noopener,noreferrer');
     } catch (error) {
-      status.className = 'status-line error';
-      status.textContent = error.message;
+      if (status) {
+        status.className = 'status-line admin-wide production-publish-status error';
+        status.textContent = `Check production loi: ${error.message}`;
+      }
     } finally {
       button.disabled = false;
-      button.textContent = 'Crawl';
+      button.textContent = originalText;
     }
   }
 
-  function parseImportUrls(value) {
-    const urls = String(value || '').match(/https?:\/\/[^\s,]+/gi) || [];
-    return [
-      ...new Set(
-        urls
-          .map((url) => url.trim())
-          .filter(Boolean)
-      )
-    ];
-  }
-
-  function normalizeJobResults(result) {
-    if (Array.isArray(result.jobs)) return result.jobs;
-    if (result.job) return [{ job: result.job, reused: Boolean(result.reused) }];
-    return [];
-  }
-
-  function renderImportBatch(status, jobs) {
-    const reusedCount = jobs.filter((item) => item.reused).length;
-    status.className = 'status-line batch-status';
-    status.innerHTML = `
-      <div class="batch-summary" data-batch-summary>
-        Đang theo dõi ${jobs.length} job${reusedCount ? `, ${reusedCount} job đã có sẵn` : ''}.
-      </div>
-      <div class="batch-progress-list">
-        ${jobs.map(({ job, reused }) => `
-          <article class="batch-progress-card">
-            <div class="batch-url">${escapeHtml(job.payload?.url || job.id)}</div>
-            <div class="muted">${reused ? 'Reuse job đang chạy' : 'Job mới'}</div>
-            <div data-job-status="${escapeAttr(job.id)}"></div>
-          </article>
-        `).join('')}
-      </div>
-    `;
-  }
-
-  async function pollImportJob(jobId, status, { navigateOnComplete = true } = {}) {
+  async function pollImportJob(jobId, status, { navigateOnComplete = false } = {}) {
     while (true) {
       const job = await fetchJson(`/api/admin/import-jobs/${encodeURIComponent(jobId)}`, {
         headers: adminHeaders()
       });
       renderImportProgress(status, job);
       if (job.status === 'completed') {
-        invalidateContentCache();
-        await loadCatalog();
-        await new Promise((resolve) => setTimeout(resolve, 650));
-        if (navigateOnComplete) location.hash = `#/read/${encodeURIComponent(job.series.id)}`;
-        return job.series;
+        const series = job.result?.series || job.series || job.result || {};
+        if (navigateOnComplete && series?.id) {
+          window.location.href = `/admin/series/${encodeURIComponent(series.id)}`;
+        }
+        return series;
       }
-      if (job.status === 'failed') throw new Error(job.error || job.progress?.message || 'Import thất bại.');
-      await new Promise((resolve) => setTimeout(resolve, 900));
+      if (job.status === 'failed') {
+        throw new Error(job.error || job.lastError || 'Import job failed.');
+      }
+      await delay(1500);
     }
   }
 
@@ -1177,7 +1424,7 @@ export function createAdminRoute({
     if (status === 'completed') return '✓';
     if (status === 'running') return '…';
     if (status === 'failed') return '!';
-    return '○';
+    return 'â—‹';
   }
 
   function formatCrawlDuration(seconds) {
@@ -1196,6 +1443,10 @@ export function createAdminRoute({
     const rate = Number(value || 0);
     if (!rate) return `0 ${suffix}`;
     return `${rate.toLocaleString('vi-VN', { maximumFractionDigits: 1 })} ${suffix}`;
+  }
+
+  function delay(ms) {
+    return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms || 0))));
   }
 
   function renderImportProgress(status, job) {

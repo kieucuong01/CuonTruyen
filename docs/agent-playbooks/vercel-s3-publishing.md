@@ -1,6 +1,9 @@
 # Vercel + Vietnix S3 Publishing
 
-This project can run public traffic without a public Node backend by exporting public catalog data to static JSON and serving comic images from S3-compatible object storage.
+This project can run public traffic with a lightweight Vercel Node API backed by
+Supabase Postgres, while still serving comic images from S3-compatible object
+storage. Static API export remains useful as a fallback/cache path, but
+production admin/content edits should use the live API.
 
 ## Target Architecture
 
@@ -16,10 +19,14 @@ Vietnix S3 Object Storage
 - /static-api/* public JSON payloads
 
 Vercel
-- Static frontend from public/
+- Frontend from public/
+- Lightweight `/api/*` Node functions for public reads and admin content edits
 - No crawler
 - No image storage
 - Production deploys from GitHub when `main` is pushed
+
+Supabase Postgres
+- Catalog, chapters, users/admin-backed sessions, bulletin messages, analytics events
 ```
 
 ## Current Live Defaults
@@ -129,21 +136,53 @@ node scripts/sync-vietnix-s3.mjs --images-only --series-id <series-id> --apply -
 node scripts/sync-vietnix-s3.mjs --static-api-only --apply --force
 ```
 
-Use `npm run sync:s3:force` only when you intentionally want to re-upload everything. Full image sync can take a long time because the current image library is tens of thousands of files.
+The S3 script refuses full image sync unless a series id, `--retry-failed`, or
+explicit `--all` is provided. This prevents accidentally rechecking hundreds of
+thousands of images.
+
+Retry only files recorded as failed in the latest S3 status:
+
+```powershell
+npm run sync:s3:retry-failed
+```
+
+Use `--all` only when you intentionally want to re-upload or recheck everything:
+
+```powershell
+node scripts/sync-vietnix-s3.mjs --apply --all
+```
+
+Full image sync can take a long time because the current image library is tens
+of thousands of files.
+
+If a failed item contains `RequestTimeTooSkewed`, sync the Windows clock first,
+then retry failed files:
+
+```powershell
+w32tm /resync
+npm run sync:s3:retry-failed
+```
 
 Dry-run is the safe default for `scripts/sync-vietnix-s3.mjs`. Use `npm run sync:s3` only after the dry-run count looks reasonable.
 
-If only images or static JSON changed, S3 sync is enough; no Vercel deploy is
-needed unless frontend code also changed.
+If production uses live Supabase API, make sure the local crawler writes to the
+same `DATABASE_URL` as Vercel. Then admin/public catalog edits appear through the
+Vercel API without waiting for static API export. S3 sync is still required for
+new images.
 
 ## Vercel Environment
 
 Set these in Vercel:
 
 ```text
-STATIC_API_MODE=true
-STATIC_API_BASE_URL=https://img.example.com/static-api
-API_BASE_URL=
+DATABASE_URL=<Supabase pooler connection string>
+POSTGRES_SSL_REJECT_UNAUTHORIZED=false
+ADMIN_EMAIL=<admin email>
+ADMIN_PASSWORD=<admin password>
+ADMIN_TOKEN=<strong random token>
+STATIC_API_MODE=false
+API_BASE_URL=https://cuontruyen.vercel.app
+PUBLIC_IMPORTS_BASE_URL=https://img.example.com
 ```
 
 The Vercel build command is:
@@ -160,10 +199,13 @@ public
 
 ## Operational Notes
 
-- Admin/crawl still happens locally at `http://localhost:54533/#/admin`.
-- The public Vercel site does not show newly crawled chapters until `export:static-api` and `sync:s3` run.
+- Admin content management is available on production `/admin`.
+- Crawl, optimize, and S3 sync still happen locally at `http://localhost:54533/admin`.
+- The production admin hides crawl, optimize, S3 sync, and production pipeline controls unless `ENABLE_LOCAL_CRAWLER_UI=true` is explicitly set.
+- If production uses live Supabase API, newly crawled catalog changes appear after the local crawler writes to Supabase and images are synced to S3.
+- If production is forced back to static API mode, the public Vercel site does not show newly crawled chapters until `export:static-api` and `sync:s3` run.
 - If images are missing on Vercel, check `PUBLIC_IMPORTS_BASE_URL` during `export:static-api`.
 - If data is stale, check `STATIC_API_BASE_URL` and S3 cache headers.
-- If admin is needed from Vercel, expose a real backend API and set `API_BASE_URL`; otherwise keep admin local only.
+- If admin fails on Vercel, check the serverless `/api/admin/session` route, `DATABASE_URL`, admin env vars, and `API_BASE_URL`.
 - Do not upload `data/imports/` to Vercel. `.vercelignore` excludes it.
 - Do not commit `.vercel/project.json`; `.gitignore` excludes `.vercel/`.

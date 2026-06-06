@@ -6,6 +6,7 @@ import {
   buildReaderChapterPayload,
   buildHomeCollections,
   buildTagIndex,
+  buildTagPage,
   findChapterBySlug,
   findSeriesBySlug,
   normalizeSeries,
@@ -122,7 +123,17 @@ test('builds SEO discovery collections and tag index from public content only', 
   assert.deepEqual(home.hot.map((series) => series.slug), ['manh-nhat-lich-su']);
   assert.equal(home.hot[0].chapters[0].pages, undefined);
   assert.equal(home.hot[0].pageCount, 3);
-  assert.deepEqual(tags.map((tag) => tag.slug), ['action', 'manhua']);
+  assert.deepEqual(tags.map((tag) => tag.slug), ['action', 'manhua', 'truyen-trung']);
+  assert.equal(tags.find((tag) => tag.slug === 'truyen-trung').seriesCount, 1);
+});
+
+test('buildTagPage resolves Manhua/Manhwa origin aliases for SEO landing pages', () => {
+  const manhuaPage = buildTagPage(catalog, 'truyen-trung');
+  const manhwaPage = buildTagPage(catalog, 'truyen-han');
+
+  assert.equal(manhuaPage.tag.name, 'Truyện Trung');
+  assert.deepEqual(manhuaPage.series.map((series) => series.slug), ['manh-nhat-lich-su']);
+  assert.equal(manhwaPage, null);
 });
 
 test('public series detail returns chapter summaries without page arrays', () => {

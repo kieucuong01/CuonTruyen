@@ -8,12 +8,14 @@ const MAX_LOG_LINES = 80;
 const MAX_LOG_TEXT = 24_000;
 const jobs = new Map();
 
-export function createProductionPublishJob({ seriesId, seriesSlug = '', title = '' } = {}) {
+export function createProductionPublishJob({ seriesId, seriesSlug = '', title = '', steps = [] } = {}) {
   const normalizedSeriesId = String(seriesId || '').trim();
   if (!normalizedSeriesId) throw new Error('Series id is required.');
 
+  const requestedSteps = normalizeRequestedSteps(steps);
   const runningJob = [...jobs.values()].find((job) => (
     job.seriesId === normalizedSeriesId
+    && sameStepSet(job.requestedSteps, requestedSteps)
     && ['queued', 'running'].includes(job.status)
   ));
   if (runningJob) return { job: publicJob(runningJob), reused: true };
@@ -30,7 +32,8 @@ export function createProductionPublishJob({ seriesId, seriesSlug = '', title = 
     finishedAt: '',
     error: '',
     logs: [],
-    steps: buildSteps(normalizedSeriesId),
+    requestedSteps,
+    steps: buildProductionPublishSteps(normalizedSeriesId, { requestedSteps }),
     result: {}
   };
   jobs.set(job.id, job);
@@ -43,31 +46,15 @@ export function getProductionPublishJob(id) {
   return job ? publicJob(job) : null;
 }
 
-function buildSteps(seriesId) {
-  return [
+export function buildProductionPublishSteps(seriesId, { requestedSteps = [] } = {}) {
+  const includeDeepMaintenance = String(process.env.PRODUCTION_PUBLISH_DEEP_MAINTENANCE || '').toLowerCase() === 'true';
+  const optimizeLimit = String(process.env.PRODUCTION_PUBLISH_OPTIMIZE_LIMIT || '800');
+  const allSteps = [
     {
       key: 'optimize',
-      label: 'Tối ưu ảnh của truyện này',
-      description: 'Nén JPG/PNG sang bản WebP khi tiết kiệm đủ dung lượng.',
-      command: [process.execPath, 'scripts/optimize-import-images.mjs', '--catalog-only', '--series-id', seriesId, '--all', '--apply', '--cleanup-originals', '--json']
-    },
-    {
-      key: 'relink',
-      label: 'Relink ảnh đã tối ưu',
-      description: 'Cập nhật catalog trỏ sang file WebP đã có và dọn file gốc an toàn.',
-      command: [process.execPath, 'scripts/relink-existing-optimized-images.mjs', '--series-id', seriesId, '--apply', '--cleanup-originals']
-    },
-    {
-      key: 'cleanup',
-      label: 'Dọn ảnh thừa của truyện',
-      description: 'Xóa ảnh local không còn được catalog tham chiếu trong thư mục truyện.',
-      command: [process.execPath, 'scripts/cleanup-unreferenced-import-images.mjs', '--series-id', seriesId, '--apply']
-    },
-    {
-      key: 'export-static-api',
-      label: 'Export static API',
-      description: 'Sinh lại JSON public để Vercel đọc dữ liệu mới.',
-      command: [process.execPath, 'scripts/export-static-api.mjs']
+      label: 'Tối ưu ảnh nhanh',
+      description: 'Fast publish: chỉ tối ưu một lô ảnh lớn/chưa tối ưu để tránh kẹt job quá lâu.',
+      command: [process.execPath, 'scripts/optimize-import-images.mjs', '--catalog-only', '--series-id', seriesId, '--limit', optimizeLimit, '--apply', '--json']
     },
     {
       key: 'sync-images',
@@ -77,13 +64,40 @@ function buildSteps(seriesId) {
       s3Step: true
     },
     {
+      key: 'export-static-api',
+      label: 'Export static API',
+      description: 'Sinh lại JSON public để Vercel đọc dữ liệu mới.',
+      command: [process.execPath, 'scripts/export-static-api.mjs']
+    },
+    {
       key: 'sync-static-api',
       label: 'Sync static API lên S3',
       description: 'Đẩy JSON public mới lên Vietnix S3 để production cập nhật.',
       command: [process.execPath, 'scripts/sync-vietnix-s3.mjs', '--static-api-only', '--apply'],
       s3Step: true
     }
-  ].map((step) => ({
+  ];
+
+  if (includeDeepMaintenance) {
+    allSteps.splice(1, 0,
+      {
+        key: 'relink',
+        label: 'Relink anh da toi uu',
+        description: 'Deep maintenance: cap nhat catalog tro sang WebP da co va don file goc.',
+        command: [process.execPath, 'scripts/relink-existing-optimized-images.mjs', '--series-id', seriesId, '--apply', '--cleanup-originals']
+      },
+      {
+        key: 'cleanup',
+        label: 'Don anh thua cua truyen',
+        description: 'Deep maintenance: xoa anh local khong con duoc catalog tham chieu.',
+        command: [process.execPath, 'scripts/cleanup-unreferenced-import-images.mjs', '--series-id', seriesId, '--apply']
+      }
+    );
+  }
+
+  const wanted = new Set(requestedSteps.length ? requestedSteps : ['optimize', 'export-static-api', 'sync-images', 'sync-static-api']);
+  const steps = allSteps.filter((step) => wanted.has(step.key));
+  return steps.map((step) => ({
     ...step,
     status: 'pending',
     startedAt: '',
@@ -94,6 +108,18 @@ function buildSteps(seriesId) {
   }));
 }
 
+function normalizeRequestedSteps(steps = []) {
+  const allowed = new Set(['optimize', 'relink', 'cleanup', 'export-static-api', 'sync-images', 'sync-static-api']);
+  return [...new Set((Array.isArray(steps) ? steps : [])
+    .map((step) => String(step || '').trim())
+    .filter((step) => allowed.has(step)))];
+}
+
+function sameStepSet(left = [], right = []) {
+  if (left.length !== right.length) return false;
+  const leftSet = new Set(left);
+  return right.every((step) => leftSet.has(step));
+}
 async function runProductionPublishJob(job) {
   job.status = 'running';
   touch(job);
@@ -148,7 +174,9 @@ function runCommand(command, { s3Step = false, onOutput = null } = {}) {
         NODE_TLS_REJECT_UNAUTHORIZED: process.env.NODE_TLS_REJECT_UNAUTHORIZED || '0',
         S3_SYNC_CONCURRENCY: process.env.S3_SYNC_CONCURRENCY || process.env.VIETNIX_S3_SYNC_CONCURRENCY || '6',
         S3_SYNC_RETRY_CONCURRENCY: process.env.S3_SYNC_RETRY_CONCURRENCY || process.env.VIETNIX_S3_SYNC_RETRY_CONCURRENCY || '2',
-        S3_SYNC_RETRY_ROUNDS: process.env.S3_SYNC_RETRY_ROUNDS || process.env.VIETNIX_S3_SYNC_RETRY_ROUNDS || '3'
+        S3_SYNC_RETRY_ROUNDS: process.env.S3_SYNC_RETRY_ROUNDS || process.env.VIETNIX_S3_SYNC_RETRY_ROUNDS || '3',
+        S3_SYNC_STATE_SAVE_EVERY: process.env.S3_SYNC_STATE_SAVE_EVERY || process.env.VIETNIX_S3_SYNC_STATE_SAVE_EVERY || '100',
+        S3_SYNC_STATE_SAVE_INTERVAL_MS: process.env.S3_SYNC_STATE_SAVE_INTERVAL_MS || process.env.VIETNIX_S3_SYNC_STATE_SAVE_INTERVAL_MS || '10000'
       } : {})
     };
     const child = spawn(bin, args, {
@@ -187,7 +215,7 @@ function handleStepOutput(job, step, text) {
 }
 
 function parseS3ProgressLine(line) {
-  const progress = String(line || '').match(/^\[s3-sync\]\s+(progress|done)\s+checked=(\d+)\/(\d+)\s+uploaded=(\d+)\s+skipped=(\d+)(?:\s+cached=(\d+))?(?:\s+failed=(\d+))?\s+rate=([\d.]+)\s+files\/min\s+eta=([^\s]+)\s+concurrency=(\d+)/);
+  const progress = String(line || '').match(/^\[s3-sync\]\s+(progress|done)\s+checked=(\d+)\/(\d+)\s+uploaded=(\d+)\s+skipped=(\d+)(?:\s+cached=(\d+))?(?:\s+failed=(\d+))?\s+rate=([\d.]+)\s+files\/min\s+eta=([^\s]+)\s+concurrency=(\d+)(?:\s+attempts=(\d+))?(?:\s+recovered=(\d+))?(?:\s+retryRound=(\d+))?/);
   if (progress) {
     return {
       phase: progress[1],
@@ -199,10 +227,13 @@ function parseS3ProgressLine(line) {
       failed: Number(progress[7] || 0),
       ratePerMinute: Number(progress[8]),
       eta: progress[9],
-      concurrency: Number(progress[10])
+      concurrency: Number(progress[10]),
+      failedAttempts: Number(progress[11] || 0),
+      recovered: Number(progress[12] || 0),
+      retryRound: Number(progress[13] || 0)
     };
   }
-  const start = String(line || '').match(/^\[s3-sync\]\s+(\S+)\s+(\d+)\s+files\b.*\bconcurrency=(\d+)/);
+  const start = String(line || '').match(/^\[s3-sync\]\s+(\S+)\s+(\d+)\s+files\b.*\bconcurrency=(\d+)(?:\s+retryRounds=(\d+))?(?:\s+retryConcurrency=(\d+))?/);
   if (!start) return null;
   return {
     phase: start[1],
@@ -210,9 +241,15 @@ function parseS3ProgressLine(line) {
     total: Number(start[2]),
     uploaded: 0,
     skipped: 0,
+    cached: 0,
+    failed: 0,
+    failedAttempts: 0,
+    recovered: 0,
     ratePerMinute: 0,
     eta: 'dang-tinh',
-    concurrency: Number(start[3])
+    concurrency: Number(start[3]),
+    retryRounds: Number(start[4] || 0),
+    retryConcurrency: Number(start[5] || 0)
   };
 }
 
@@ -242,6 +279,7 @@ function publicJob(job) {
     error: job.error,
     logs: job.logs,
     steps: job.steps.map(({ command, s3Step, ...step }) => step),
+    requestedSteps: job.requestedSteps || [],
     result: job.result
   };
 }

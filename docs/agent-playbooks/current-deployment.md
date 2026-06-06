@@ -2,7 +2,7 @@
 
 This file records the current production-ish setup so future developers and AI agents do not have to rediscover it.
 
-## Public Frontend
+## Public Frontend And Admin API
 
 Vercel project:
 
@@ -44,10 +44,21 @@ npx vercel@latest deploy --prod --yes --archive=tgz
 Production environment variables on Vercel:
 
 ```text
-STATIC_API_MODE=true
-STATIC_API_BASE_URL=https://s3.vn-hcm-1.vietnix.cloud/cuontruyen/static-api
+DATABASE_URL=<Supabase pooler connection string>
+POSTGRES_SSL_REJECT_UNAUTHORIZED=false
+ADMIN_EMAIL=<admin email>
+ADMIN_PASSWORD=<admin password>
+ADMIN_TOKEN=<strong random token>
+STATIC_API_MODE=false
+API_BASE_URL=https://cuontruyen.vercel.app
 PUBLIC_SITE_URL=https://cuontruyen.vercel.app
+PUBLIC_IMPORTS_BASE_URL=https://s3.vn-hcm-1.vietnix.cloud/cuontruyen
 ```
+
+When `DATABASE_URL` or `POSTGRES_URL` exists on Vercel, the build writes
+`staticApiMode=false` unless `FORCE_STATIC_API_MODE=true` is explicitly set.
+This lets the public site and production admin use live Vercel API routes backed
+by Supabase Postgres.
 
 ## Public Storage
 
@@ -82,6 +93,23 @@ https://s3.vn-hcm-1.vietnix.cloud/cuontruyen/static-api/home.json
 https://s3.vn-hcm-1.vietnix.cloud/cuontruyen/static-api/series.json
 https://s3.vn-hcm-1.vietnix.cloud/cuontruyen/imports/<seriesId>/<chapterId>/<image>
 ```
+
+## Production Admin Mode
+
+Production `/admin` is enabled, but it is content-only:
+
+```text
+Allowed: login, catalog, metadata edits, series status, chapter status, events.
+Hidden: crawl, update chapters, optimize images, sync S3, production pipeline.
+```
+
+The heavy controls only show on localhost/private LAN hosts or when:
+
+```text
+ENABLE_LOCAL_CRAWLER_UI=true
+```
+
+Do not enable heavy crawler UI on Vercel production.
 
 ## Local Runtime
 
@@ -137,8 +165,10 @@ npm run sync:s3:dry-run
 npm run sync:s3
 ```
 
-If only images/static JSON changed and frontend code did not change, a Vercel
-redeploy is usually not required. The browser reads S3 JSON directly.
+If production uses live Supabase API, the most important publish step is syncing
+images to S3 after the local crawler has written catalog changes to the same
+Supabase database. Static API export/sync can still be used as fallback/cache,
+but Vercel no longer needs it for admin edits to appear.
 
 If frontend code changed, commit and push to `main`; Vercel deploys production
 from Git automatically.
@@ -146,6 +176,8 @@ from Git automatically.
 ## Known Operational Notes
 
 - Full image sync can take a long time because the library has tens of thousands of image files.
+- S3 image sync is fail-safe by default: normal image publish must pass `--series-id <series-id>`, retry failed files uses `--retry-failed`, and full image sync requires explicit `--all`.
+- If Vietnix S3 returns `RequestTimeTooSkewed`, sync the Windows clock (`w32tm /resync`) and use the admin "Retry file thiếu" button or `npm run sync:s3:retry-failed`.
 - `S3_ACL=public-read` is needed for objects to be readable through the current S3 public URL.
 - `.vercelignore` must keep `data/`, `logs/`, `.runtime/`, and local env files out of deploy uploads.
 - Custom domain `img.cuontruyen.com` is not configured yet. If added, update `PUBLIC_IMPORTS_BASE_URL`, `S3_PUBLIC_BASE_URL`, and `STATIC_API_BASE_URL`.

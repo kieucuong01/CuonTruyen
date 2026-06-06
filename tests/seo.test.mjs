@@ -2,12 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  buildRobotsTxt,
   buildSitemapXml,
   chapterJsonLd,
   renderHtmlShell,
   renderNotFoundShell,
   renderStaticPageShell,
-  seriesJsonLd
+  seriesJsonLd,
+  tagPageJsonLd
 } from '../server/seo.mjs';
 
 const series = {
@@ -53,13 +55,35 @@ test('chapterJsonLd links chapter to the parent series', () => {
 });
 
 test('buildSitemapXml includes series, chapter, and tag URLs', () => {
-  const xml = buildSitemapXml([series], [{ slug: 'manhua' }], 'https://example.com');
+  const xml = buildSitemapXml([series], [{ slug: 'manhua', seriesCount: 1 }, { slug: 'empty', seriesCount: 0 }], 'https://example.com');
 
   assert.match(xml, /<loc>https:\/\/example.com\/gioi-thieu<\/loc>/);
   assert.match(xml, /<loc>https:\/\/example.com\/truyen\/manh-nhat-lich-su<\/loc>/);
   assert.match(xml, /<loc>https:\/\/example.com\/truyen\/manh-nhat-lich-su\/chapter-1<\/loc>/);
   assert.doesNotMatch(xml, /chapter-2/);
   assert.match(xml, /<loc>https:\/\/example.com\/the-loai\/manhua<\/loc>/);
+  assert.doesNotMatch(xml, /\/the-loai\/empty/);
+});
+
+test('buildRobotsTxt allows public pages but blocks admin and JSON surfaces', () => {
+  const robots = buildRobotsTxt('https://example.com');
+
+  assert.match(robots, /Allow: \//);
+  assert.match(robots, /Disallow: \/admin/);
+  assert.match(robots, /Disallow: \/api\//);
+  assert.match(robots, /Disallow: \/static-api\//);
+  assert.match(robots, /Sitemap: https:\/\/example.com\/sitemap\.xml/);
+});
+
+test('tagPageJsonLd emits a crawlable collection page payload', () => {
+  const payload = tagPageJsonLd({
+    tag: { name: 'Truyện Manhua', slug: 'manhua' },
+    series: [series]
+  }, 'https://example.com');
+
+  assert.equal(payload['@type'], 'CollectionPage');
+  assert.equal(payload.url, 'https://example.com/the-loai/manhua');
+  assert.equal(payload.mainEntity.itemListElement[0].url, 'https://example.com/truyen/manh-nhat-lich-su');
 });
 
 test('renderStaticPageShell emits crawlable static policy pages', () => {

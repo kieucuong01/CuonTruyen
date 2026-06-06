@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { readCatalog } from '../server/dataStore.mjs';
 
@@ -233,7 +234,11 @@ async function putObject(client, item) {
   });
   if (!response.ok) {
     const text = await response.text().catch(() => '');
-    throw new Error(`PUT ${item.key} failed ${response.status}${text ? `: ${text.slice(0, 300)}` : ''}`);
+    const error = new Error(`PUT ${item.key} failed ${response.status}${text ? `: ${text.slice(0, 300)}` : ''}`);
+    error.status = response.status;
+    error.responseText = text;
+    error.retryable = isRetryableS3Failure({ status: response.status, text });
+    throw error;
   }
 }
 
@@ -285,7 +290,7 @@ async function mapUploadItems() {
 async function collectCatalogImageFiles(importRoot, seriesId = '') {
   const catalog = await readCatalog();
   const root = path.resolve(importRoot);
-  const files = new Set();
+  const candidates = new Set();
   const wantedSeriesId = String(seriesId || '').trim();
   for (const series of catalog.series || []) {
     if (wantedSeriesId && series.id !== wantedSeriesId && series.slug !== wantedSeriesId) continue;
@@ -297,15 +302,20 @@ async function collectCatalogImageFiles(importRoot, seriesId = '') {
           if (wantedSeriesId && !relative.startsWith(`${wantedSeriesId}/`)) continue;
           const filePath = path.resolve(root, ...relative.split('/').map((part) => decodeURIComponent(part)));
           if (!isInsideDirectory(filePath, root)) continue;
-          try {
-            const stat = await fs.stat(filePath);
-            if (stat.isFile() && IMAGE_EXTENSIONS.has(path.extname(filePath).toLowerCase())) files.add(filePath);
-          } catch {}
+          if (IMAGE_EXTENSIONS.has(path.extname(filePath).toLowerCase())) candidates.add(filePath);
         }
       }
     }
   }
-  return [...files].sort((a, b) => a.localeCompare(b));
+  const files = [];
+  const statConcurrency = Math.max(1, Number(env('S3_CATALOG_STAT_CONCURRENCY', 'VIETNIX_S3_CATALOG_STAT_CONCURRENCY') || 64));
+  await runConcurrent([...candidates].sort((a, b) => a.localeCompare(b)), statConcurrency, async (filePath) => {
+    try {
+      const stat = await fs.stat(filePath);
+      if (stat.isFile()) files.push(filePath);
+    } catch {}
+  });
+  return files.sort((a, b) => a.localeCompare(b));
 }
 
 function importRelativePath(value = '') {
@@ -439,18 +449,31 @@ async function main() {
   const apply = arg('--apply');
   const force = arg('--force');
   const seriesId = argValue('--series-id', '').trim();
+  const retryFailed = arg('--retry-failed');
+  const allowFull = arg('--all') || ['1', 'true', 'yes', 'on'].includes(String(env('S3_SYNC_ALLOW_FULL', 'VIETNIX_S3_SYNC_ALLOW_FULL') || '').toLowerCase());
+  const includesImages = !arg('--static-api-only');
   const concurrency = Math.max(1, Number(env('S3_SYNC_CONCURRENCY', 'VIETNIX_S3_SYNC_CONCURRENCY') || 8));
   const useState = !arg('--no-state') && String(env('S3_SYNC_STATE', 'VIETNIX_S3_SYNC_STATE') || '1').toLowerCase() !== '0';
   const stateFile = path.resolve(argValue('--state-file', env('S3_SYNC_STATE_FILE', 'VIETNIX_S3_SYNC_STATE_FILE') || DEFAULT_SYNC_STATE_PATH));
   const statusFile = path.resolve(argValue('--status-file', env('S3_SYNC_STATUS_FILE', 'VIETNIX_S3_SYNC_STATUS_FILE') || DEFAULT_SYNC_STATUS_PATH));
+  const stateSaveEvery = Math.max(1, Number(env('S3_SYNC_STATE_SAVE_EVERY', 'VIETNIX_S3_SYNC_STATE_SAVE_EVERY') || 200));
+  const stateSaveIntervalMs = Math.max(1000, Number(env('S3_SYNC_STATE_SAVE_INTERVAL_MS', 'VIETNIX_S3_SYNC_STATE_SAVE_INTERVAL_MS') || 15000));
 
   if (!endpoint || !bucket || !accessKeyId || !secretAccessKey) {
     throw new Error('Missing S3 config. Required: S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY.');
+  }
+  if (shouldRefuseFullImageSync({ includesImages, seriesId, allowFull, retryFailed })) {
+    throw new Error('Refusing full image S3 sync without --series-id. Use --series-id <series-id> for normal publish, --retry-failed to retry missing files, or --all / S3_SYNC_ALLOW_FULL=true when you intentionally want a full image sync.');
   }
 
   const client = { endpoint, bucket, region, accessKeyId, secretAccessKey, pathStyle };
   const syncState = useState ? await loadSyncState(stateFile) : {};
   let items = await mapUploadItems();
+  if (retryFailed) {
+    const failedKeys = await loadFailedKeysFromStatus(statusFile);
+    items = items.filter((item) => failedKeys.has(item.key));
+    if (!items.length) throw new Error('No failed S3 files found to retry. Check .runtime/s3-sync-status.json first.');
+  }
   const limit = Number(argValue('--limit', 0));
   if (limit > 0) items = items.slice(0, limit);
   let uploaded = 0;
@@ -462,6 +485,8 @@ async function main() {
   const startedAt = Date.now();
   let lastProgressAt = 0;
   let currentItem = null;
+  let stateDirtyCount = 0;
+  let lastStateSaveAt = Date.now();
 
   const retryRounds = Math.max(0, Number(env('S3_SYNC_RETRY_ROUNDS', 'VIETNIX_S3_SYNC_RETRY_ROUNDS') || 3));
   const retryConcurrency = Math.max(1, Math.min(
@@ -473,8 +498,8 @@ async function main() {
   let recovered = 0;
   let retryRound = 0;
 
-  console.log(`[s3-sync] ${apply ? 'apply' : 'dry-run'} ${items.length} files to s3://${bucket} concurrency=${concurrency} retryRounds=${retryRounds} retryConcurrency=${retryConcurrency} state=${useState ? stateFile : 'off'}`);
-  await writeStatus({ status: 'running', message: 'Dang bat dau dong bo S3...' });
+  console.log(`[s3-sync] ${apply ? 'apply' : 'dry-run'} ${items.length} files to s3://${bucket} concurrency=${concurrency} retryRounds=${retryRounds} retryConcurrency=${retryConcurrency} state=${useState ? stateFile : 'off'} ${retryFailed ? 'retryFailed=true' : ''}`);
+  await writeStatus({ status: 'running', message: s3SyncScopeMessage({ retryFailed, failedCount: items.length, seriesId }) });
 
   let retryQueue = await runSyncPass(items, {
     countChecked: true,
@@ -501,7 +526,7 @@ async function main() {
   failed = retryQueue.length;
 
   console.log(progressLine({ done: true }));
-  if (apply && useState) await saveSyncState(stateFile, syncState);
+  await maybeSaveSyncState(true);
   if (failedItems.length) {
     console.log(`[s3-sync] failed-items ${JSON.stringify(failedItems)}`);
   }
@@ -529,7 +554,7 @@ async function main() {
         if (!retrying) failed += 1;
         roundFailures.push(item);
         rememberFailedItem(item, error);
-        console.log(`[s3-sync] failed key=${item.key} error=${shortError(error)} checked=${checked}/${items.length} uploaded=${uploaded} skipped=${skipped} failed=${failed} attempts=${failedAttempts}`);
+        console.log(`[s3-sync] failed key=${item.key} error=${shortError(error)} checked=${checked}/${items.length} uploaded=${uploaded} skipped=${skipped} failed=${failed} attempts=${failedAttempts}${error?.retryable ? ' retryable=true' : ''}`);
         await maybePrintProgress(item, message);
       }
     });
@@ -544,7 +569,10 @@ async function main() {
       return;
     }
     let remote = { exists: false, size: 0 };
-    if (!force) {
+    const skipHead = ['1', 'true', 'yes', 'on'].includes(
+      String(env('S3_SKIP_HEAD', 'VIETNIX_S3_SKIP_HEAD') || '').toLowerCase()
+    );
+    if (!force && !skipHead) {
       try {
         remote = await headObject(client, item.key);
       } catch (error) {
@@ -554,12 +582,28 @@ async function main() {
     }
     if (remote.exists && remote.size === stat.size) {
       skipped += 1;
-      if (apply && useState) syncState[item.key] = syncStateEntry(stat);
+      await markStateSynced(item.key, stat);
       return;
     }
     if (apply) await putObject(client, item);
-    if (apply && useState) syncState[item.key] = syncStateEntry(stat);
+    await markStateSynced(item.key, stat);
     uploaded += 1;
+  }
+
+  async function markStateSynced(key, stat) {
+    if (!apply || !useState) return;
+    syncState[key] = syncStateEntry(stat);
+    stateDirtyCount += 1;
+    await maybeSaveSyncState(false);
+  }
+
+  async function maybeSaveSyncState(force = false) {
+    if (!apply || !useState) return;
+    const now = Date.now();
+    if (!force && stateDirtyCount < stateSaveEvery && now - lastStateSaveAt < stateSaveIntervalMs) return;
+    await saveSyncState(stateFile, syncState);
+    stateDirtyCount = 0;
+    lastStateSaveAt = now;
   }
 
   function rememberFailedItem(item, error) {
@@ -570,9 +614,10 @@ async function main() {
       attempts: failedAttempts,
       retryRound
     };
+    const failedItemsMax = Math.max(20, Number(env('S3_FAILED_ITEMS_MAX', 'VIETNIX_S3_FAILED_ITEMS_MAX') || 1000));
     if (existingIndex >= 0) failedItems.splice(existingIndex, 1);
     failedItems.push(entry);
-    if (failedItems.length > 20) failedItems.shift();
+    if (failedItems.length > failedItemsMax) failedItems.splice(0, failedItems.length - failedItemsMax);
   }
 
   function forgetFailedItem(item) {
@@ -626,7 +671,8 @@ async function main() {
       retryConcurrency,
       currentKey: activeItem.key || '',
       currentChapter: chapterFromSyncKey(activeItem.key || ''),
-      failedItems: failedItems.slice(-20),
+      failedItems: failedItems.slice(),
+      failedItemCount: failedItems.length,
       startedAt: new Date(startedAt).toISOString(),
       message
     });
@@ -648,6 +694,38 @@ function backoffDelay(baseDelayMs, attempt) {
   const jitter = Math.floor(Math.random() * Math.max(1, base));
   return Math.min(30000, exponential + jitter);
 }
+
+export function shouldRefuseFullImageSync({ includesImages, seriesId = '', allowFull = false, retryFailed = false } = {}) {
+  return Boolean(includesImages && !String(seriesId || '').trim() && !allowFull && !retryFailed);
+}
+
+export function isRetryableS3Failure({ status = 0, text = '' } = {}) {
+  const body = String(text || '').toLowerCase();
+  return [408, 429, 500, 502, 503, 504].includes(Number(status))
+    || body.includes('requesttimetoo skewed')
+    || body.includes('requesttimetooskewed')
+    || body.includes('request time')
+    || body.includes('clock skew');
+}
+
+export function s3SyncScopeMessage({ retryFailed = false, failedCount = 0, seriesId = '' } = {}) {
+  if (retryFailed) return `Retry ${Number(failedCount || 0)} file thiếu/lỗi trên S3...`;
+  if (seriesId) return `Đang đồng bộ S3 cho truyện ${seriesId}...`;
+  return 'Đang đồng bộ S3...';
+}
+
+async function loadFailedKeysFromStatus(filePath) {
+  try {
+    const parsed = JSON.parse(await fs.readFile(filePath, 'utf8'));
+    return new Set((parsed.failedItems || [])
+      .map((item) => String(item?.key || '').trim())
+      .filter(Boolean));
+  } catch (error) {
+    if (error.code === 'ENOENT') return new Set();
+    throw error;
+  }
+}
+
 function shortError(error) {
   const causeCode = error?.cause?.code ? ` ${error.cause.code}` : '';
   return String(`${error?.name || 'Error'}${causeCode}: ${error?.message || error}`).replace(/\s+/g, ' ').slice(0, 220);
@@ -681,7 +759,9 @@ function roundOne(value) {
   return Math.round(Number(value || 0) * 10) / 10;
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}

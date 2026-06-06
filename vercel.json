@@ -6,38 +6,6 @@
   "trailingSlash": false,
   "rewrites": [
     {
-      "source": "/api/home",
-      "destination": "/fallback-api/home.json"
-    },
-    {
-      "source": "/api/public/home",
-      "destination": "/fallback-api/home.json"
-    },
-    {
-      "source": "/api/series",
-      "destination": "/fallback-api/series.json"
-    },
-    {
-      "source": "/api/search",
-      "destination": "/fallback-api/search-index.json"
-    },
-    {
-      "source": "/api/tags/:tag",
-      "destination": "/fallback-api/tags/:tag.json"
-    },
-    {
-      "source": "/api/series/:series/chapters/:chapter/next",
-      "destination": "/static-api/reader/:series/:chapter/next.json"
-    },
-    {
-      "source": "/api/series/:series/chapters/:chapter",
-      "destination": "/static-api/reader/:series/:chapter.json"
-    },
-    {
-      "source": "/api/series/:series",
-      "destination": "/fallback-api/series/:series.json"
-    },
-    {
       "source": "/static-api/home.json",
       "destination": "/fallback-api/home.json"
     },

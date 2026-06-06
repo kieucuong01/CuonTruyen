@@ -2327,6 +2327,33 @@ button:disabled,
   font-size: 13px;
 }
 
+.adsense-slot {
+  position: relative;
+  overflow: hidden;
+  padding: 12px;
+}
+
+.adsense-slot .ad-label {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  color: rgba(102, 112, 133, 0.72);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.adsense-slot .adsbygoogle {
+  width: 100%;
+  min-height: 72px;
+}
+
+.series-ad {
+  max-width: 100%;
+  margin: 18px 0;
+}
+
 .reader-ad {
   width: min(100%, 760px);
   margin: 24px auto;
@@ -2339,6 +2366,84 @@ button:disabled,
 .admin-grid {
   display: grid;
   gap: 12px;
+}
+
+.revenue-dashboard {
+  display: grid;
+  gap: 16px;
+  margin: 18px 0;
+}
+
+.revenue-range-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.revenue-range-tabs .ghost-btn.active {
+  border-color: rgba(255, 139, 43, 0.42);
+  background: rgba(255, 139, 43, 0.12);
+  color: #bf4f00;
+}
+
+.revenue-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.revenue-metrics article {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 16px;
+  background: linear-gradient(135deg, #ffffff, #fff7ed);
+}
+
+.revenue-metrics span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.revenue-metrics strong {
+  color: var(--ink);
+  font-size: clamp(22px, 3vw, 32px);
+  line-height: 1;
+}
+
+.revenue-table-wrap {
+  overflow-x: auto;
+}
+
+.revenue-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.revenue-table th,
+.revenue-table td {
+  padding: 12px 10px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  text-align: left;
+}
+
+.revenue-table th {
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.revenue-table a {
+  color: inherit;
+  font-weight: 800;
+  text-decoration: none;
 }
 
 .admin-session-bar {
@@ -3368,6 +3473,10 @@ button:disabled,
 }
 
 @media (max-width: 720px) {
+  .revenue-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .admin-series-details-grid .support-actions,
   .admin-series-details-grid .support-actions .ghost-btn,
   .admin-series-details-grid > .primary-btn[type="submit"] {
@@ -3376,6 +3485,12 @@ button:disabled,
 
   .admin-update-status .progress-grid {
     grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .revenue-metrics {
+    grid-template-columns: 1fr;
   }
 }
 .admin-list-head {
@@ -6320,6 +6435,40 @@ button:disabled,
   line-height: 1.35;
 }
 
+.production-pipeline-list {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.production-pipeline-step {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid rgba(249, 115, 22, 0.18);
+  border-radius: 18px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.production-pipeline-step strong {
+  display: block;
+  color: #111827;
+  font-size: 15px;
+}
+
+.production-pipeline-step p {
+  margin: 4px 0 0;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.production-pipeline-step .ghost-btn {
+  min-width: 148px;
+}
+
 @media (max-width: 720px) {
   .app-featured-tags {
     border-radius: 22px;
@@ -6347,5 +6496,13 @@ button:disabled,
 
   .admin-origin-options {
     grid-template-columns: 1fr;
+  }
+
+  .production-pipeline-step {
+    grid-template-columns: 1fr;
+  }
+
+  .production-pipeline-step .ghost-btn {
+    width: 100%;
   }
 }

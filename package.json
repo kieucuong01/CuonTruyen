@@ -9,6 +9,7 @@
     "export:static-api": "node scripts/export-static-api.mjs",
     "sync:s3:dry-run": "node scripts/sync-vietnix-s3.mjs",
     "sync:s3": "node scripts/sync-vietnix-s3.mjs --apply",
+    "sync:s3:retry-failed": "node scripts/sync-vietnix-s3.mjs --apply --retry-failed",
     "sync:s3:force": "node scripts/sync-vietnix-s3.mjs --apply --force",
     "publish:static": "npm run export:static-api && npm run sync:s3",
     "test": "node --test tests",

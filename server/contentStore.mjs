@@ -5,6 +5,32 @@ import { slugify, uniqueBy } from './utils.mjs';
 const PUBLIC_STATUS = 'public';
 const HIDDEN_STATUSES = new Set(['draft', 'removed']);
 
+export const SEO_FEATURED_TAGS = [
+  {
+    slug: 'manhwa',
+    name: 'Truyện Manhwa',
+    aliases: ['manhwa', 'truyen-han', 'truyen-han-quoc', 'han-quoc', 'han']
+  },
+  {
+    slug: 'manhua',
+    name: 'Truyện Manhua',
+    aliases: ['manhua', 'truyen-trung', 'truyen-trung-quoc', 'trung-quoc', 'trung']
+  },
+  {
+    slug: 'truyen-han',
+    name: 'Truyện Hàn',
+    aliases: ['truyen-han', 'truyen-han-quoc', 'han-quoc', 'han', 'manhwa']
+  },
+  {
+    slug: 'truyen-trung',
+    name: 'Truyện Trung',
+    aliases: ['truyen-trung', 'truyen-trung-quoc', 'trung-quoc', 'trung', 'manhua']
+  }
+].map((tag) => ({
+  ...tag,
+  matchSlugs: new Set([tag.slug, ...tag.aliases].map((value) => slugify(value)).filter(Boolean))
+}));
+
 function isPublicStatus(status) {
   return String(status || '').trim() === PUBLIC_STATUS;
 }
@@ -29,6 +55,34 @@ export function normalizeTags(tags = []) {
       .filter((tag) => tag.name && tag.slug),
     (tag) => tag.slug
   );
+}
+
+function featuredTagForSlug(tagSlug) {
+  const normalizedSlug = slugify(tagSlug || '');
+  return SEO_FEATURED_TAGS.find((tag) => tag.slug === normalizedSlug) || null;
+}
+
+function tagIdentitySlugs(tag) {
+  const normalized = normalizeTag(tag);
+  return new Set([normalized.slug, slugify(normalized.name)].filter(Boolean));
+}
+
+function tagMatchesFeatured(tag, featuredTag) {
+  for (const slug of tagIdentitySlugs(tag)) {
+    if (featuredTag.matchSlugs.has(slug)) return true;
+  }
+  return false;
+}
+
+function seriesMatchesFeaturedTag(series, featuredTag) {
+  return (series.tags || []).some((tag) => tagMatchesFeatured(tag, featuredTag));
+}
+
+function seriesMatchesTag(series, tagSlug) {
+  const normalizedSlug = slugify(tagSlug || '');
+  const featuredTag = featuredTagForSlug(normalizedSlug);
+  if (featuredTag) return seriesMatchesFeaturedTag(series, featuredTag);
+  return (series.tags || []).some((tag) => tag.slug === normalizedSlug);
 }
 
 function chapterLabel(chapter = {}) {
@@ -128,6 +182,7 @@ function seriesMeta(series = {}) {
       follows: 0,
       readDepth: 0,
       adViews: 0,
+      adClicks: 0,
       donateClicks: 0,
       ...(series.stats || {})
     },
@@ -332,26 +387,38 @@ export function buildReaderChapterPayload(catalog, seriesSlug, chapterSlug, { wi
 
 export function buildTagIndex(catalog) {
   const tags = new Map();
+  const publicSeries = [];
   for (const rawSeries of (catalog.series || [])) {
     const series = seriesMeta(rawSeries);
     if (series.status !== PUBLIC_STATUS) continue;
+    publicSeries.push(series);
     for (const tag of series.tags) {
       const previous = tags.get(tag.slug) || { ...tag, seriesCount: 0 };
       previous.seriesCount += 1;
       tags.set(tag.slug, previous);
     }
   }
+  for (const featuredTag of SEO_FEATURED_TAGS) {
+    const seriesCount = publicSeries.filter((series) => seriesMatchesFeaturedTag(series, featuredTag)).length;
+    if (!seriesCount) continue;
+    tags.set(featuredTag.slug, {
+      slug: featuredTag.slug,
+      name: featuredTag.name,
+      seriesCount
+    });
+  }
   return [...tags.values()].sort((a, b) => a.name.localeCompare(b.name, 'vi'));
 }
 
 export function buildTagPage(catalog, tagSlug) {
+  const normalizedSlug = slugify(tagSlug || '');
   const series = (catalog.series || [])
     .filter((item) => {
       const meta = seriesMeta(item);
-      return meta.status === PUBLIC_STATUS && meta.tags.some((tag) => tag.slug === tagSlug);
+      return meta.status === PUBLIC_STATUS && seriesMatchesTag(meta, normalizedSlug);
     })
     .map((item) => publicSeriesSummary(item, { chapterLimit: 3 }));
-  const tag = buildTagIndex(catalog).find((item) => item.slug === tagSlug) || null;
+  const tag = buildTagIndex(catalog).find((item) => item.slug === normalizedSlug) || null;
   return tag ? { tag, series } : null;
 }
 
@@ -475,6 +542,7 @@ export function recordEventOnCatalog(catalog, event = {}) {
   if (event.type === 'follow') stats.follows = Number(stats.follows || 0) + 1;
   if (event.type === 'read_depth') stats.readDepth = Math.max(Number(stats.readDepth || 0), Number(event.value || 0));
   if (event.type === 'ad_view' || event.type === 'ad_impression') stats.adViews = Number(stats.adViews || 0) + 1;
+  if (event.type === 'ad_click') stats.adClicks = Number(stats.adClicks || 0) + 1;
   if (event.type === 'donate_click') stats.donateClicks = Number(stats.donateClicks || 0) + 1;
   const next = normalizeSeries({
     ...current,

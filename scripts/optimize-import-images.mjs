@@ -6,6 +6,7 @@ import { readCatalog, writeCatalog } from '../server/dataStore.mjs';
 import {
   estimateOptimizationSaving,
   imageOptimizationConfig,
+  optimizedFilenameFor,
   optimizeImageBuffer,
   shouldAttemptImageOptimization
 } from '../server/imageOptimizer.mjs';
@@ -17,9 +18,9 @@ async function main() {
   const config = imageOptimizationConfig(process.env);
   const root = path.resolve(args.root || IMPORT_ROOT);
   const scanRoot = args.seriesId ? path.join(root, args.seriesId) : root;
-  const allImages = await collectImages(scanRoot);
-  const catalogImagePaths = args.catalogOnly ? await collectCatalogImageFilePaths(root, args.seriesId) : null;
-  const sourceImages = catalogImagePaths ? allImages.filter((item) => catalogImagePaths.has(path.resolve(item.filePath))) : allImages;
+  const catalogImages = args.catalogOnly ? await collectCatalogImageItems(root, args.seriesId) : null;
+  const allImages = catalogImages || await collectImages(scanRoot);
+  const sourceImages = catalogImages || allImages;
   const candidates = sourceImages
     .filter((item) => shouldAttemptImageOptimization({
       filename: item.name,
@@ -62,10 +63,23 @@ async function main() {
     skippedBecauseSharpMissing: 0,
     notWorthReplacing: 0,
     failed: 0,
+    reusedExistingOptimizedFiles: 0,
     bestSavings: []
   };
 
   await runConcurrent(selected, optimizeConcurrency, async (item) => {
+    if (mode === 'apply') {
+      const reused = await reuseExistingOptimizedFile({
+        item,
+        catalog,
+        root,
+        config,
+        catalogUpdates,
+        summary
+      });
+      if (reused) return;
+    }
+
     const buffer = await fs.readFile(item.filePath);
     const optimized = await optimizeImageBuffer(buffer, item.name, config);
     if (optimized.reason === 'sharp-not-installed') {
@@ -129,6 +143,65 @@ async function main() {
   printSummary(summary, { json: args.json, partial: !args.all && candidates.length > selected.length });
 }
 
+async function reuseExistingOptimizedFile({
+  item,
+  catalog,
+  root,
+  config,
+  catalogUpdates,
+  summary
+}) {
+  const optimizedPath = path.join(path.dirname(item.filePath), optimizedFilenameFor(item.name, config));
+  if (path.resolve(optimizedPath) === path.resolve(item.filePath)) return false;
+  let optimizedStat;
+  try {
+    optimizedStat = await fs.stat(optimizedPath);
+  } catch {
+    return false;
+  }
+  if (!optimizedStat.isFile()) return false;
+
+  const savingPercent = estimateOptimizationSaving({
+    originalBytes: item.bytes,
+    optimizedBytes: optimizedStat.size
+  });
+  if (savingPercent < config.minSavingPercent) return false;
+
+  const update = updateCatalogPageForOptimizedImage({
+    catalog,
+    root,
+    originalPath: item.filePath,
+    optimizedPath,
+    optimized: {
+      optimizedBytes: optimizedStat.size,
+      width: null,
+      height: null
+    },
+    originalBytes: item.bytes
+  });
+  if (!update) return false;
+
+  catalogUpdates.set(update.key, update);
+  summary.reusedExistingOptimizedFiles += 1;
+  summary.catalogPagesUpdated += 1;
+  summary.processedOriginalBytes += item.bytes;
+  summary.processedOptimizedBytes += optimizedStat.size;
+  summary.processedWouldSaveBytes += Math.max(0, item.bytes - optimizedStat.size);
+  summary.bestSavings.push({
+    path: path.relative(root, item.filePath),
+    originalMB: roundMb(item.bytes),
+    optimizedMB: roundMb(optimizedStat.size),
+    saveMB: roundMb(Math.max(0, item.bytes - optimizedStat.size)),
+    savePercent: roundOne(savingPercent),
+    reusedExisting: true,
+    width: null,
+    height: null
+  });
+  summary.bestSavings.sort((a, b) => b.saveMB - a.saveMB);
+  summary.bestSavings = summary.bestSavings.slice(0, 20);
+  return true;
+}
+
 async function collectCatalogImageFilePaths(root, seriesId = '') {
   const catalog = await readCatalog();
   const paths = new Set();
@@ -143,6 +216,24 @@ async function collectCatalogImageFilePaths(root, seriesId = '') {
     }
   }
   return paths;
+}
+
+async function collectCatalogImageItems(root, seriesId = '') {
+  const paths = await collectCatalogImageFilePaths(root, seriesId);
+  const images = [];
+  for (const filePath of paths) {
+    if (!IMAGE_RE.test(filePath)) continue;
+    try {
+      const stat = await fs.stat(filePath);
+      if (!stat.isFile()) continue;
+      images.push({
+        filePath,
+        name: path.basename(filePath),
+        bytes: stat.size
+      });
+    } catch {}
+  }
+  return images;
 }
 
 async function collectImages(root) {

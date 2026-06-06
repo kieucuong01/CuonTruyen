@@ -8,6 +8,8 @@ Use this file as the first stop for any future AI agent. Keep it short; put deta
 
 - Token-efficient map for AI agents: `docs/agent-playbooks/agent-token-map.md`
 - Current deployment/storage state: `docs/agent-playbooks/current-deployment.md`
+- SEO launch checklist: `docs/agent-playbooks/seo-launch.md`
+- Revenue tracking and ads: `docs/agent-playbooks/revenue-tracking.md`
 - Main branch auto-deploy flow: `docs/agent-playbooks/git-main-auto-deploy.md`
 - Vercel + Vietnix S3 publishing flow: `docs/agent-playbooks/vercel-s3-publishing.md`
 - Product and technical playbook: `docs/agent-playbooks/comic-reader.md`
@@ -33,6 +35,7 @@ npm run worker:crawl
 npm run export:static-api
 npm run sync:s3:dry-run
 npm run sync:s3
+npm run sync:s3:retry-failed
 npm run smoke:import
 ```
 
@@ -49,10 +52,10 @@ $env:PORT='54533'; npm run dev
 - Local JSON catalog and image cache under `data/imports/` by default.
 - PostgreSQL catalog mode when `DATABASE_URL` or `POSTGRES_URL` is set.
 - Separate crawl worker process for durable import jobs.
-- Current preferred public hosting mode: Vercel serves the static frontend, Vietnix S3 serves `/imports/*` images and `/static-api/*` public JSON, and the local machine runs admin/crawler.
+- Current preferred public hosting mode: Vercel serves the frontend plus lightweight Node API for public reads/admin content management, Supabase Postgres stores catalog/users/events, Vietnix S3 serves `/imports/*` images, and the local machine runs crawler/optimizer/S3 sync.
 - Browser reading history, follow list, and resume state in `localStorage`, with in-memory fallback for restricted storage.
 - Public SEO routes under `/truyen/:seriesSlug`, `/truyen/:seriesSlug/:chapterSlug`, `/the-loai/:tagSlug`, static policy pages, `/sitemap.xml`, and `/robots.txt`.
-- Admin/crawl/content review UI is in the SPA under `#/admin`.
+- Admin/content review UI is in the SPA under `/admin`. Production admin is content-only; crawl/optimize/S3 sync controls are shown only on localhost or when `ENABLE_LOCAL_CRAWLER_UI=true`.
 
 ## Important Product Behaviors
 
@@ -62,13 +65,14 @@ $env:PORT='54533'; npm run dev
 - Chapter links must never depend on a fragile source slug only. Use stable `chapter.id` fallback.
 - Import progress must show phase, chapter progress, image progress, retries/errors, and batch status for multiple URLs.
 - Re-crawling the same running URL should reuse the active job, not start a duplicate.
-- New imports default to `draft`; admin publishes intentionally.
+- New imports currently default to `public` when imported pages exist; admin can move content back to `draft`/`removed` intentionally.
 - Public home/search/tag/reader/sitemap must only expose `public` series and `public` chapters.
 - `draft` and `removed` content stays visible in admin for review/recovery.
 
 ## Editing Rules For Agents
 
 - Do not delete or rewrite `data/imports/` unless the user explicitly asks. It can contain large local crawl output.
+- Do not run full image S3 sync by default. Use `node scripts/sync-vietnix-s3.mjs --images-only --catalog-only --series-id <series-id> --apply` for normal image publish, `npm run sync:s3:retry-failed` for missing failed files, and only use `--all` when the owner explicitly wants a full image sync.
 - Do not commit `.env`, `.env.local`, S3 credentials, Vercel project metadata, logs, `.runtime/`, or `data/imports/`.
 - Do not assume images should move to Supabase Storage. The current owner preference is Vietnix S3 Object Storage for public images, with local crawl/admin.
 - Do not revert unrelated local changes. This workspace is often dirty.

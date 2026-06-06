@@ -5,7 +5,15 @@ const DEFAULT_TITLE = 'Cuộn Truyện - Đọc truyện tranh manhwa, manhua on
 function readMonetizationConfig() {
   return {
     adsEnabled: process.env.ADS_ENABLED !== 'false',
-    donateUrl: process.env.DONATE_URL || ''
+    donateUrl: process.env.DONATE_URL || '',
+    adsProvider: process.env.ADS_PROVIDER || (process.env.ADSENSE_CLIENT ? 'adsense' : ''),
+    adsenseClient: process.env.ADSENSE_CLIENT || '',
+    adsenseSlots: {
+      home: process.env.ADSENSE_SLOT_HOME || '',
+      series: process.env.ADSENSE_SLOT_SERIES || '',
+      chapterEnd: process.env.ADSENSE_SLOT_CHAPTER_END || ''
+    },
+    adsenseTestMode: String(process.env.ADSENSE_TEST_MODE || '').toLowerCase() === 'true'
   };
 }
 
@@ -19,25 +27,25 @@ export const STATIC_PAGES = [
   {
     path: '/gioi-thieu',
     title: 'Giới thiệu Cuộn Truyện - Trình đọc truyện tranh liền mạch',
-    description: 'Cuộn Truyện tập trung vào trải nghiệm đọc truyện tranh online mượt, nối chapter liên tục và tự lưu vị trí đọc trên trình duyệt.',
+    description: 'Cuộn Truyện là website đọc truyện tranh manhwa, manhua online tối ưu cho mobile, cuộn chapter liền mạch và tự lưu vị trí đọc.',
     heading: 'Giới thiệu Cuộn Truyện',
-    body: 'Cuộn Truyện là website đọc truyện tranh tối ưu cho trải nghiệm cuộn liên tục, giúp bạn mở lại đúng bộ đang đọc và theo dõi lịch sử ngay trên trình duyệt.',
+    body: 'Cuộn Truyện tập trung vào một việc: giúp người đọc truyện tranh trên điện thoại nhanh, gọn và ít bị ngắt mạch. Trải nghiệm chính là đọc liên tục giữa các chapter, mở lại đúng vị trí đang đọc và tìm nhanh các bộ manhwa, manhua đang cập nhật.',
     items: [
-      'Đọc liền mạch nhiều chapter mà không phải bấm chuyển trang.',
-      'Tự lưu lịch sử, danh sách theo dõi và vị trí đọc trên trình duyệt.',
-      'Chỉ hiển thị nội dung đã được quản trị viên publish ra public.'
+      'Reader cuộn dọc liền mạch, phù hợp thói quen đọc truyện trên điện thoại.',
+      'Lịch sử đọc, theo dõi và vị trí đọc được lưu để bạn quay lại nhanh hơn.',
+      'Chỉ nội dung public mới xuất hiện trên trang chủ, tìm kiếm, thể loại và sitemap.'
     ]
   },
   {
     path: '/lien-he',
     title: 'Liên hệ - Cuộn Truyện',
-    description: 'Liên hệ Cuộn Truyện để báo lỗi truyện, góp ý trải nghiệm đọc hoặc yêu cầu xử lý nội dung.',
+    description: 'Liên hệ Cuộn Truyện để báo lỗi ảnh, góp ý trải nghiệm đọc hoặc gửi yêu cầu xử lý nội dung.',
     heading: 'Liên hệ',
-    body: 'Nếu bạn thấy truyện lỗi ảnh, sai thông tin hoặc cần gửi yêu cầu xử lý nội dung, hãy liên hệ quản trị viên Cuộn Truyện qua kênh liên hệ được công bố trên website.',
+    body: 'Nếu bạn gặp ảnh lỗi, chapter thiếu, thông tin truyện chưa đúng hoặc cần gửi yêu cầu xử lý nội dung, hãy liên hệ quản trị viên Cuộn Truyện qua kênh liên hệ được công bố trên website.',
     items: [
       'Ghi rõ tên truyện, chapter và lỗi bạn gặp để đội vận hành kiểm tra nhanh hơn.',
       'Với yêu cầu gỡ bỏ nội dung, hãy gửi kèm đường dẫn và bằng chứng quyền sở hữu hợp lệ.',
-      'Các nội dung vi phạm có thể được chuyển sang trạng thái removed và biến mất khỏi public/sitemap.'
+      'Nội dung vi phạm có thể được ẩn khỏi public, reader, tìm kiếm, thể loại và sitemap.'
     ]
   },
   {
@@ -45,23 +53,23 @@ export const STATIC_PAGES = [
     title: 'Chính sách nội dung và gỡ bỏ - Cuộn Truyện',
     description: 'Chính sách nội dung của Cuộn Truyện: quản trị viên có thể ẩn truyện, ẩn chapter và xử lý yêu cầu gỡ bỏ.',
     heading: 'Chính sách nội dung',
-    body: 'Cuộn Truyện chỉ nên vận hành với nguồn nội dung chủ sở hữu được phép sử dụng. Khi có yêu cầu hợp lệ, quản trị viên có thể ẩn truyện hoặc chapter khỏi trang public và sitemap.',
+    body: 'Cuộn Truyện chỉ nên vận hành với nguồn nội dung mà chủ sở hữu website được phép sử dụng. Khi có yêu cầu hợp lệ, quản trị viên có thể ẩn truyện hoặc chapter khỏi toàn bộ bề mặt public và sitemap.',
     items: [
-      'Nội dung mới sau khi crawl mặc định ở trạng thái draft để chờ review.',
+      'Chỉ truyện và chapter có trạng thái public mới được index trên website.',
       'Draft và removed không xuất hiện ở trang public, reader, search, tag hoặc sitemap.',
-      'Takedown hợp lệ được xử lý bằng cách ẩn truyện/chapter thay vì xóa dữ liệu vận hành ngay lập tức.'
+      'Yêu cầu takedown hợp lệ được xử lý bằng cách ẩn truyện/chapter trước, sau đó rà soát dữ liệu vận hành khi cần.'
     ]
   },
   {
     path: '/privacy',
-    title: 'Privacy - Cuộn Truyện',
-    description: 'Cuộn Truyện lưu lịch sử đọc và theo dõi chủ yếu trên trình duyệt của người dùng; sự kiện đọc được dùng để cải thiện trải nghiệm.',
-    heading: 'Privacy',
-    body: 'Lịch sử đọc, danh sách theo dõi và vị trí đọc được lưu trên trình duyệt. Website có thể ghi nhận sự kiện như lượt xem, độ sâu đọc và tương tác để cải thiện sản phẩm.',
+    title: 'Chính sách riêng tư - Cuộn Truyện',
+    description: 'Cuộn Truyện lưu lịch sử đọc chủ yếu trên trình duyệt và chỉ dùng dữ liệu tương tác để vận hành, bảo mật, cải thiện trải nghiệm.',
+    heading: 'Chính sách riêng tư',
+    body: 'Cuộn Truyện ưu tiên lưu dữ liệu đọc ở phía trình duyệt để trải nghiệm nhanh và ít phụ thuộc tài khoản. Website có thể ghi nhận sự kiện cơ bản để vận hành, chống lạm dụng, đo hiệu quả nội dung và cải thiện sản phẩm.',
     items: [
       'Tiến độ đọc và danh sách theo dõi dùng localStorage theo từng trình duyệt.',
-      'Khi đăng nhập, phiên đọc có token server-issued để đồng bộ các thao tác tài khoản.',
-      'Sự kiện như lượt xem, click donate hoặc độ sâu đọc chỉ dùng để cải thiện sản phẩm.'
+      'Khi đăng nhập, phiên truy cập dùng token server-issued để xác thực thao tác tài khoản.',
+      'Sự kiện như lượt xem, click donate hoặc tương tác quảng cáo chỉ dùng cho vận hành và thống kê nội bộ.'
     ]
   }
 ];
@@ -101,7 +109,27 @@ export function chapterJsonLd(series, chapter, baseUrl) {
   };
 }
 
+export function tagPageJsonLd(page, baseUrl) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name: `Truyện ${page.tag.name}`,
+    description: `Danh sách truyện tranh ${page.tag.name} đang được cập nhật trên Cuộn Truyện.`,
+    url: `${baseUrl}/the-loai/${page.tag.slug}`,
+    mainEntity: {
+      '@type': 'ItemList',
+      itemListElement: (page.series || []).slice(0, 20).map((series, index) => ({
+        '@type': 'ListItem',
+        position: index + 1,
+        name: series.title,
+        url: `${baseUrl}/truyen/${series.slug}`
+      }))
+    }
+  };
+}
+
 export function buildSitemapXml(seriesList, tags, baseUrl, { staticPages = STATIC_PAGES } = {}) {
+  const publicTags = (tags || []).filter((tag) => Number(tag.seriesCount || tag.count || 0) > 0);
   const urls = [
     { loc: baseUrl, lastmod: new Date().toISOString() },
     ...staticPages.map((page) => ({ loc: `${baseUrl}${page.path}` })),
@@ -117,7 +145,7 @@ export function buildSitemapXml(seriesList, tags, baseUrl, { staticPages = STATI
           }))
       ];
     }),
-    ...tags.map((tag) => ({ loc: `${baseUrl}/the-loai/${tag.slug}` }))
+    ...publicTags.map((tag) => ({ loc: `${baseUrl}/the-loai/${tag.slug}` }))
   ];
 
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((item) => `  <url>\n    <loc>${escapeXml(item.loc)}</loc>${item.lastmod ? `\n    <lastmod>${escapeXml(item.lastmod)}</lastmod>` : ''}\n  </url>`).join('\n')}\n</urlset>\n`;
@@ -127,6 +155,11 @@ export function buildRobotsTxt(baseUrl) {
   return [
     'User-agent: *',
     'Allow: /',
+    'Disallow: /admin',
+    'Disallow: /api/',
+    'Disallow: /static-api/',
+    'Disallow: /fallback-api/',
+    'Allow: /imports/',
     `Sitemap: ${baseUrl}/sitemap.xml`,
     ''
   ].join('\n');

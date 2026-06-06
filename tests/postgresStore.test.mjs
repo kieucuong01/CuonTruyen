@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { POSTGRES_SCHEMA_SQL } from '../server/postgresStore.mjs';
 
 test('postgres schema includes production catalog tables and indexes', () => {
-  for (const table of ['series', 'chapters', 'pages', 'tags', 'series_tags', 'crawl_jobs']) {
+  for (const table of ['series', 'chapters', 'pages', 'tags', 'series_tags', 'crawl_jobs', 'analytics_events']) {
     assert.match(POSTGRES_SCHEMA_SQL, new RegExp(`create table if not exists ${table}`));
   }
 
@@ -16,7 +16,9 @@ test('postgres schema includes production catalog tables and indexes', () => {
     'idx_pages_chapter_order',
     'idx_series_tags_tag',
     'idx_crawl_jobs_source_status',
-    'idx_crawl_jobs_queue'
+    'idx_crawl_jobs_queue',
+    'idx_analytics_events_created_at',
+    'idx_analytics_events_type'
   ]) {
     assert.match(POSTGRES_SCHEMA_SQL, new RegExp(`create index if not exists ${index}`));
   }

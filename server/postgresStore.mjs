@@ -120,6 +120,19 @@ create table if not exists bulletin_messages (
   updated_at timestamptz not null
 );
 
+create table if not exists analytics_events (
+  id bigserial primary key,
+  type text not null,
+  series_slug text,
+  chapter_slug text,
+  value numeric,
+  placement text,
+  source text,
+  url text,
+  raw jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
 alter table if exists crawl_jobs add column if not exists payload jsonb not null default '{}'::jsonb;
 alter table if exists crawl_jobs add column if not exists result jsonb not null default '{}'::jsonb;
 alter table if exists crawl_jobs add column if not exists series_id text;
@@ -144,6 +157,8 @@ create index if not exists idx_app_sessions_user_id on app_sessions(user_id);
 create index if not exists idx_app_sessions_expires_at on app_sessions(expires_at);
 create index if not exists idx_bulletin_messages_pinned on bulletin_messages(pinned, pinned_at);
 create index if not exists idx_bulletin_messages_created_at on bulletin_messages(created_at);
+create index if not exists idx_analytics_events_created_at on analytics_events(created_at desc);
+create index if not exists idx_analytics_events_type on analytics_events(type, created_at desc);
 `;
 
 export function usesPostgresStorage() {

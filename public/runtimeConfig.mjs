@@ -1,7 +1,11 @@
 const DEFAULT_CONFIG = {
   apiBaseUrl: '',
   staticApiMode: false,
-  staticApiBaseUrl: ''
+  staticApiBaseUrl: '',
+  importsBaseUrl: '',
+  publicSiteUrl: '',
+  productionBaseUrl: '',
+  enableLocalCrawlerUi: false
 };
 
 export function getRuntimeConfig(globalObject = globalThis) {
@@ -23,7 +27,7 @@ export function apiUrl(path, config = getRuntimeConfig()) {
   return baseUrl ? `${baseUrl}${value}` : value;
 }
 
-function isLocalAdminOrigin(globalObject = globalThis) {
+export function isLocalAdminOrigin(globalObject = globalThis) {
   const hostname = String(globalObject?.location?.hostname || '').toLowerCase();
   return hostname === 'localhost'
     || hostname === '127.0.0.1'
@@ -31,4 +35,9 @@ function isLocalAdminOrigin(globalObject = globalThis) {
     || /^192\.168\./.test(hostname)
     || /^10\./.test(hostname)
     || /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname);
+}
+
+export function localOperationsEnabled(globalObject = globalThis) {
+  const config = getRuntimeConfig(globalObject);
+  return Boolean(config.enableLocalCrawlerUi) || isLocalAdminOrigin(globalObject);
 }

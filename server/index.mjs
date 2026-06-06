@@ -1,6 +1,7 @@
 import './env.mjs';
 import fs from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
+import { spawn } from 'node:child_process';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { IMPORT_ROOT } from './catalogStore.mjs';
 import { createBoundedCache } from './cacheStore.mjs';
 import { ensureStorageSchema, getSeries, readCatalog, usesPostgresStorage } from './dataStore.mjs';
-import { appendAnalyticsEvent } from './analyticsStore.mjs';
+import { appendAnalyticsEvent, buildAnalyticsSummary, listAnalyticsEvents } from './analyticsStore.mjs';
 import { adminConfigStatus, createAdminSession, isAdminAuthorized, isAdminPath } from './adminAuth.mjs';
 import {
   extractUserToken,
@@ -67,7 +68,8 @@ import {
   renderNotFoundShell,
   renderHtmlShell,
   renderStaticPageShell,
-  seriesJsonLd
+  seriesJsonLd,
+  tagPageJsonLd
 } from './seo.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -213,6 +215,44 @@ async function readS3SyncStatus() {
   }
 }
 
+function localS3SyncEnabled() {
+  return !process.env.VERCEL || process.env.ENABLE_LOCAL_CRAWLER_UI === 'true';
+}
+
+async function startRetryFailedS3Sync() {
+  const status = await readS3SyncStatus();
+  const updatedAtMs = Date.parse(status.updatedAt || '');
+  const freshRunning = status.status === 'running'
+    && Number.isFinite(updatedAtMs)
+    && Date.now() - updatedAtMs < 90_000;
+  if (freshRunning) {
+    const error = new Error('S3 sync đang chạy, hãy đợi job hiện tại xong hoặc kẹt quá 90 giây rồi retry.');
+    error.status = 409;
+    throw error;
+  }
+  if (!Array.isArray(status.failedItems) || !status.failedItems.length) {
+    const error = new Error('Chưa có file S3 lỗi để retry.');
+    error.status = 400;
+    throw error;
+  }
+  const child = spawn(process.execPath, ['scripts/sync-vietnix-s3.mjs', '--apply', '--retry-failed'], {
+    cwd: ROOT,
+    env: {
+      ...process.env,
+      NODE_TLS_REJECT_UNAUTHORIZED: process.env.NODE_TLS_REJECT_UNAUTHORIZED || '0'
+    },
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true
+  });
+  child.unref();
+  return {
+    started: true,
+    pid: child.pid,
+    retryCount: status.failedItems.length
+  };
+}
+
 async function drainEmbeddedCrawlQueue(reason) {
   console.log(`[crawl-worker] embedded drain requested: ${reason}`);
   while (embeddedCrawlDrainRequested) {
@@ -353,7 +393,7 @@ async function handleApi(req, res, url) {
     return true;
   }
 
-  if (req.method === 'POST' && url.pathname === '/api/admin/login') {
+  if (req.method === 'POST' && (url.pathname === '/api/admin/login' || url.pathname === '/api/admin/session')) {
     const config = adminConfigStatus();
     if (!config.configured) {
       jsonResponse(res, 503, {
@@ -438,6 +478,14 @@ async function handleApi(req, res, url) {
     return true;
   }
 
+  if (req.method === 'GET' && url.pathname === '/api/admin/session') {
+    jsonResponse(res, 200, {
+      email: adminConfigStatus().email,
+      authenticated: true
+    });
+    return true;
+  }
+
   if (req.method === 'GET' && url.pathname === '/api/admin/bulletin/messages') {
     jsonResponse(res, 200, { messages: await listBulletinMessages({ limit: Number(url.searchParams.get('limit') || 60) }) });
     return true;
@@ -473,13 +521,68 @@ async function handleApi(req, res, url) {
     return true;
   }
 
-  if (req.method === 'GET' && url.pathname === '/api/admin/series') {
+  if (req.method === 'GET' && (url.pathname === '/api/admin/series' || url.pathname === '/api/admin/catalog')) {
     jsonResponse(res, 200, await readAdminCatalog());
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/admin/events') {
+    jsonResponse(res, 200, {
+      events: await listAnalyticsEvents({ limit: Number(url.searchParams.get('limit') || 200) })
+    });
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/admin/analytics/summary') {
+    const range = url.searchParams.get('range') || '30d';
+    jsonResponse(res, 200, buildAnalyticsSummary({
+      catalog: await readCatalog({ includePages: false }),
+      events: await listAnalyticsEvents({ limit: Number(url.searchParams.get('limit') || 5000) }),
+      range
+    }));
     return true;
   }
 
   if (req.method === 'GET' && url.pathname === '/api/admin/s3-sync/status') {
     jsonResponse(res, 200, await readS3SyncStatus());
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/admin/s3-sync/retry-failed') {
+    if (!localS3SyncEnabled()) {
+      jsonResponse(res, 503, {
+        error: 'Retry S3 chỉ chạy ở admin local/crawler, không chạy trên Vercel production.'
+      });
+      return true;
+    }
+    try {
+      jsonResponse(res, 202, await startRetryFailedS3Sync());
+    } catch (error) {
+      jsonResponse(res, error.status || 500, { error: error.message || 'Không thể retry file S3 lỗi.' });
+    }
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/admin/production-check') {
+    try {
+      const body = await readJsonBody(req);
+      const target = new URL(String(body.url || ''));
+      if (!['http:', 'https:'].includes(target.protocol)) throw new Error('Invalid production URL.');
+      const response = await fetch(target, {
+        method: 'GET',
+        headers: { 'user-agent': 'CuonTruyenAdminCheck/1.0' }
+      });
+      jsonResponse(res, response.ok ? 200 : 502, {
+        ok: response.ok,
+        status: response.status,
+        url: target.toString()
+      });
+    } catch (error) {
+      jsonResponse(res, 400, {
+        ok: false,
+        error: error.message || 'Production check failed.'
+      });
+    }
     return true;
   }
 
@@ -543,6 +646,28 @@ async function handleApi(req, res, url) {
     return true;
   }
 
+  if (req.method === 'PATCH' && url.pathname.match(/^\/api\/admin\/chapters\/[^/]+$/)) {
+    const chapterId = decodeURIComponent(url.pathname.replace('/api/admin/chapters/', ''));
+    const body = await readJsonBody(req);
+    let seriesId = String(body.seriesId || body.seriesSlug || '').trim();
+    if (!seriesId) {
+      const catalog = await readAdminCatalog();
+      const owner = (catalog.series || []).find((series) => (
+        Array.isArray(series.chapters)
+        && series.chapters.some((chapter) => chapter.id === chapterId || chapter.slug === chapterId)
+      ));
+      seriesId = owner?.id || owner?.slug || '';
+    }
+    if (!seriesId) {
+      jsonResponse(res, 400, { error: 'seriesId is required to update this chapter.' });
+      return true;
+    }
+    const result = await updateStoredChapter(seriesId, chapterId, body);
+    clearApiCache();
+    jsonResponse(res, result.chapter ? 200 : 404, result.chapter || { error: 'Chapter not found' });
+    return true;
+  }
+
   if (req.method === 'PATCH' && url.pathname.startsWith('/api/admin/series/')) {
     const id = decodeURIComponent(url.pathname.replace('/api/admin/series/', ''));
     const result = await updateStoredSeries(id, await readJsonBody(req));
@@ -587,6 +712,7 @@ async function handleApi(req, res, url) {
 
   if (req.method === 'POST' && url.pathname.match(/^\/api\/admin\/series\/[^/]+\/publish-production$/)) {
     const id = decodeURIComponent(url.pathname.split('/')[4]);
+    const body = await readJsonBody(req);
     const catalog = await readCatalog({ includePages: false });
     const series = findSeriesBySlug(catalog, id, { includeDraft: true }) || await getSeries(id, { includePages: false, includeDraft: true });
     if (!series) {
@@ -596,7 +722,8 @@ async function handleApi(req, res, url) {
     const result = createProductionPublishJob({
       seriesId: series.id || id,
       seriesSlug: series.slug || '',
-      title: series.title || ''
+      title: series.title || '',
+      steps: body.steps || []
     });
     clearApiCache();
     jsonResponse(res, result.reused ? 200 : 202, result);
@@ -764,8 +891,9 @@ async function handleSeoRoute(req, res, url) {
     }
     textResponse(res, 200, renderHtmlShell({
       title: `Truyện ${page.tag.name} - Cuộn Truyện`,
-      description: `Danh sách truyện tranh thể loại ${page.tag.name} trên Cuộn Truyện, cập nhật mới và đọc liền mạch.`,
-      canonicalUrl: `${baseUrl}/the-loai/${page.tag.slug}`
+      description: `Đọc truyện tranh ${page.tag.name} online trên Cuộn Truyện, cập nhật mới và tối ưu trải nghiệm đọc liền mạch trên điện thoại.`,
+      canonicalUrl: `${baseUrl}/the-loai/${page.tag.slug}`,
+      jsonLd: tagPageJsonLd(page, baseUrl)
     }), 'text/html; charset=utf-8');
     return true;
   }

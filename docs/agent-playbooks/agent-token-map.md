@@ -39,7 +39,7 @@ These can be large or temporary. Use targeted file paths only.
 | Admin/crawl UI | `public/routes/admin.mjs`, `server/index.mjs`, `server/crawlJobStore.mjs` |
 | New chapter updates | `server/importer.mjs`, `server/crawlQueue.mjs`, `server/crawlWorker.mjs`, `public/routes/admin.mjs` |
 | Public catalog/filtering | `server/contentStore.mjs`, `server/catalogStore.mjs` |
-| Vercel static frontend | `vercel.json`, `.vercelignore`, `scripts/write-public-config.mjs`, `public/apiClient.mjs` |
+| Vercel frontend/admin API | `vercel.json`, `api/[...path].mjs`, `scripts/write-public-config.mjs`, `public/apiClient.mjs`, `server/index.mjs` |
 | S3 sync/export | `scripts/export-static-api.mjs`, `scripts/sync-vietnix-s3.mjs`, `docs/agent-playbooks/vercel-s3-publishing.md` |
 | SEO shell/sitemap | `server/seo.mjs`, `server/index.mjs`, `server/contentStore.mjs` |
 | Encoding mojibake | `scripts/check-encoding.mjs`, then the reported files |
@@ -50,10 +50,11 @@ The live public site is not a normal backend app:
 
 ```text
 Vercel serves public/
-public/config.js tells the browser to use S3 static API
-S3 serves /static-api/*.json
+public/config.js tells the browser to use live Vercel API when DATABASE_URL exists
+S3 can still serve /static-api/*.json as fallback/cache
 S3 serves /imports/* images
-Local Node app is for admin and crawler
+Vercel Node API is for public reads/admin content edits
+Local Node app is for crawler/optimizer/S3 sync
 ```
 
 So for public Vercel bugs, check static JSON and config first. Do not immediately debug server API routes unless the issue also happens locally.
