@@ -105,17 +105,33 @@ async function writeRouteIndex(routePath, html) {
 }
 
 async function writeStaticInfoPages() {
-  const { STATIC_PAGES, renderHtmlShell, renderStaticPageShell, seriesJsonLd, chapterJsonLd, tagPageJsonLd } = await import('../server/seo.mjs');
+  const {
+    STATIC_PAGES,
+    buildRobotsTxt,
+    buildSitemapXml,
+    renderHtmlShell,
+    renderStaticPageShell,
+    seriesJsonLd,
+    chapterJsonLd,
+    tagPageJsonLd
+  } = await import('../server/seo.mjs');
   const baseUrl = siteBaseUrl();
   for (const page of STATIC_PAGES) {
     await writeRouteIndex(page.path, renderStaticPageShell(page.path, baseUrl));
   }
 
-  const publicData = await readPublicJson(path.join('static-api', 'series.json'));
-  const homeData = await readPublicJson(path.join('static-api', 'home.json'));
+  const publicData = await readPublicJson(path.join('static-api', 'series.json'))
+    || await readPublicJson(path.join('fallback-api', 'series.json'))
+    || { series: [] };
+  const homeData = await readPublicJson(path.join('static-api', 'home.json'))
+    || await readPublicJson(path.join('fallback-api', 'home.json'))
+    || { tags: [] };
   let seriesPageCount = 0;
   let chapterPageCount = 0;
   let tagPageCount = 0;
+
+  await fs.writeFile(path.join(PUBLIC_DIR, 'robots.txt'), buildRobotsTxt(baseUrl), 'utf8');
+  await fs.writeFile(path.join(PUBLIC_DIR, 'sitemap.xml'), buildSitemapXml(publicData.series || [], homeData.tags || [], baseUrl), 'utf8');
 
   for (const series of publicData?.series || []) {
     const seriesSlug = safeRoutePart(series.slug);
