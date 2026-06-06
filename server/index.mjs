@@ -55,6 +55,10 @@ import {
   createProductionPublishJob,
   getProductionPublishJob
 } from './productionPublishJobs.mjs';
+import {
+  buildProductionCheckTargets,
+  checkProductionTargets
+} from './productionCheck.mjs';
 import { runWorkerOnce } from './crawlWorker.mjs';
 import { normalizeImportBatchPayload, normalizeImportPayload } from './importOptions.mjs';
 import { createUpdateChaptersPayload, sourceUrlForSeries } from './crawlQueue.mjs';
@@ -69,7 +73,8 @@ import {
   renderHtmlShell,
   renderStaticPageShell,
   seriesJsonLd,
-  tagPageJsonLd
+  tagPageJsonLd,
+  tagSeoCopy
 } from './seo.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -77,6 +82,7 @@ const ROOT = path.resolve(__dirname, '..');
 const PUBLIC_DIR = path.join(ROOT, 'public');
 const PORT = Number(process.env.PORT || 4173);
 const S3_SYNC_STATUS_FILE = path.resolve(process.env.S3_SYNC_STATUS_FILE || process.env.VIETNIX_S3_SYNC_STATUS_FILE || path.join(ROOT, '.runtime', 's3-sync-status.json'));
+const S3_SYNC_STATE_FILE = path.resolve(process.env.S3_SYNC_STATE_FILE || process.env.VIETNIX_S3_SYNC_STATE_FILE || path.join(ROOT, '.runtime', 's3-sync-state.json'));
 const API_CACHE_TTL_MS = 15_000;
 const apiResponseCache = createBoundedCache({ maxEntries: Number(process.env.API_CACHE_MAX_ENTRIES || 250) });
 const SPA_ROUTE_PATHS = new Set(['/admin']);
@@ -215,8 +221,150 @@ async function readS3SyncStatus() {
   }
 }
 
-function localS3SyncEnabled() {
+let productionStatusCache = null;
+
+async function readS3SyncState() {
+  const rawState = await fs.readFile(S3_SYNC_STATE_FILE, 'utf8');
+  return JSON.parse(rawState.replace(/^\uFEFF/, ''));
+}
+
+function isImportAssetReference(value = '') {
+  const raw = String(value || '').trim();
+  return raw.startsWith('/imports/') || raw.startsWith('imports/') || raw.includes('/imports/');
+}
+
+function productionStatusLabel(state) {
+  if (state === 'ok') return 'Production OK';
+  if (state === 'syncing') return 'Đang sync';
+  if (state === 'missing-static-api') return 'Thiếu static API';
+  if (state === 'missing-images') return 'Thiếu ảnh S3';
+  if (state === 'not-public') return 'Chưa public';
+  return 'Chưa kiểm tra';
+}
+
+function estimateProductionImageTotal(series = {}) {
+  const pageCount = Number(series.pageCount || 0);
+  const coverCount = [
+    series.thumbnailUrl,
+    series.coverThumbnailUrl,
+    series.coverThumb,
+    series.coverUrl,
+    series.imageUrl
+  ].some(isImportAssetReference) ? 1 : 0;
+  return Math.max(0, pageCount) + coverCount;
+}
+
+function buildAdminProductionStatus(catalog = {}, syncState = {}, syncStatus = {}) {
+  const objects = syncState.objects || {};
+  const keys = Object.keys(objects);
+  const importKeyCounts = new Map();
+  const staticReaderCounts = new Map();
+  const staticKeys = new Set();
+
+  for (const key of keys) {
+    if (key.startsWith('imports/')) {
+      const seriesId = key.split('/')[1] || '';
+      if (seriesId) importKeyCounts.set(seriesId, (importKeyCounts.get(seriesId) || 0) + 1);
+      continue;
+    }
+    if (key.startsWith('static-api/')) {
+      staticKeys.add(key);
+      const readerMatch = key.match(/^static-api\/reader\/([^/]+)\//);
+      if (readerMatch?.[1]) {
+        const slug = decodeURIComponent(readerMatch[1]);
+        staticReaderCounts.set(slug, (staticReaderCounts.get(slug) || 0) + 1);
+      }
+    }
+  }
+
+  const statuses = {};
+  for (const series of catalog.series || []) {
+    const seriesId = String(series.id || '').trim();
+    if (!seriesId) continue;
+    const slug = String(series.slug || '').trim();
+    const imageTotal = estimateProductionImageTotal(series);
+    const imageUploaded = importKeyCounts.get(seriesId) || 0;
+    const staticSeriesKey = slug ? `static-api/series/${slug}.json` : '';
+    const staticSeriesUploaded = staticSeriesKey ? staticKeys.has(staticSeriesKey) : false;
+    const staticReaderUploaded = slug ? (staticReaderCounts.get(slug) || 0) : 0;
+    const syncMatchesSeries = syncStatus?.status === 'running' && String(syncStatus.seriesId || '') === seriesId;
+    const imagesOk = imageTotal > 0 && imageUploaded >= imageTotal;
+    const staticOk = !slug || (staticSeriesUploaded && staticReaderUploaded > 0);
+    let state = 'unchecked';
+
+    if (String(series.status || 'draft') !== 'public') {
+      state = 'not-public';
+    } else if (syncMatchesSeries) {
+      state = 'syncing';
+    } else if (!imagesOk) {
+      state = 'missing-images';
+    } else if (!staticOk) {
+      state = 'missing-static-api';
+    } else {
+      state = 'ok';
+    }
+
+    statuses[seriesId] = {
+      state,
+      label: productionStatusLabel(state),
+      summary: imagesOk && staticOk ? 'Ảnh và static API đã có trong S3 state.' : '',
+      images: {
+        uploaded: imageUploaded,
+        total: imageTotal,
+        missing: Math.max(0, imageTotal - imageUploaded)
+      },
+      staticApi: {
+        series: staticSeriesUploaded,
+        readerCount: staticReaderUploaded
+      },
+      sync: syncMatchesSeries ? {
+        checked: Number(syncStatus.checked || 0),
+        total: Number(syncStatus.total || 0),
+        percent: Number(syncStatus.percent || 0),
+        eta: syncStatus.eta || ''
+      } : null,
+      updatedAt: syncState.updatedAt || ''
+    };
+  }
+
+  return {
+    updatedAt: syncState.updatedAt || '',
+    stateFileExists: true,
+    statuses
+  };
+}
+
+async function readAdminProductionStatus() {
+  const now = Date.now();
+  if (productionStatusCache && productionStatusCache.expiresAt > now) return productionStatusCache.value;
+  try {
+    const [catalog, syncState, syncStatus] = await Promise.all([
+      readAdminCatalog(),
+      readS3SyncState(),
+      readS3SyncStatus()
+    ]);
+    const value = buildAdminProductionStatus(catalog, syncState, syncStatus);
+    productionStatusCache = { value, expiresAt: now + 10_000 };
+    return value;
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return {
+        updatedAt: '',
+        stateFileExists: false,
+        statuses: {},
+        message: 'Chưa có dữ liệu S3 sync state local.'
+      };
+    }
+    throw error;
+  }
+}
+
+function localAdminOperationsEnabled() {
   return !process.env.VERCEL || process.env.ENABLE_LOCAL_CRAWLER_UI === 'true';
+}
+
+function localS3SyncEnabled() {
+  return localAdminOperationsEnabled();
 }
 
 async function startRetryFailedS3Sync() {
@@ -548,6 +696,11 @@ async function handleApi(req, res, url) {
     return true;
   }
 
+  if (req.method === 'GET' && url.pathname === '/api/admin/production-status') {
+    jsonResponse(res, 200, await readAdminProductionStatus());
+    return true;
+  }
+
   if (req.method === 'POST' && url.pathname === '/api/admin/s3-sync/retry-failed') {
     if (!localS3SyncEnabled()) {
       jsonResponse(res, 503, {
@@ -568,13 +721,41 @@ async function handleApi(req, res, url) {
       const body = await readJsonBody(req);
       const target = new URL(String(body.url || ''));
       if (!['http:', 'https:'].includes(target.protocol)) throw new Error('Invalid production URL.');
-      const response = await fetch(target, {
-        method: 'GET',
-        headers: { 'user-agent': 'CuonTruyenAdminCheck/1.0' }
+      const seriesId = String(body.seriesId || '').trim();
+      let targets = [{
+        key: 'series-page',
+        label: 'Trang truyện production',
+        kind: 'html',
+        required: true,
+        url: target.toString()
+      }];
+      if (seriesId) {
+        const catalog = await readCatalog();
+        const series = findSeriesBySlug(catalog, seriesId, { includeDraft: true }) || await getSeries(seriesId, { includePages: true, includeDraft: true });
+        if (!series) {
+          jsonResponse(res, 404, { ok: false, error: 'Series not found' });
+          return true;
+        }
+        targets = buildProductionCheckTargets({
+          series,
+          productionUrl: target.toString(),
+          productionBaseUrl: process.env.PUBLIC_SITE_URL || getBaseUrl(req),
+          importsBaseUrl: process.env.IMPORTS_BASE_URL || process.env.PUBLIC_IMPORTS_BASE_URL || process.env.S3_IMPORTS_BASE_URL || '',
+          staticApiBaseUrl: process.env.STATIC_API_BASE_URL || process.env.PUBLIC_STATIC_API_BASE_URL || ''
+        });
+      }
+      const result = await checkProductionTargets(targets, {
+        fetchImpl: (targetUrl, options = {}) => fetch(targetUrl, {
+          ...options,
+          headers: {
+            'user-agent': 'CuonTruyenAdminCheck/1.0',
+            ...(options.headers || {})
+          }
+        })
       });
-      jsonResponse(res, response.ok ? 200 : 502, {
-        ok: response.ok,
-        status: response.status,
+      jsonResponse(res, result.ok ? 200 : 502, {
+        ...result,
+        status: result.ok ? 200 : 502,
         url: target.toString()
       });
     } catch (error) {
@@ -711,6 +892,12 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === 'POST' && url.pathname.match(/^\/api\/admin\/series\/[^/]+\/publish-production$/)) {
+    if (!localAdminOperationsEnabled()) {
+      jsonResponse(res, 503, {
+        error: 'Production pipeline chỉ chạy ở admin local/crawler, không chạy trên Vercel production.'
+      });
+      return true;
+    }
     const id = decodeURIComponent(url.pathname.split('/')[4]);
     const body = await readJsonBody(req);
     const catalog = await readCatalog({ includePages: false });
@@ -889,9 +1076,10 @@ async function handleSeoRoute(req, res, url) {
       textResponse(res, 404, renderNotFoundShell(url.pathname, baseUrl), 'text/html; charset=utf-8');
       return true;
     }
+    const copy = tagSeoCopy(page.tag);
     textResponse(res, 200, renderHtmlShell({
-      title: `Truyện ${page.tag.name} - Cuộn Truyện`,
-      description: `Đọc truyện tranh ${page.tag.name} online trên Cuộn Truyện, cập nhật mới và tối ưu trải nghiệm đọc liền mạch trên điện thoại.`,
+      title: copy.title,
+      description: copy.description,
       canonicalUrl: `${baseUrl}/the-loai/${page.tag.slug}`,
       jsonLd: tagPageJsonLd(page, baseUrl)
     }), 'text/html; charset=utf-8');

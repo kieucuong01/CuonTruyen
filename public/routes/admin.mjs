@@ -62,6 +62,7 @@ export function createAdminRoute({
   let adminFlashMessage = '';
   let s3SyncPollTimer = null;
   let crawlQueuePollTimer = null;
+  let adminProductionStatus = null;
 
   function canRunLocalOperations() {
     return localOperationsEnabled();
@@ -81,6 +82,11 @@ export function createAdminRoute({
       .catch(() => null);
   }
 
+  async function loadAdminProductionStatus() {
+    return fetchJson('/api/admin/production-status', { headers: adminHeaders() })
+      .catch(() => ({ statuses: {}, stateFileExists: false }));
+  }
+
   async function renderAdmin() {
     stopReaderRuntime();
     if (!loadAdminToken()) {
@@ -90,12 +96,15 @@ export function createAdminRoute({
     let catalog;
     let bulletin;
     let analytics;
+    let productionStatus;
     try {
-      [catalog, bulletin, analytics] = await Promise.all([
+      [catalog, bulletin, analytics, productionStatus] = await Promise.all([
         loadAdminCatalog(),
         loadAdminBulletin(),
-        loadAdminAnalytics()
+        loadAdminAnalytics(),
+        loadAdminProductionStatus()
       ]);
+      adminProductionStatus = productionStatus;
     } catch (error) {
       if (isAdminAuthError(error)) {
         clearAdminSession();
@@ -165,8 +174,13 @@ export function createAdminRoute({
       return;
     }
     let catalog;
+    let productionStatus;
     try {
-      catalog = await loadAdminCatalog();
+      [catalog, productionStatus] = await Promise.all([
+        loadAdminCatalog(),
+        loadAdminProductionStatus()
+      ]);
+      adminProductionStatus = productionStatus;
     } catch (error) {
       if (isAdminAuthError(error)) {
         clearAdminSession();
@@ -723,16 +737,18 @@ export function createAdminRoute({
             <strong title="${escapeAttr(series.title)}">${escapeHtml(series.title)}</strong>
             <span>${stats.importedChapterCount}/${stats.chapterCount} chapter - ${stats.pageCount} ảnh</span>
             ${renderAdminSeriesBadges(stats)}
+            ${renderAdminProductionBadge(series)}
           </div>
         </div>
         <div class="admin-series-card-actions">
           <a class="primary-btn" data-link href="/admin/series/${escapeAttr(series.id)}">Quản lý</a>
           ${localOps ? `<button class="ghost-btn" type="button" data-update-chapters="${escapeAttr(series.id)}" ${sourceUrl ? '' : 'disabled'}>Cập nhật chapter mới</button>` : ''}
           ${localOps ? `<button class="ghost-btn production-quick-btn" type="button" data-publish-production="${escapeAttr(series.id)}">Tối ưu + sync S3</button>` : ''}
+          ${series.slug ? `<button class="ghost-btn" type="button" data-production-check="${escapeAttr(series.id)}" data-production-url="${escapeAttr(productionSeriesUrl(series))}">Check</button>` : ''}
           ${series.slug ? `<a class="ghost-btn" data-link href="/truyen/${escapeAttr(series.slug)}">Mở public</a>` : ''}
         </div>
         ${localOps ? `<div class="status-line admin-update-status" data-update-chapters-status="${escapeAttr(series.id)}"></div>` : ''}
-        ${localOps ? `<div class="status-line production-publish-status" data-production-publish-status="${escapeAttr(series.id)}"></div>` : ''}
+        <div class="status-line production-publish-status" data-production-publish-status="${escapeAttr(series.id)}"></div>
       </article>
     `;
   }
@@ -751,6 +767,7 @@ export function createAdminRoute({
             <h2>${escapeHtml(series.title)}</h2>
             <p>${stats.importedChapterCount}/${stats.chapterCount} chapter - ${stats.pageCount} ảnh - ${escapeHtml(statusLabel(stats.status))}</p>
             ${renderAdminSeriesBadges(stats)}
+            ${renderAdminProductionBadge(series)}
           </div>
           ${localOps ? `<div class="admin-detail-actions">
             <button class="ghost-btn" type="button" data-update-chapters="${escapeAttr(series.id)}" ${sourceUrl ? '' : 'disabled'}>Cập nhật chapter mới</button>
@@ -934,6 +951,66 @@ export function createAdminRoute({
         ${stats.missingImageCount ? `<span>${stats.missingImageCount} thiếu ảnh</span>` : ''}
       </div>
     `;
+  }
+
+  function productionStatusForSeries(series = {}) {
+    return adminProductionStatus?.statuses?.[series.id] || null;
+  }
+
+  function renderAdminProductionBadge(series = {}) {
+    const status = productionStatusForSeries(series);
+    const state = status?.state || 'unchecked';
+    const images = status?.images || {};
+    const staticApi = status?.staticApi || {};
+    const sync = status?.sync || null;
+    const title = status
+      ? [
+        `Ảnh S3: ${Number(images.uploaded || 0)}/${Number(images.total || 0)}`,
+        `Static series: ${staticApi.series ? 'có' : 'thiếu'}`,
+        `Reader API: ${Number(staticApi.readerCount || 0)} file`,
+        sync ? `Đang sync: ${Number(sync.percent || 0)}% - ETA ${sync.eta || 'đang tính'}` : ''
+      ].filter(Boolean).join(' · ')
+      : 'Chưa có dữ liệu sync local để kết luận.';
+    return `
+      <div class="admin-production-badge-row">
+        <span class="admin-production-badge is-${escapeAttr(productionStatusClass(state))}" title="${escapeAttr(title)}">
+          ${productionStatusIcon(state)} ${escapeHtml(status?.label || 'Chưa kiểm tra')}
+        </span>
+        ${renderAdminProductionMiniStats(status)}
+      </div>
+    `;
+  }
+
+  function renderAdminProductionMiniStats(status) {
+    if (!status) return '<small>Chưa có dữ liệu S3 sync state.</small>';
+    if (status.state === 'syncing') {
+      return `<small>${Number(status.sync?.percent || 0)}% · ETA ${escapeHtml(status.sync?.eta || 'đang tính')}</small>`;
+    }
+    if (status.state === 'missing-images') {
+      return `<small>Thiếu ${Number(status.images?.missing || 0).toLocaleString('vi-VN')} ảnh</small>`;
+    }
+    if (status.state === 'missing-static-api') {
+      return '<small>Ảnh đã có, cần sync static API</small>';
+    }
+    if (status.state === 'ok') {
+      return '<small>Ảnh + API đã có trong state</small>';
+    }
+    return `<small>${escapeHtml(status.label || 'Chưa kiểm tra')}</small>`;
+  }
+
+  function productionStatusClass(state = '') {
+    if (state === 'ok') return 'ok';
+    if (state === 'syncing') return 'syncing';
+    if (state === 'missing-images' || state === 'missing-static-api') return 'warning';
+    if (state === 'not-public') return 'draft';
+    return 'unchecked';
+  }
+
+  function productionStatusIcon(state = '') {
+    if (state === 'ok') return '✓';
+    if (state === 'syncing') return '...';
+    if (state === 'missing-images' || state === 'missing-static-api') return '!';
+    return '○';
   }
 
   function statusLabel(status) {
@@ -1307,12 +1384,12 @@ export function createAdminRoute({
       const result = await fetchJson('/api/admin/production-check', {
         method: 'POST',
         headers: adminHeaders(),
-        body: JSON.stringify({ url })
+        body: JSON.stringify({ url, seriesId })
       });
       if (!result.ok) throw new Error(result.error || `Production tra ve HTTP ${result.status || '?'}.`);
       if (status) {
         status.className = 'status-line admin-wide production-publish-status success';
-        status.innerHTML = `Production OK (${Number(result.status || 200)}): <a href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(url)}</a>`;
+        status.innerHTML = renderProductionCheckResult(result, url);
       }
       window.open(url, '_blank', 'noopener,noreferrer');
     } catch (error) {
@@ -1324,6 +1401,25 @@ export function createAdminRoute({
       button.disabled = false;
       button.textContent = originalText;
     }
+  }
+
+  function renderProductionCheckResult(result = {}, url = '') {
+    const checks = Array.isArray(result.checks) ? result.checks : [];
+    return `
+      <div class="progress-copy">
+        <strong>Production OK (${Number(result.status || 200)})</strong>
+        <a href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(url)}</a>
+      </div>
+      ${checks.length ? `<div class="production-step-list">
+        ${checks.map((check) => `
+          <article class="production-step is-${check.ok ? 'completed' : 'failed'}">
+            <b>${check.ok ? '✓' : '!'} ${escapeHtml(check.label || check.key || 'Check')}</b>
+            <span>${escapeHtml(check.url || '')}</span>
+            <small>${check.ok ? `HTTP ${Number(check.status || 200)}` : escapeHtml(check.error || `HTTP ${Number(check.status || 0)}`)}</small>
+          </article>
+        `).join('')}
+      </div>` : ''}
+    `;
   }
 
   async function pollImportJob(jobId, status, { navigateOnComplete = false } = {}) {
@@ -1424,7 +1520,7 @@ export function createAdminRoute({
     if (status === 'completed') return '✓';
     if (status === 'running') return '…';
     if (status === 'failed') return '!';
-    return 'â—‹';
+    return '○';
   }
 
   function formatCrawlDuration(seconds) {

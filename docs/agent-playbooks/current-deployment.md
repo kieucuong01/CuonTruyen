@@ -99,7 +99,7 @@ https://s3.vn-hcm-1.vietnix.cloud/cuontruyen/imports/<seriesId>/<chapterId>/<ima
 Production `/admin` is enabled, but it is content-only:
 
 ```text
-Allowed: login, catalog, metadata edits, series status, chapter status, events.
+Allowed: login, catalog, metadata edits, tag/origin edits, series status, chapter status, bulletin messages, analytics/events.
 Hidden: crawl, update chapters, optimize images, sync S3, production pipeline.
 ```
 
@@ -110,6 +110,8 @@ ENABLE_LOCAL_CRAWLER_UI=true
 ```
 
 Do not enable heavy crawler UI on Vercel production.
+
+The server also blocks local-only production pipeline calls on Vercel. Even if a hidden button is called manually, `POST /api/admin/series/:id/publish-production` should return `503` unless the app is running locally or `ENABLE_LOCAL_CRAWLER_UI=true` is explicitly set.
 
 ## Local Runtime
 
@@ -169,6 +171,21 @@ If production uses live Supabase API, the most important publish step is syncing
 images to S3 after the local crawler has written catalog changes to the same
 Supabase database. Static API export/sync can still be used as fallback/cache,
 but Vercel no longer needs it for admin edits to appear.
+
+For normal image publish, sync by series instead of full bucket:
+
+```powershell
+node scripts/sync-vietnix-s3.mjs --images-only --catalog-only --series-id <series-id> --apply
+node scripts/sync-vietnix-s3.mjs --static-api-only --apply
+```
+
+The admin local production check verifies:
+
+- production series page
+- cover image on S3
+- first readable chapter image on S3
+- static series API JSON
+- static reader API JSON
 
 If frontend code changed, commit and push to `main`; Vercel deploys production
 from Git automatically.

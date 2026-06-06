@@ -113,7 +113,8 @@ async function writeStaticInfoPages() {
     renderStaticPageShell,
     seriesJsonLd,
     chapterJsonLd,
-    tagPageJsonLd
+    tagPageJsonLd,
+    tagSeoCopy
   } = await import('../server/seo.mjs');
   const baseUrl = siteBaseUrl();
   for (const page of STATIC_PAGES) {
@@ -137,8 +138,8 @@ async function writeStaticInfoPages() {
     const seriesSlug = safeRoutePart(series.slug);
     if (!seriesSlug) continue;
     const seriesUrl = `${baseUrl}/truyen/${seriesSlug}`;
-    const seriesTitle = `${series.title} - Đọc truyện tranh online tại Cuộn Truyện`;
-    const seriesDescription = series.description || `Đọc ${series.title} online, tự lưu vị trí đọc và mở lại đúng chương trên Cuộn Truyện.`;
+    const seriesTitle = `${series.title} - ??c truy?n tranh online t?i Cu?n Truy?n`;
+    const seriesDescription = series.description || `??c ${series.title} online t?i Cu?n Truy?n, reader cu?n d?c m??t, t? l?u v? tr? v? m? l?i ??ng ch??ng ?ang ??c.`;
     if (await writeRouteIndex(`/truyen/${seriesSlug}`, renderHtmlShell({
       title: seriesTitle,
       description: seriesDescription,
@@ -154,7 +155,7 @@ async function writeStaticInfoPages() {
       const chapterSlug = safeRoutePart(chapter.slug || chapter.id);
       if (!chapterSlug || chapter.status !== 'public' || !chapter.imported) continue;
       const chapterTitle = `${series.title} - ${chapter.label || chapter.title || chapterSlug}`;
-      const chapterDescription = `Đọc ${chapterTitle} online tại Cuộn Truyện.`;
+      const chapterDescription = `??c ${chapterTitle} online t?i Cu?n Truy?n v?i ?nh t?i nhanh, ??c d?c li?n m?ch v? t? l?u ti?n ??.`;
       if (await writeRouteIndex(`/truyen/${seriesSlug}/${chapterSlug}`, renderHtmlShell({
         title: chapterTitle,
         description: chapterDescription,
@@ -171,13 +172,13 @@ async function writeStaticInfoPages() {
   for (const tag of homeData?.tags || []) {
     const tagSlug = safeRoutePart(tag.slug);
     if (!tagSlug) continue;
-    const title = `${tag.name || tag.slug} - Truyện tranh theo thể loại`;
+    const copy = tagSeoCopy({ ...tag, slug: tagSlug });
     if (await writeRouteIndex(`/the-loai/${tagSlug}`, renderHtmlShell({
-      title,
-      description: `Đọc truyện tranh thể loại ${tag.name || tag.slug} trên Cuộn Truyện.`,
+      title: copy.title,
+      description: copy.description,
       canonicalUrl: `${baseUrl}/the-loai/${tagSlug}`,
       jsonLd: tagPageJsonLd({ tag: { ...tag, slug: tagSlug }, series: [] }, baseUrl),
-      bodyHtml: `<main id="app" class="site-shell static-page"><section class="page-heading static-page-heading"><h1>${escapeHtml(title)}</h1></section></main>`
+      bodyHtml: `<main id="app" class="site-shell static-page"><section class="page-heading static-page-heading"><h1>${escapeHtml(copy.title)}</h1><p>${escapeHtml(copy.description)}</p></section></main>`
     }))) {
       tagPageCount += 1;
     }

@@ -21,3 +21,12 @@ test('vercel serverless API catch-all exists for admin production', () => {
   const source = fs.readFileSync('api/[...path].mjs', 'utf8');
   assert.match(source, /handleNodeRequest/);
 });
+
+test('vercel production blocks local-only publish pipeline API', () => {
+  const source = fs.readFileSync('server/index.mjs', 'utf8');
+
+  assert.match(source, /function localAdminOperationsEnabled\(\)/);
+  assert.match(source, /ENABLE_LOCAL_CRAWLER_UI/);
+  assert.match(source, /publish-production/);
+  assert.match(source, /Production pipeline chỉ chạy ở admin local\/crawler/);
+});

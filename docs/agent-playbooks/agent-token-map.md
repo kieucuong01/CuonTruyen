@@ -41,7 +41,7 @@ These can be large or temporary. Use targeted file paths only.
 | Public catalog/filtering | `server/contentStore.mjs`, `server/catalogStore.mjs` |
 | Vercel frontend/admin API | `vercel.json`, `api/[...path].mjs`, `scripts/write-public-config.mjs`, `public/apiClient.mjs`, `server/index.mjs` |
 | S3 sync/export | `scripts/export-static-api.mjs`, `scripts/sync-vietnix-s3.mjs`, `docs/agent-playbooks/vercel-s3-publishing.md` |
-| SEO shell/sitemap | `server/seo.mjs`, `server/index.mjs`, `server/contentStore.mjs` |
+| SEO shell/sitemap/copy | `server/seo.mjs`, `server/index.mjs`, `scripts/write-public-config.mjs`, `docs/agent-playbooks/seo-launch.md` |
 | Encoding mojibake | `scripts/check-encoding.mjs`, then the reported files |
 
 ## Public Hosting Mental Model
@@ -92,8 +92,8 @@ npm run export:static-api
 Upload public JSON/images to S3:
 
 ```powershell
-npm run sync:s3:dry-run
-npm run sync:s3
+node scripts/sync-vietnix-s3.mjs --images-only --catalog-only --series-id <series-id> --apply
+node scripts/sync-vietnix-s3.mjs --static-api-only --apply
 ```
 
 Deploy static frontend:

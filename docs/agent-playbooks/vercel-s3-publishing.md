@@ -125,20 +125,26 @@ After crawling or updating chapters locally:
 ```powershell
 $env:PUBLIC_IMPORTS_BASE_URL='https://img.example.com'
 npm run export:static-api
-npm run sync:s3:dry-run
-npm run sync:s3
 ```
 
 For a newly completed crawl, prefer syncing only that series' images first:
 
 ```powershell
-node scripts/sync-vietnix-s3.mjs --images-only --series-id <series-id> --apply --force
+node scripts/sync-vietnix-s3.mjs --images-only --catalog-only --series-id <series-id> --apply
 node scripts/sync-vietnix-s3.mjs --static-api-only --apply --force
 ```
 
 The S3 script refuses full image sync unless a series id, `--retry-failed`, or
 explicit `--all` is provided. This prevents accidentally rechecking hundreds of
 thousands of images.
+
+The production pipeline in local admin should run per selected series:
+
+```text
+Choose series -> crawl/update chapters -> optimize images -> sync that series images -> export static API -> sync static API -> check production
+```
+
+Do not use `npm run sync:s3` as the default daily flow because it can become a full image run. Use a scoped `--series-id` image sync plus static API sync.
 
 Retry only files recorded as failed in the latest S3 status:
 
@@ -164,6 +170,18 @@ npm run sync:s3:retry-failed
 ```
 
 Dry-run is the safe default for `scripts/sync-vietnix-s3.mjs`. Use `npm run sync:s3` only after the dry-run count looks reasonable.
+
+## Production Check After Sync
+
+After a series publish, use local admin's `Check production` step. It checks:
+
+- `/truyen/<series-slug>` returns OK.
+- cover image URL resolves through the public S3 imports base.
+- first readable chapter image resolves through the public S3 imports base.
+- `/static-api/series/<series-slug>.json` exists.
+- `/static-api/reader/<series-slug>/<chapter-slug>.json` exists.
+
+If one image check fails but static API is OK, retry S3 failed files first. If static API fails, rerun `npm run export:static-api` and then `node scripts/sync-vietnix-s3.mjs --static-api-only --apply --force`.
 
 If production uses live Supabase API, make sure the local crawler writes to the
 same `DATABASE_URL` as Vercel. Then admin/public catalog edits appear through the

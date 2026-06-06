@@ -13,6 +13,9 @@ Implemented:
 - Admin credentials no longer have code defaults; `ADMIN_EMAIL`, `ADMIN_PASSWORD`, and `ADMIN_TOKEN` are required.
 - `/api/admin/*` and `/api/import` fail closed when admin env is missing.
 - `/api/admin/*`, `/api/import`, and `/api/events` have basic in-memory rate limiting.
+- Production `/admin` is content-only on Vercel: metadata, tags, status, bulletin, analytics.
+- Crawl, update chapters, optimize images, S3 sync, and production pipeline controls are local-only.
+- Vercel also rejects direct production pipeline API calls unless local crawler UI is explicitly enabled.
 - Series and chapter statuses: `public`, `draft`, `removed`.
 - New imports default to `draft`.
 - Recrawls preserve existing public moderation where appropriate.
@@ -20,12 +23,15 @@ Implemented:
 - Admin catalog endpoint can still see draft/removed content.
 - Admin UI can edit series metadata, crawl schedule, and chapter status/title/takedown reason.
 - SEO static pages exist at `/gioi-thieu`, `/lien-he`, `/chinh-sach-noi-dung`, and `/privacy`.
+- SEO production copy has been reviewed for default metadata, static policy pages, and origin tag pages.
+- Tag SEO copy for Manhwa, Manhua, Korean comics, and Chinese comics is centralized in `tagSeoCopy()` in `server/seo.mjs`.
 - Missing or hidden public series/chapter/tag routes return a clean 404 HTML shell.
 - Reader has stronger continue CTAs and neutral chapter breaks instead of an intrusive ad placeholder.
+- S3 image sync is scoped by series by default, records failed files, supports retry-failed, and local admin can check production assets after sync.
 
 Not yet done:
 
-- Real ads or donate integration.
+- Real AdSense slot values and real donate destination.
 - VPS deployment scripts/process manager setup.
 - Browser-automated visual QA in sessions where the browser tool is unavailable.
 
@@ -61,8 +67,15 @@ Before public launch:
 - `/sitemap.xml` returns only public series, public chapters, tags, and static policy pages.
 - `/robots.txt` points to the sitemap.
 - Public series pages have useful title, description, canonical, Open Graph, and JSON-LD.
+- Tag pages have production copy for Manhwa, Manhua, Truyen Han, and Truyen Trung.
 - Static policy/contact/privacy pages are reachable and linked in the UI or footer/nav.
 - Removed/draft URLs return a clean 404 HTML shell.
+
+Google Search Console smoke:
+
+- Submit `https://<domain>/sitemap.xml`.
+- Inspect `/`, `/gioi-thieu`, one public series page, one public chapter page, and origin tag pages.
+- Request indexing only after the live URL test returns HTTP 200 and is not blocked by robots.
 
 ## Reader Checklist
 

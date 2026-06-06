@@ -170,6 +170,7 @@ const READER_PRELOAD_AHEAD_COUNT = 28;
 const READER_PRELOAD_ROOT_MARGIN = '6500px 0px';
 const READER_IMAGE_RELEASE_BEHIND_PX = 28000;
 const READER_BLANK_IMAGE = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+const READER_RELEASE_MEDIA_QUERY = '(hover: hover) and (pointer: fine)';
 const preloadedImageUrls = new Set();
 const readerPreloadLinkUrls = new Set();
 const readerDecodeQueue = new Set();
@@ -1626,11 +1627,17 @@ function decodeReaderImageSoon(image) {
 }
 
 function releaseFarBehindReaderImages() {
+  if (!shouldReleaseReaderImages()) return;
   document.querySelectorAll('[data-reader-image]').forEach((image) => {
     const rect = image.getBoundingClientRect();
     if (rect.bottom >= -READER_IMAGE_RELEASE_BEHIND_PX) return;
     releaseReaderImageElement(image, READER_BLANK_IMAGE);
   });
+}
+
+function shouldReleaseReaderImages() {
+  if (typeof window.matchMedia !== 'function') return false;
+  return window.matchMedia(READER_RELEASE_MEDIA_QUERY).matches;
 }
 
 function saveReaderProgress() {

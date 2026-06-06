@@ -56,12 +56,19 @@ Do not block `/imports/`; comic images are part of public reading pages.
 
 Production static pages are generated from `server/seo.mjs`:
 
-- `/gioi-thieu`: product positioning and reader benefits.
-- `/lien-he`: bug reports, takedown requests, contact instructions.
-- `/chinh-sach-noi-dung`: public/draft/removed moderation behavior.
-- `/privacy`: localStorage, login tokens, analytics/ad/donate events.
+- Homepage/default metadata: position Cuon Truyen as a mobile-first comic reader for Manhwa, Manhua, and Manga, not as a prototype.
+- `/gioi-thieu`: product positioning, mobile reader benefits, continue-reading behavior.
+- `/lien-he`: bug reports, missing chapters/images, content handling requests.
+- `/chinh-sach-noi-dung`: public/draft/removed moderation behavior, takedown handling, sitemap exclusion.
+- `/privacy`: localStorage reading progress, login/session tokens, analytics/ad/donate events.
+- `/the-loai/manhwa`: Manhwa / Korean comics landing page.
+- `/the-loai/manhua`: Manhua / Chinese comics landing page.
+- `/the-loai/truyen-han`: Korean-origin comics landing page.
+- `/the-loai/truyen-trung`: Chinese-origin comics landing page.
 
 When editing these pages, keep copy factual and avoid promising licensing or response SLAs unless the owner has a real process for them.
+
+Tag page copy is centralized in `tagSeoCopy()` in `server/seo.mjs`. If a new high-value tag needs custom SEO copy, add it there so both dynamic API rendering and Vercel static HTML generation stay consistent.
 
 ## Verification commands
 

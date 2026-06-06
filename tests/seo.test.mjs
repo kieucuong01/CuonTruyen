@@ -9,7 +9,8 @@ import {
   renderNotFoundShell,
   renderStaticPageShell,
   seriesJsonLd,
-  tagPageJsonLd
+  tagPageJsonLd,
+  tagSeoCopy
 } from '../server/seo.mjs';
 
 const series = {
@@ -75,6 +76,12 @@ test('buildRobotsTxt allows public pages but blocks admin and JSON surfaces', ()
   assert.match(robots, /Sitemap: https:\/\/example.com\/sitemap\.xml/);
 });
 
+test('tagSeoCopy gives production copy for origin landing pages', () => {
+  assert.match(tagSeoCopy({ name: 'Manhwa', slug: 'manhwa' }).title, /Manhwa Hàn Quốc/);
+  assert.match(tagSeoCopy({ name: 'Manhua', slug: 'manhua' }).description, /Manhua Trung Quốc/);
+  assert.match(tagSeoCopy({ name: 'Fantasy', slug: 'fantasy' }).description, /đọc dọc mượt/);
+});
+
 test('tagPageJsonLd emits a crawlable collection page payload', () => {
   const payload = tagPageJsonLd({
     tag: { name: 'Truyện Manhua', slug: 'manhua' },
@@ -83,15 +90,26 @@ test('tagPageJsonLd emits a crawlable collection page payload', () => {
 
   assert.equal(payload['@type'], 'CollectionPage');
   assert.equal(payload.url, 'https://example.com/the-loai/manhua');
+  assert.equal(payload.description, tagSeoCopy({ name: 'Truyện Manhua', slug: 'manhua' }).description);
   assert.equal(payload.mainEntity.itemListElement[0].url, 'https://example.com/truyen/manh-nhat-lich-su');
 });
 
 test('renderStaticPageShell emits crawlable static policy pages', () => {
   const html = renderStaticPageShell('/chinh-sach-noi-dung', 'https://example.com');
 
-  assert.match(html, /<title>Chính sách nội dung và gỡ bỏ - Cuộn Truyện<\/title>/);
+  assert.match(html, /<title>Chính sách nội dung và gỡ bỏ truyện - Cuộn Truyện<\/title>/);
   assert.match(html, /<link rel="canonical" href="https:\/\/example.com\/chinh-sach-noi-dung">/);
-  assert.match(html, /Chính sách nội dung/);
+  assert.match(html, /public\/draft\/removed/);
+});
+
+test('renderStaticPageShell emits production homepage-adjacent copy for intro and privacy pages', () => {
+  const intro = renderStaticPageShell('/gioi-thieu', 'https://example.com');
+  const privacy = renderStaticPageShell('/privacy', 'https://example.com');
+
+  assert.match(intro, /Website đọc truyện tranh online tối ưu mobile/);
+  assert.match(intro, /reader cuộn dọc mượt/);
+  assert.match(privacy, /Cách Cuộn Truyện lưu dữ liệu đọc/);
+  assert.match(privacy, /localStorage/);
 });
 
 test('renderNotFoundShell emits clean 404 metadata', () => {

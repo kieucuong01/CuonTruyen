@@ -3936,6 +3936,61 @@ button:disabled,
   white-space: nowrap;
 }
 
+.admin-production-badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 7px;
+}
+
+.admin-production-badge-row small {
+  color: #667085;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.admin-production-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  border: 1px solid rgba(148, 163, 184, 0.36);
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: #f8fafc;
+  color: #475467;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.admin-production-badge.is-ok {
+  border-color: rgba(16, 185, 129, 0.34);
+  background: #ecfdf3;
+  color: #047857;
+}
+
+.admin-production-badge.is-syncing {
+  border-color: rgba(59, 130, 246, 0.3);
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.admin-production-badge.is-warning {
+  border-color: rgba(245, 158, 11, 0.38);
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.admin-production-badge.is-draft,
+.admin-production-badge.is-unchecked {
+  border-color: rgba(148, 163, 184, 0.32);
+  background: #f8fafc;
+  color: #667085;
+}
+
 .admin-series-list-card .admin-series-card-actions {
   display: grid;
   grid-template-columns: 1fr;
@@ -4625,6 +4680,8 @@ button:disabled,
   .chapter-block {
     margin: 0;
     padding: 0;
+    content-visibility: visible;
+    contain-intrinsic-size: auto;
   }
 
   .chapter-heading {
