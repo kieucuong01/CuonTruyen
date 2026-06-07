@@ -3,11 +3,19 @@ import '../server/env.mjs';
 import { readCatalog as readJsonCatalog } from '../server/catalogStore.mjs';
 import { ensureStorageSchema, usesPostgresStorage, writeCatalog } from '../server/dataStore.mjs';
 import { closePostgresPool, upsertSeriesInPostgres } from '../server/postgresStore.mjs';
+import { assertCatalogStorageReady } from '../server/storageConfig.mjs';
 
-if (!usesPostgresStorage()) {
+try {
+  assertCatalogStorageReady();
+} catch (error) {
+  console.error(error.message);
+  process.exitCode = 1;
+}
+
+if (!process.exitCode && !usesPostgresStorage()) {
   console.error('Set CATALOG_STORAGE=postgres and CATALOG_DATABASE_URL, DATABASE_URL, or POSTGRES_URL before running this migration.');
   process.exitCode = 1;
-} else {
+} else if (!process.exitCode) {
   const catalog = await readJsonCatalog();
   await ensureStorageSchema();
   const seriesList = catalog.series || [];

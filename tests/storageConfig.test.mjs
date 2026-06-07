@@ -2,11 +2,16 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  assertCatalogStorageReady,
   catalogStorageMode,
   hasPostgresCatalogUrl,
   postgresCatalogUrl,
   requirePostgresCatalogUrl
 } from '../server/storageConfig.mjs';
+
+test('catalog storage defaults to postgres without an explicit json escape hatch', () => {
+  assert.equal(catalogStorageMode({}), 'postgres');
+});
 
 test('catalog storage selects postgres when a Postgres URL is configured', () => {
   assert.equal(catalogStorageMode({ DATABASE_URL: 'postgres://db.example/catalog' }), 'postgres');
@@ -29,6 +34,17 @@ test('explicit postgres catalog mode requires a connection URL', () => {
   assert.equal(postgresCatalogUrl(env), '');
   assert.throws(
     () => requirePostgresCatalogUrl(env),
-    /CATALOG_STORAGE=postgres requires CATALOG_DATABASE_URL, DATABASE_URL, or POSTGRES_URL/
+    /PostgreSQL catalog mode requires CATALOG_DATABASE_URL, DATABASE_URL, or POSTGRES_URL/
   );
+});
+
+test('postgres catalog readiness fails before runtime can fall back to json', () => {
+  assert.throws(
+    () => assertCatalogStorageReady({}),
+    /PostgreSQL catalog mode requires CATALOG_DATABASE_URL, DATABASE_URL, or POSTGRES_URL/
+  );
+});
+
+test('explicit json catalog readiness bypasses the postgres URL requirement', () => {
+  assert.equal(assertCatalogStorageReady({ CATALOG_STORAGE: 'json' }), 'json');
 });

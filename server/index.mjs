@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { IMPORT_ROOT } from './catalogStore.mjs';
 import { createBoundedCache } from './cacheStore.mjs';
 import { ensureStorageSchema, getSeries, readCatalog, usesPostgresStorage } from './dataStore.mjs';
+import { assertCatalogStorageReady } from './storageConfig.mjs';
 import { appendAnalyticsEvent, buildAnalyticsSummary, listAnalyticsEvents } from './analyticsStore.mjs';
 import { adminConfigStatus, createAdminSession, isAdminAuthorized, isAdminPath } from './adminAuth.mjs';
 import {
@@ -1112,6 +1113,7 @@ async function handleSeoRoute(req, res, url) {
 export async function bootstrapServerStorage() {
   if (!serverBootstrapPromise) {
     serverBootstrapPromise = (async () => {
+      assertCatalogStorageReady();
       await ensureStorageSchema();
       await ensureCrawlQueueStorage();
     })();

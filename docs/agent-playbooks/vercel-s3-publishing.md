@@ -12,7 +12,7 @@ Local machine
 - Admin UI
 - Crawler
 - data/imports image library
-- PostgreSQL catalog through the same DB URL as production
+- PostgreSQL catalog through a separate local DB by default
 - optional legacy catalog.json fallback only when DB mode is intentionally disabled
 
 Vietnix S3 Object Storage
@@ -58,7 +58,17 @@ https://img.cuontruyen.com
 
 ## Required Secrets
 
-Put real values in `.env.local`:
+Put real values in `.env.local`. For local catalog DB setup, prefer:
+
+```powershell
+npm run db:local:setup
+```
+
+That writes `CATALOG_STORAGE=postgres`,
+`CATALOG_DATABASE_URL=postgres://comic_user:comic_local_password@127.0.0.1:5432/comic_reader_local`,
+and `POSTGRES_SSL=false` for the local database.
+
+S3 values also belong in `.env.local`:
 
 ```text
 S3_ENDPOINT=
@@ -184,9 +194,9 @@ After a series publish, use local admin's `Check production` step. It checks:
 
 If one image check fails but static API is OK, retry S3 failed files first. If static API fails, rerun `npm run export:static-api` and then `node scripts/sync-vietnix-s3.mjs --static-api-only --apply --force`.
 
-If production uses live Supabase API, make sure the local crawler writes to the
-same `DATABASE_URL` as Vercel. Then admin/public catalog edits appear through the
-Vercel API without waiting for static API export. S3 sync is still required for
+If production uses live Supabase API, local crawler/admin uses a separate local
+Postgres database by default. Promote catalog changes intentionally before
+expecting them to appear through the Vercel API. S3 sync is still required for
 new images.
 
 ## Vercel Environment
@@ -222,7 +232,7 @@ public
 - Admin content management is available on production `/admin`.
 - Crawl, optimize, and S3 sync still happen locally at `http://localhost:54533/admin`.
 - The production admin hides crawl, optimize, S3 sync, and production pipeline controls unless `ENABLE_LOCAL_CRAWLER_UI=true` is explicitly set.
-- With `CATALOG_STORAGE=postgres`, newly crawled catalog changes appear after the local crawler writes to Supabase and images are synced to S3.
+- With `CATALOG_STORAGE=postgres`, local crawls write to the configured DB. The default local setup is separate from production Supabase; production only changes after an intentional DB promotion/backfill.
 - If production is forced back to static API mode, the public Vercel site does not show newly crawled chapters until `export:static-api` and `sync:s3` run.
 - If images are missing on Vercel, check `PUBLIC_IMPORTS_BASE_URL` during `export:static-api`.
 - If data is stale, check `STATIC_API_BASE_URL` and S3 cache headers.

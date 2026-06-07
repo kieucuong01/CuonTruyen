@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { IMPORT_ROOT } from './catalogStore.mjs';
 import { importSeries } from './importer.mjs';
 import { ensureStorageSchema, readCatalog } from './dataStore.mjs';
+import { assertCatalogStorageReady } from './storageConfig.mjs';
 import { setStoredCrawlSchedule } from './contentStore.mjs';
 import {
   claimNextImportJob,
@@ -27,6 +28,7 @@ export async function runWorkerOnce({
   workerId = DEFAULT_WORKER_ID,
   enqueueSchedules = false
 } = {}) {
+  assertCatalogStorageReady();
   return withWorkerLock(workerId, async () => {
     await ensureStorageSchema();
     await ensureCrawlQueueStorage();
@@ -106,6 +108,7 @@ export async function startWorkerLoop({
   pollIntervalMs = Number(process.env.CRAWL_WORKER_POLL_MS || 2_000),
   scheduleScanMs = Number(process.env.CRAWL_SCHEDULE_SCAN_MS || 60_000)
 } = {}) {
+  assertCatalogStorageReady();
   let stopping = false;
   let nextScheduleScanAt = 0;
   const stop = () => {

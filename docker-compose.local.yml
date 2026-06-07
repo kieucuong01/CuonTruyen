@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cuontruyen-local-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${LOCAL_POSTGRES_USER:-comic_user}
+      POSTGRES_PASSWORD: ${LOCAL_POSTGRES_PASSWORD:-comic_local_password}
+      POSTGRES_DB: ${LOCAL_POSTGRES_DB:-comic_reader_local}
+    ports:
+      - "${LOCAL_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - cuontruyen_local_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  cuontruyen_local_postgres:

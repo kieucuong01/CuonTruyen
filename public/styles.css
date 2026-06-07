@@ -2370,8 +2370,19 @@ button:disabled,
 
 .revenue-dashboard {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
+  width: 100%;
+  min-width: 0;
   margin: 18px 0;
+}
+
+.admin-panel.revenue-dashboard {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.revenue-dashboard .admin-list-head {
+  min-width: 0;
 }
 
 .revenue-range-tabs {
@@ -2388,8 +2399,9 @@ button:disabled,
 
 .revenue-metrics {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
   gap: 12px;
+  min-width: 0;
 }
 
 .revenue-metrics article {
@@ -2416,6 +2428,8 @@ button:disabled,
 }
 
 .revenue-table-wrap {
+  width: 100%;
+  min-width: 0;
   overflow-x: auto;
 }
 

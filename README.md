@@ -17,7 +17,7 @@ Local-first comic reader and crawler for Vietnamese manhua/manhwa workflows. The
 - Local user session, follow list, and reading history using browser storage.
 - Admin login for crawl/import and content management.
 - Multi-URL durable crawl jobs with worker mode, retries, per-domain delay, and progress counters.
-- DB-first catalog facade: PostgreSQL mode when `CATALOG_DATABASE_URL`, `DATABASE_URL`, or `POSTGRES_URL` is set; local JSON is a legacy fallback/escape hatch.
+- DB-first catalog facade: local and production default to PostgreSQL; local JSON is only an explicit legacy fallback/escape hatch.
 - Cached images served from `data/imports/` or `IMPORT_ROOT` through `/imports/*`.
 - Optional Vercel static frontend mode with images and public JSON served from S3-compatible storage.
 - Series and chapter moderation with `public`, `draft`, and `removed` statuses.
@@ -30,6 +30,7 @@ Run from the repo root:
 
 ```powershell
 npm test
+npm run db:local:setup
 $env:PORT='54533'; npm run dev
 ```
 
@@ -58,6 +59,7 @@ npm run export:static-api
 npm run sync:s3:dry-run
 npm run sync:s3
 npm run db:migrate:catalog
+npm run db:local:setup
 npm test
 ```
 
@@ -195,22 +197,29 @@ S3 credentials belong in `.env.local`, not in Git. See `.env.example` and `docs/
 
 ## PostgreSQL Catalog Mode
 
-Use PostgreSQL for normal catalog/admin management:
+Use PostgreSQL for normal catalog/admin management. Local development uses a
+separate database on the machine by default:
 
 ```powershell
-$env:CATALOG_STORAGE='postgres'
-$env:CATALOG_DATABASE_URL='postgres://comic_user:password@127.0.0.1:5432/comic_reader'
-npm install
-npm run db:migrate:catalog
+npm run db:local:setup
 npm run dev
 ```
 
-`DATABASE_URL` or `POSTGRES_URL` also enable the same mode. When enabled,
-metadata, tags, chapters, pages, crawl schedules, crawl jobs, bulletin messages,
-users, sessions, and analytics events live in PostgreSQL. Images still stay on
-local/VPS disk under `IMPORT_ROOT` or `data/imports/`. Set
-`CATALOG_STORAGE=json` only when you intentionally need the legacy local JSON
-fallback.
+The setup command starts `docker-compose.local.yml`, writes these catalog values
+to `.env.local`, and migrates the existing JSON catalog into Postgres:
+
+```env
+CATALOG_STORAGE=postgres
+CATALOG_DATABASE_URL=postgres://comic_user:comic_local_password@127.0.0.1:5432/comic_reader_local
+POSTGRES_SSL=false
+```
+
+`DATABASE_URL` or `POSTGRES_URL` also enable the same mode. When PostgreSQL mode
+is active, metadata, tags, chapters, pages, crawl schedules, crawl jobs,
+bulletin messages, users, sessions, and analytics events live in PostgreSQL.
+Images still stay on local/VPS disk under `IMPORT_ROOT` or `data/imports/`.
+Set `CATALOG_STORAGE=json` only when you intentionally need the legacy local
+JSON fallback.
 
 ## Local Production Direction Before VPS
 
@@ -243,8 +252,8 @@ See `.env.example` for the full list. Important ones:
 - `CORS_ALLOW_ORIGIN` - exact frontend origin in production.
 - `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_TOKEN` - required admin login/session values.
 - `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_ADMIN_MAX`, `RATE_LIMIT_EVENTS_MAX` - basic in-memory protection for admin/import/events.
-- `CATALOG_STORAGE` - set to `postgres` for DB-first catalog mode, or `json` for the legacy local fallback.
-- `CATALOG_DATABASE_URL`, `DATABASE_URL`, or `POSTGRES_URL` - enables PostgreSQL catalog mode and supplies the connection string.
+- `CATALOG_STORAGE` - defaults to `postgres`; set to `json` only for the legacy local fallback.
+- `CATALOG_DATABASE_URL`, `DATABASE_URL`, or `POSTGRES_URL` - required for PostgreSQL catalog mode and supplies the connection string.
 - `IMPORT_ROOT` - moves runtime image/catalog files to another disk path.
 - `CRAWL_*` variables - worker polling, retry, rate-limit, and schedule tuning.
 

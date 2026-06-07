@@ -13,11 +13,17 @@ export function catalogStorageMode(env = process.env) {
   const explicit = String(env.CATALOG_STORAGE || env.CATALOG_STORAGE_MODE || '').trim().toLowerCase();
   if (POSTGRES_STORAGE_VALUES.has(explicit)) return 'postgres';
   if (JSON_STORAGE_VALUES.has(explicit)) return 'json';
-  return hasPostgresCatalogUrl(env) ? 'postgres' : 'json';
+  return 'postgres';
 }
 
 export function requirePostgresCatalogUrl(env = process.env) {
   const url = postgresCatalogUrl(env);
   if (url) return url;
-  throw new Error('CATALOG_STORAGE=postgres requires CATALOG_DATABASE_URL, DATABASE_URL, or POSTGRES_URL.');
+  throw new Error('PostgreSQL catalog mode requires CATALOG_DATABASE_URL, DATABASE_URL, or POSTGRES_URL. Run npm run db:local:setup for the local database, or set CATALOG_STORAGE=json for the legacy JSON fallback.');
+}
+
+export function assertCatalogStorageReady(env = process.env) {
+  const mode = catalogStorageMode(env);
+  if (mode === 'postgres') requirePostgresCatalogUrl(env);
+  return mode;
 }

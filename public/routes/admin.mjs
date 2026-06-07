@@ -564,7 +564,6 @@ export function createAdminRoute({
       : 'Crawler embedded đang tắt; cần chạy worker riêng.';
 
     target.className = `status-line crawl-queue-status${failedJobs.length ? ' warning' : ''}`;
-    const failedItems = Array.isArray(status.failedItems) ? status.failedItems : [];
     target.innerHTML = `
       <div class="progress-copy">
         <strong>${runningJob ? escapeHtml(runningJob.progress?.message || 'Đang crawl...') : totalWaiting ? 'Có job đang chờ crawler nhận' : 'Queue crawl đang rảnh'}</strong>
@@ -638,6 +637,7 @@ export function createAdminRoute({
           ? ' warning'
           : '';
     const title = status.message || (status.status === 'running' ? 'Đang đồng bộ ảnh lên S3...' : status.exists ? 'Tiến trình S3 gần nhất' : 'Chưa có tiến trình S3');
+    const failedItems = Array.isArray(status.failedItems) ? status.failedItems : [];
     target.className = `status-line s3-sync-status${statusClass}`;
     target.innerHTML = `
       <div class="progress-copy">

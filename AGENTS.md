@@ -49,8 +49,8 @@ $env:PORT='54533'; npm run dev
 
 - Node 18 ESM HTTP server, no framework.
 - Static frontend in `public/`.
-- DB-first catalog facade; PostgreSQL mode when `CATALOG_DATABASE_URL`, `DATABASE_URL`, or `POSTGRES_URL` is set.
-- Local JSON under `data/imports/catalog.json` remains only as a legacy fallback/escape hatch; image cache still lives under `data/imports/`.
+- DB-first catalog facade; local and production default to PostgreSQL, and `CATALOG_DATABASE_URL`, `DATABASE_URL`, or `POSTGRES_URL` is required unless `CATALOG_STORAGE=json` is set explicitly.
+- Local JSON under `data/imports/catalog.json` remains only as a deliberate legacy fallback/escape hatch; image cache still lives under `data/imports/`.
 - Separate crawl worker process for durable import jobs.
 - Current preferred public hosting mode: Vercel serves the frontend plus lightweight Node API for public reads/admin content management, Supabase Postgres stores catalog/users/events, Vietnix S3 serves `/imports/*` images, and the local machine runs crawler/optimizer/S3 sync.
 - Browser reading history, follow list, and resume state in `localStorage`, with in-memory fallback for restricted storage.

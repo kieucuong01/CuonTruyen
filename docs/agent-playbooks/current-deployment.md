@@ -125,6 +125,17 @@ http://localhost:54533
 http://localhost:54533/#/admin
 ```
 
+Local catalog storage defaults to a separate PostgreSQL database on the machine,
+not the production Supabase database. Initialize it with:
+
+```powershell
+npm run db:local:setup
+```
+
+That starts `docker-compose.local.yml`, writes the local catalog DB URL to
+`.env.local`, and migrates the legacy JSON catalog into Postgres. Use
+`CATALOG_STORAGE=json` only as an intentional emergency fallback.
+
 Local crawler:
 
 ```powershell
@@ -171,9 +182,11 @@ npm run sync:s3
 ```
 
 If production uses live Supabase API, the most important publish step is syncing
-images to S3 after the local crawler has written catalog changes to the same
-Supabase database. Static API export/sync can still be used as fallback/cache,
-but Vercel no longer needs it for admin edits to appear.
+images to S3 after catalog changes have been promoted to the production
+database. Local development uses its own Postgres database by default, so do not
+assume local admin edits automatically change production. Static API export/sync
+can still be used as fallback/cache, but Vercel no longer needs it for admin
+edits that already exist in the production DB.
 
 For normal image publish, sync by series instead of full bucket:
 

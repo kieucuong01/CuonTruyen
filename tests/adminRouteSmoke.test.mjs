@@ -87,7 +87,7 @@ const sampleSeries = {
   stats: { views: 10, adViews: 0, donateClicks: 0 }
 };
 
-function createRouteForSmoke(app) {
+function createRouteForSmoke(app, overrides = {}) {
   return createAdminRoute({
     adminHeaders: () => ({ authorization: 'Bearer test-token' }),
     app,
@@ -113,7 +113,8 @@ function createRouteForSmoke(app) {
     clearControlPending: () => {},
     setControlPending: () => {},
     splitList: (value) => String(value || '').split(/\n+/).map((item) => item.trim()).filter(Boolean),
-    stopReaderRuntime: () => {}
+    stopReaderRuntime: () => {},
+    ...overrides
   });
 }
 
@@ -205,6 +206,86 @@ test('admin route renders dashboard and series detail with required handlers bou
     globalThis.setInterval = originalSetInterval;
     globalThis.clearInterval = originalClearInterval;
   }
+});
+
+test('admin S3 status renders failed item details without a ReferenceError', async () => {
+  const originalLocalStorage = globalThis.localStorage;
+  const originalCss = globalThis.CSS;
+  const originalLocation = globalThis.location;
+  const originalWindow = globalThis.window;
+  const originalSetInterval = globalThis.setInterval;
+  const originalClearInterval = globalThis.clearInterval;
+
+  const listeners = [];
+  const app = createFakeApp(listeners);
+  const s3Target = makeElement('s3-status', listeners);
+  s3Target.isConnected = true;
+  s3Target.querySelector = () => null;
+
+  app.querySelector = (selector) => {
+    if (selector === '[data-s3-sync-status]') return s3Target;
+    return makeElement(selector, listeners);
+  };
+
+  globalThis.localStorage = {
+    getItem(key) {
+      return key === 'comic-admin-token' ? 'test-token' : 'admin@example.test';
+    },
+    setItem() {},
+    removeItem() {}
+  };
+  globalThis.CSS = { escape: (value) => String(value).replace(/[^a-zA-Z0-9_-]/g, '\\$&') };
+  globalThis.location = { origin: 'http://localhost:54533', hostname: 'localhost', href: 'http://localhost:54533/admin' };
+  globalThis.window = { location: globalThis.location };
+  globalThis.setInterval = () => 1;
+  globalThis.clearInterval = () => {};
+
+  try {
+    const route = createRouteForSmoke(app, {
+      fetchJson: async (url) => {
+        if (url === '/api/admin/series') return { series: [sampleSeries] };
+        if (url.startsWith('/api/admin/bulletin/messages')) return { messages: [] };
+        if (url.startsWith('/api/admin/analytics/summary')) return null;
+        if (url === '/api/admin/production-status') return { statuses: {}, stateFileExists: false };
+        if (url === '/api/admin/import-jobs/summary') return { counts: {}, queued: [], retrying: [], failed: [], running: [] };
+        if (url === '/api/admin/s3-sync/status') {
+          return {
+            exists: true,
+            status: 'failed',
+            total: 1,
+            checked: 1,
+            failed: 1,
+            failedItems: [{ key: 'imports/demo/001.jpg', error: 'timeout' }]
+          };
+        }
+        return {};
+      }
+    });
+
+    await route.renderAdmin();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.doesNotMatch(s3Target.textContent, /failedItems is not defined/);
+    assert.match(s3Target.innerHTML, /imports\/demo\/001\.jpg/);
+  } finally {
+    if (originalLocalStorage === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = originalLocalStorage;
+    if (originalCss === undefined) delete globalThis.CSS;
+    else globalThis.CSS = originalCss;
+    if (originalLocation === undefined) delete globalThis.location;
+    else globalThis.location = originalLocation;
+    if (originalWindow === undefined) delete globalThis.window;
+    else globalThis.window = originalWindow;
+    globalThis.setInterval = originalSetInterval;
+    globalThis.clearInterval = originalClearInterval;
+  }
+});
+
+test('revenue dashboard overrides the admin form grid layout', () => {
+  const css = fs.readFileSync('public/styles.css', 'utf8');
+
+  assert.match(css, /\.admin-panel\.revenue-dashboard\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/s);
+  assert.match(css, /\.revenue-metrics\s*\{[^}]*minmax\(140px,\s*1fr\)/s);
 });
 
 test('production admin hides local crawl, S3, and publish pipeline controls', async () => {
