@@ -154,6 +154,21 @@ function seriesSlug(series = {}) {
   return series.slug || slugify(series.title || 'Truyện tranh');
 }
 
+function seriesSlugCandidates(series = {}) {
+  return new Set([
+    series.id,
+    seriesSlug(series),
+    ...(series.aliases || []).map((value) => slugify(value))
+  ].filter(Boolean).map((value) => String(value).trim()));
+}
+
+function seriesMatchesSlug(series = {}, target = '') {
+  const normalizedTarget = String(target || '').trim();
+  if (!normalizedTarget) return false;
+  const candidates = seriesSlugCandidates(series);
+  return candidates.has(normalizedTarget) || candidates.has(slugify(normalizedTarget));
+}
+
 function seriesMeta(series = {}) {
   const title = series.title || 'Truyện tranh';
   const coverUrl = publicImportUrl(series.coverUrl || series.cover || '');
@@ -340,7 +355,7 @@ export function adminCatalog(catalog) {
 export function findSeriesBySlug(catalog, slugOrId, { includeDraft = false } = {}) {
   const target = String(slugOrId || '').trim();
   const series = (catalog.series || [])
-    .find((item) => item.id === target || seriesSlug(item) === target);
+    .find((item) => seriesMatchesSlug(item, target));
   if (!series) return null;
   const summary = publicSeriesDetail(series);
   if (!includeDraft && summary.status !== PUBLIC_STATUS) return null;
@@ -357,7 +372,7 @@ export function findChapterBySlug(series, chapterSlug, { includeHidden = false }
 
 export function buildReaderChapterPayload(catalog, seriesSlug, chapterSlug, { window = 0, start = 'current' } = {}) {
   const series = (catalog.series || [])
-    .find((item) => item.id === String(seriesSlug || '').trim() || seriesMeta(item).slug === String(seriesSlug || '').trim());
+    .find((item) => seriesMatchesSlug(item, String(seriesSlug || '').trim()));
   if (!series || seriesMeta(series).status !== PUBLIC_STATUS) return null;
 
   const chapters = (series.chapters || [])

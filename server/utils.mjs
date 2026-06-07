@@ -18,6 +18,8 @@ export function stripTags(value = '') {
 
 export function slugify(value = 'series') {
   const slug = value
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'd')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()

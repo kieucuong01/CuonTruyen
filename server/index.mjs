@@ -135,6 +135,15 @@ function textResponse(res, status, body, contentType) {
   res.end(body);
 }
 
+function redirectResponse(res, location, status = 301) {
+  res.writeHead(status, {
+    ...corsHeaders(),
+    location,
+    'cache-control': 'no-cache'
+  });
+  res.end();
+}
+
 async function cachedJsonResponse(req, res, key, producer, ttlMs = API_CACHE_TTL_MS) {
   const now = Date.now();
   const cached = apiResponseCache.get(key);
@@ -1036,9 +1045,14 @@ async function handleSeoRoute(req, res, url) {
 
   const seriesMatch = url.pathname.match(/^\/truyen\/([^/]+)$/);
   if (seriesMatch) {
-    const series = findSeriesBySlug(await readCatalog({ includePages: false }), decodeURIComponent(seriesMatch[1]));
+    const requestedSlug = decodeURIComponent(seriesMatch[1]);
+    const series = findSeriesBySlug(await readCatalog({ includePages: false }), requestedSlug);
     if (!series) {
       textResponse(res, 404, renderNotFoundShell(url.pathname, baseUrl), 'text/html; charset=utf-8');
+      return true;
+    }
+    if (requestedSlug !== series.slug) {
+      redirectResponse(res, `/truyen/${encodeURIComponent(series.slug)}`);
       return true;
     }
     textResponse(res, 200, renderHtmlShell({
@@ -1053,10 +1067,16 @@ async function handleSeoRoute(req, res, url) {
 
   const chapterMatch = url.pathname.match(/^\/truyen\/([^/]+)\/([^/]+)$/);
   if (chapterMatch) {
-    const series = findSeriesBySlug(await readCatalog(), decodeURIComponent(chapterMatch[1]));
-    const chapter = findChapterBySlug(series, decodeURIComponent(chapterMatch[2]));
+    const requestedSeriesSlug = decodeURIComponent(chapterMatch[1]);
+    const requestedChapterSlug = decodeURIComponent(chapterMatch[2]);
+    const series = findSeriesBySlug(await readCatalog(), requestedSeriesSlug);
+    const chapter = findChapterBySlug(series, requestedChapterSlug);
     if (!series || !chapter) {
       textResponse(res, 404, renderNotFoundShell(url.pathname, baseUrl), 'text/html; charset=utf-8');
+      return true;
+    }
+    if (requestedSeriesSlug !== series.slug) {
+      redirectResponse(res, `/truyen/${encodeURIComponent(series.slug)}/${encodeURIComponent(requestedChapterSlug)}`);
       return true;
     }
     textResponse(res, 200, renderHtmlShell({
