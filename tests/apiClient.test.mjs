@@ -37,14 +37,11 @@ test('userHeaders sends the current reader session token', () => {
   });
 });
 
-test('static API mode serves reader chapter payloads from static reader JSON', async () => {
+test('reader payloads use the live API', async () => {
   const originalFetch = globalThis.fetch;
   const originalConfig = globalThis.COMIC_READER_CONFIG;
   const requested = [];
-  globalThis.COMIC_READER_CONFIG = {
-    staticApiMode: true,
-    staticApiBaseUrl: '/static-api'
-  };
+  globalThis.COMIC_READER_CONFIG = {};
   globalThis.fetch = async (url) => {
     requested.push(String(url));
     return new Response(JSON.stringify({ chapter: { id: 'chuong-1' } }), {
@@ -57,7 +54,7 @@ test('static API mode serves reader chapter payloads from static reader JSON', a
     const client = createApiClient();
     const payload = await client.fetchJson('/api/series/demo-series/chapters/chuong-1?window=1');
     assert.equal(payload.chapter.id, 'chuong-1');
-    assert.deepEqual(requested, ['/static-api/reader/demo-series/chuong-1.json']);
+    assert.deepEqual(requested, ['/api/series/demo-series/chapters/chuong-1?window=1']);
   } finally {
     globalThis.fetch = originalFetch;
     if (originalConfig === undefined) delete globalThis.COMIC_READER_CONFIG;
@@ -65,14 +62,11 @@ test('static API mode serves reader chapter payloads from static reader JSON', a
   }
 });
 
-test('static API mode prefers packaged Vercel reader JSON before remote S3', async () => {
+test('series payloads use the live API', async () => {
   const originalFetch = globalThis.fetch;
   const originalConfig = globalThis.COMIC_READER_CONFIG;
   const requested = [];
-  globalThis.COMIC_READER_CONFIG = {
-    staticApiMode: true,
-    staticApiBaseUrl: 'https://s3.example.test/static-api'
-  };
+  globalThis.COMIC_READER_CONFIG = {};
   globalThis.fetch = async (url) => {
     requested.push(String(url));
     return new Response(JSON.stringify({ chapter: { id: 'chuong-1' } }), {
@@ -83,9 +77,9 @@ test('static API mode prefers packaged Vercel reader JSON before remote S3', asy
 
   try {
     const client = createApiClient();
-    const payload = await client.fetchJson('/api/series/demo-series/chapters/chuong-1?window=1');
+    const payload = await client.fetchJson('/api/series/demo-series');
     assert.equal(payload.chapter.id, 'chuong-1');
-    assert.deepEqual(requested, ['/static-api/reader/demo-series/chuong-1.json']);
+    assert.deepEqual(requested, ['/api/series/demo-series']);
   } finally {
     globalThis.fetch = originalFetch;
     if (originalConfig === undefined) delete globalThis.COMIC_READER_CONFIG;

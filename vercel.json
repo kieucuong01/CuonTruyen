@@ -6,26 +6,6 @@
   "trailingSlash": false,
   "rewrites": [
     {
-      "source": "/static-api/home.json",
-      "destination": "/fallback-api/home.json"
-    },
-    {
-      "source": "/static-api/series.json",
-      "destination": "/fallback-api/series.json"
-    },
-    {
-      "source": "/static-api/search-index.json",
-      "destination": "/fallback-api/search-index.json"
-    },
-    {
-      "source": "/static-api/manifest.json",
-      "destination": "/fallback-api/manifest.json"
-    },
-    {
-      "source": "/static-api/series/:series",
-      "destination": "/fallback-api/series/:series"
-    },
-    {
       "source": "/truyen/:path*",
       "destination": "/index"
     },

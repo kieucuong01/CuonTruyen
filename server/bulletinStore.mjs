@@ -1,14 +1,8 @@
 import crypto from 'node:crypto';
-import fs from 'node:fs/promises';
-import path from 'node:path';
 
 import { ensurePostgresSchema, queryPostgres, usesPostgresStorage } from './postgresStore.mjs';
 
-const ROOT = process.cwd();
-const BULLETIN_STORE_PATH = path.resolve(process.env.BULLETIN_STORE_PATH || path.join(ROOT, 'data', 'bulletin-messages.json'));
-const MAX_MESSAGES = Number(process.env.BULLETIN_MAX_MESSAGES || 200);
 const MAX_TEXT_LENGTH = Number(process.env.BULLETIN_MAX_TEXT_LENGTH || 500);
-let writeQueue = Promise.resolve();
 let libSqlClientPromise = null;
 let libSqlSchemaPromise = null;
 
@@ -23,10 +17,7 @@ export function usesPostgresBulletinStore() {
 export async function listBulletinMessages({ limit = 30 } = {}) {
   if (usesPostgresBulletinStore()) return listPostgresBulletinMessages({ limit });
   if (usesLibSqlBulletinStore()) return listLibSqlBulletinMessages({ limit });
-  const store = await readBulletinStore();
-  return sortMessages(store.messages)
-    .slice(0, Math.max(1, Number(limit || 30)))
-    .map(publicMessage);
+  throw missingBulletinDatabaseError();
 }
 
 export async function createUserBulletinMessage({ text, user, now = new Date().toISOString() } = {}) {
@@ -54,17 +45,7 @@ export async function createAdminBulletinMessage({ text, adminEmail, pinned = fa
 export async function setAdminBulletinPinned(id, pinned = false, { now = new Date().toISOString() } = {}) {
   if (usesPostgresBulletinStore()) return setPostgresAdminBulletinPinned(id, pinned, { now });
   if (usesLibSqlBulletinStore()) return setLibSqlAdminBulletinPinned(id, pinned, { now });
-  const store = await readBulletinStore();
-  const message = store.messages.find((item) => item.id === id);
-  if (!message) throw Object.assign(new Error('Không tìm thấy tin nhắn.'), { status: 404 });
-  if (message.authorRole !== 'admin') {
-    throw Object.assign(new Error('Chỉ tin nhắn admin mới được ghim.'), { status: 400 });
-  }
-  message.pinned = Boolean(pinned);
-  message.pinnedAt = message.pinned ? now : null;
-  message.updatedAt = now;
-  await writeBulletinStore(store);
-  return publicMessage(message);
+  throw missingBulletinDatabaseError();
 }
 
 async function appendMessage({ text, now, authorRole, authorId, authorName, pinned = false }) {
@@ -88,10 +69,7 @@ async function appendMessage({ text, now, authorRole, authorId, authorName, pinn
     await insertLibSqlMessage(message);
     return publicMessage(message);
   }
-  const store = await readBulletinStore();
-  store.messages = sortMessages([message, ...store.messages]).slice(0, MAX_MESSAGES);
-  await writeBulletinStore(store);
-  return publicMessage(message);
+  throw missingBulletinDatabaseError();
 }
 
 async function listPostgresBulletinMessages({ limit = 30 } = {}) {
@@ -281,29 +259,11 @@ function libSqlAuthToken() {
   return process.env.LIBSQL_AUTH_TOKEN || process.env.TURSO_AUTH_TOKEN || '';
 }
 
-async function readBulletinStore() {
-  try {
-    const value = JSON.parse(await fs.readFile(BULLETIN_STORE_PATH, 'utf8'));
-    return {
-      messages: Array.isArray(value.messages) ? value.messages.map(normalizeMessage).filter(Boolean) : []
-    };
-  } catch (error) {
-    if (error.code === 'ENOENT') return { messages: [] };
-    throw error;
-  }
-}
-
-function writeBulletinStore(store) {
-  const pending = writeQueue.then(() => writeBulletinStoreNow(store));
-  writeQueue = pending.catch(() => {});
-  return pending;
-}
-
-async function writeBulletinStoreNow(store) {
-  await fs.mkdir(path.dirname(BULLETIN_STORE_PATH), { recursive: true });
-  const tempPath = `${BULLETIN_STORE_PATH}.${process.pid}.${Date.now()}.tmp`;
-  await fs.writeFile(tempPath, `${JSON.stringify({ messages: store.messages }, null, 2)}\n`, 'utf8');
-  await fs.rename(tempPath, BULLETIN_STORE_PATH);
+function missingBulletinDatabaseError() {
+  return Object.assign(
+    new Error('Bulletin messages require DATABASE_URL, POSTGRES_URL, or LIBSQL/TURSO database env.'),
+    { status: 503 }
+  );
 }
 
 function normalizeMessage(value = {}) {
@@ -328,15 +288,6 @@ function normalizeMessageText(text = '') {
     throw Object.assign(new Error(`Tin nhắn tối đa ${MAX_TEXT_LENGTH} ký tự.`), { status: 400 });
   }
   return cleanText;
-}
-
-function sortMessages(messages = []) {
-  return [...messages].sort((a, b) => {
-    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
-    const aTime = Date.parse(a.pinned ? a.pinnedAt || a.updatedAt : a.createdAt) || 0;
-    const bTime = Date.parse(b.pinned ? b.pinnedAt || b.updatedAt : b.createdAt) || 0;
-    return bTime - aTime;
-  });
 }
 
 function publicMessage(message) {

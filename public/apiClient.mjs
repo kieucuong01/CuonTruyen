@@ -1,5 +1,5 @@
 import { createBoundedCache } from './cacheStore.mjs';
-import { apiUrl, getRuntimeConfig } from './runtimeConfig.mjs';
+import { apiUrl } from './runtimeConfig.mjs';
 
 export { apiUrl };
 
@@ -16,9 +16,6 @@ export function createApiClient({
   userTokenProvider = () => ''
 } = {}) {
   async function fetchJson(url, options) {
-    const staticRequest = staticApiRequest(url, options);
-    if (staticRequest) return staticRequest;
-
     const cacheable = isCacheableRequest(url, options);
     if (cacheable && cache.has(url)) return cache.get(url);
 
@@ -26,7 +23,10 @@ export function createApiClient({
       const data = await readJsonResponse(response);
       if (!response.ok) {
         const detail = data.detail && data.detail !== data.error ? `: ${data.detail}` : '';
-        throw new Error(`${data.error || 'Request failed'}${detail}`);
+        const error = new Error(`${data.error || 'Request failed'}${detail}`);
+        error.status = response.status;
+        error.payload = data;
+        throw error;
       }
       return data;
     });
@@ -91,175 +91,4 @@ function normalizePlainTextApiError(message = '', status = 0) {
     return 'Kh\u00f4ng t\u00ecm th\u1ea5y API endpoint. H\u00e3y ki\u1ec3m tra backend API \u0111ang ch\u1ea1y ho\u1eb7c Vercel Function \u0111\u00e3 deploy xong.';
   }
   return message || `Request failed (${status})`;
-}
-
-function staticApiRequest(url, options = {}) {
-  const config = getRuntimeConfig();
-  const method = String(options?.method || 'GET').toUpperCase();
-  const parsed = parseApiUrl(url);
-  const useStaticApi = Boolean(config.staticApiMode || config.staticApiBaseUrl);
-  if (!useStaticApi || !parsed) return null;
-
-  if (method === 'POST' && parsed.pathname === '/api/events' && !config.apiBaseUrl) {
-    return Promise.resolve({ ok: true, static: true });
-  }
-
-  if (parsed.pathname.startsWith('/api/admin')) {
-    return null;
-  }
-
-  if (method !== 'GET') return null;
-
-  const searchQuery = parsed.pathname === '/api/search'
-    ? parsed.searchParams.get('q') || ''
-    : null;
-  if (searchQuery !== null) {
-    return fetchStaticJson('search-index.json', config)
-      .then((data) => ({ series: filterStaticSearch(data.series || [], searchQuery) }));
-  }
-
-  const staticPath = staticApiPath(parsed.pathname);
-  return staticPath ? fetchStaticJson(staticPath, config) : null;
-}
-
-function parseApiUrl(url) {
-  try {
-    return new URL(String(url || ''), 'https://comic-reader.local');
-  } catch {
-    return null;
-  }
-}
-
-function isLocalAdminOrigin(globalObject = globalThis) {
-  const hostname = String(globalObject?.location?.hostname || '').toLowerCase();
-  return hostname === 'localhost'
-    || hostname === '127.0.0.1'
-    || hostname === '::1'
-    || /^192\.168\./.test(hostname)
-    || /^10\./.test(hostname)
-    || /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname);
-}
-
-function staticApiPath(pathname) {
-  if (pathname === '/api/home' || pathname === '/api/public/home') return 'home.json';
-  if (pathname === '/api/series') return 'series.json';
-
-  const tagMatch = pathname.match(/^\/api\/tags\/([^/]+)$/);
-  if (tagMatch) return `tags/${safeSegment(tagMatch[1])}.json`;
-
-  const nextMatch = pathname.match(/^\/api\/series\/([^/]+)\/chapters\/([^/]+)\/next$/);
-  if (nextMatch) return `reader/${safeSegment(nextMatch[1])}/${safeSegment(nextMatch[2])}/next.json`;
-
-  const chapterMatch = pathname.match(/^\/api\/series\/([^/]+)\/chapters\/([^/]+)$/);
-  if (chapterMatch) return `reader/${safeSegment(chapterMatch[1])}/${safeSegment(chapterMatch[2])}.json`;
-
-  const seriesMatch = pathname.match(/^\/api\/series\/([^/]+)$/);
-  if (seriesMatch) return `series/${safeSegment(seriesMatch[1])}.json`;
-
-  return '';
-}
-
-function fetchStaticJson(path, config) {
-  const cleanPath = path.replace(/^\/+/, '');
-  const configuredBase = trimTrailingSlash(config.staticApiBaseUrl || '/static-api');
-  const localStaticBase = '/static-api';
-  const fallbackBase = '/fallback-api';
-  const bases = staticApiBaseOrder(cleanPath, {
-    configuredBase,
-    fallbackBase,
-    localStaticBase
-  });
-  let lastError = null;
-
-  return bases.reduce((chain, baseUrl) => chain.catch(async () => {
-    try {
-      return await fetchStaticJsonFrom(`${baseUrl}/${cleanPath}`, path);
-    } catch (error) {
-      lastError = error;
-      throw error;
-    }
-  }), Promise.reject()).catch(() => {
-    throw lastError || new Error(`Static API not found: ${path}`);
-  });
-}
-
-function staticApiBaseOrder(path, { configuredBase, fallbackBase, localStaticBase }) {
-  if (fallbackApiShouldLead(path)) {
-    return uniqueValues([fallbackBase, localStaticBase, configuredBase]);
-  }
-  if (readerStaticApiShouldLead(path)) {
-    return uniqueValues([localStaticBase, configuredBase, fallbackBase]);
-  }
-  return uniqueValues([configuredBase, localStaticBase, fallbackBase]);
-}
-
-function fallbackApiShouldLead(path = '') {
-  const cleanPath = String(path || '').replace(/^\/+/, '');
-  return cleanPath === 'manifest.json';
-}
-
-function readerStaticApiShouldLead(path = '') {
-  return /^reader\/[^/]+\/[^/]+(?:\.json|\/next\.json)$/.test(String(path || '').replace(/^\/+/, ''));
-}
-
-async function fetchStaticJsonFrom(url, path) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), staticFetchTimeoutMs(url));
-  let response;
-  try {
-    response = await fetch(url, { signal: controller.signal });
-  } finally {
-    clearTimeout(timeoutId);
-  }
-  const text = await response.text();
-  let data = null;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    data = { error: text.slice(0, 200) || 'Static API response is not JSON' };
-  }
-  if (!response.ok) throw new Error(data?.error || `Static API not found: ${path}`);
-  if (!data) throw new Error(`Static API response is empty: ${path}`);
-  return data;
-}
-
-function staticFetchTimeoutMs(url = '') {
-  const baseTimeout = 3000;
-  const localTimeout = 3500;
-  return /^\/(?:fallback-api|static-api)\//.test(String(url || '')) ? localTimeout : baseTimeout;
-}
-
-function uniqueValues(values = []) {
-  return [...new Set(values.filter(Boolean))];
-}
-
-function safeSegment(value) {
-  return encodeURIComponent(decodeURIComponent(String(value || '')));
-}
-
-function trimTrailingSlash(value = '') {
-  return String(value || '').replace(/\/$/, '');
-}
-
-function normalizeSearchText(value = '') {
-  return String(value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
-}
-
-function filterStaticSearch(seriesList, query) {
-  const needle = normalizeSearchText(query);
-  if (!needle) return [];
-  return seriesList.filter((series) => {
-    const haystack = normalizeSearchText([
-      series.title,
-      series.slug,
-      ...(series.aliases || []),
-      ...(series.tags || []).map((tag) => tag.name)
-    ].join(' '));
-    return haystack.includes(needle);
-  });
 }

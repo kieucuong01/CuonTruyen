@@ -1,4 +1,4 @@
-# Git main auto-deploy flow
+﻿# Git main auto-deploy flow
 
 This project should deploy to Vercel from GitHub, not from routine local CLI uploads.
 
@@ -71,5 +71,3 @@ Even then, check `npx vercel ls cuontruyen` afterward before assuming it worked.
 ## Notes for future agents
 
 - Do not commit `.vercel/`, `.env`, `.env.local`, S3 credentials, logs, runtime folders, or `data/imports/`.
-- Do not deploy admin/crawler flows to Vercel as if they were production crawler workers. Current production reading flow is frontend plus live DB-backed API, with S3 static JSON/assets as fallback.
-- If a production page breaks after push, inspect `/app.js`, `/config.js`, the live `/api/*` payload or `/static-api/manifest.json` fallback, and the exact route before changing unrelated code.

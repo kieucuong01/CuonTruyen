@@ -3,28 +3,21 @@ import test from 'node:test';
 
 import {
   assertCatalogStorageReady,
+  catalogStorageSummary,
   catalogStorageMode,
   hasPostgresCatalogUrl,
   postgresCatalogUrl,
+  productionPostgresCatalogUrl,
   requirePostgresCatalogUrl
 } from '../server/storageConfig.mjs';
 
-test('catalog storage defaults to postgres without an explicit json escape hatch', () => {
+test('catalog storage is always postgres', () => {
   assert.equal(catalogStorageMode({}), 'postgres');
-});
-
-test('catalog storage selects postgres when a Postgres URL is configured', () => {
   assert.equal(catalogStorageMode({ DATABASE_URL: 'postgres://db.example/catalog' }), 'postgres');
   assert.equal(catalogStorageMode({ POSTGRES_URL: 'postgres://db.example/catalog' }), 'postgres');
   assert.equal(catalogStorageMode({ CATALOG_DATABASE_URL: 'postgres://db.example/catalog' }), 'postgres');
+  assert.equal(catalogStorageMode({ CATALOG_STORAGE: 'file', DATABASE_URL: 'postgres://db.example/catalog' }), 'postgres');
   assert.equal(hasPostgresCatalogUrl({ CATALOG_DATABASE_URL: 'postgres://db.example/catalog' }), true);
-});
-
-test('catalog storage supports an explicit json escape hatch', () => {
-  assert.equal(catalogStorageMode({
-    CATALOG_STORAGE: 'json',
-    DATABASE_URL: 'postgres://db.example/catalog'
-  }), 'json');
 });
 
 test('explicit postgres catalog mode requires a connection URL', () => {
@@ -38,13 +31,37 @@ test('explicit postgres catalog mode requires a connection URL', () => {
   );
 });
 
-test('postgres catalog readiness fails before runtime can fall back to json', () => {
+test('postgres catalog readiness fails before runtime starts without a database', () => {
   assert.throws(
     () => assertCatalogStorageReady({}),
     /PostgreSQL catalog mode requires CATALOG_DATABASE_URL, DATABASE_URL, or POSTGRES_URL/
   );
 });
 
-test('explicit json catalog readiness bypasses the postgres URL requirement', () => {
-  assert.equal(assertCatalogStorageReady({ CATALOG_STORAGE: 'json' }), 'json');
+test('file catalog env still requires a Postgres URL', () => {
+  assert.throws(
+    () => assertCatalogStorageReady({ CATALOG_STORAGE: 'file' }),
+    /PostgreSQL catalog mode requires CATALOG_DATABASE_URL, DATABASE_URL, or POSTGRES_URL/
+  );
+});
+
+test('catalog storage summary includes masked production target and source relation', () => {
+  const env = {
+    CATALOG_STORAGE: 'postgres',
+    CATALOG_DATABASE_URL: 'postgres://local_user:local_secret@localhost:5432/local_catalog',
+    PRODUCTION_CATALOG_DATABASE_URL: 'postgres://prod_user:prod_secret@db.example.com:6543/postgres'
+  };
+  const summary = catalogStorageSummary(env);
+
+  assert.equal(productionPostgresCatalogUrl(env), env.PRODUCTION_CATALOG_DATABASE_URL);
+  assert.equal(summary.postgres.displayUrl.includes('local_secret'), false);
+  assert.equal(summary.productionPostgres.displayUrl.includes('prod_secret'), false);
+  assert.equal(summary.productionPostgres.configured, true);
+  assert.equal(summary.productionPostgres.sameAsSource, false);
+
+  const sameSummary = catalogStorageSummary({
+    ...env,
+    PRODUCTION_CATALOG_DATABASE_URL: env.CATALOG_DATABASE_URL
+  });
+  assert.equal(sameSummary.productionPostgres.sameAsSource, true);
 });

@@ -383,8 +383,10 @@ async function upsertSeriesRows(client, rawSeries) {
     );
   }
 
+  const usedChapterSlugs = new Set();
   for (const [chapterIndex, rawChapter] of series.chapters.entries()) {
     const chapter = normalizeChapterForStorage(rawChapter, chapterIndex);
+    chapter.slug = makeUniqueChapterSlugForStorage(chapter.slug, chapter.id, chapterIndex, usedChapterSlugs);
     await client.query(`
       insert into chapters (
         series_id, id, title, label, slug, status, source_url, source_order,
@@ -589,6 +591,33 @@ function normalizeChapterForStorage(rawChapter, index) {
     raw: rawChapter,
     pages
   };
+}
+
+export function makeUniqueChapterSlugForStorage(rawSlug, rawId, index, usedSlugs) {
+  const used = usedSlugs || new Set();
+  const base = slugify(rawSlug) || slugify(rawId) || `chapter-${index + 1}`;
+  const idSlug = slugify(rawId);
+  const candidates = [
+    base,
+    idSlug && idSlug !== base ? `${base}-${idSlug}` : '',
+    `${base}-${index + 1}`
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    if (!used.has(candidate)) {
+      used.add(candidate);
+      return candidate;
+    }
+  }
+
+  let counter = 2;
+  let candidate = `${base}-${counter}`;
+  while (used.has(candidate)) {
+    counter += 1;
+    candidate = `${base}-${counter}`;
+  }
+  used.add(candidate);
+  return candidate;
 }
 
 function normalizePageForStorage(rawPage, index) {

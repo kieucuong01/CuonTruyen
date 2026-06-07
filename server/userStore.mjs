@@ -1,14 +1,8 @@
 ﻿import crypto from 'node:crypto';
-import fs from 'node:fs/promises';
-import path from 'node:path';
-
 import { ensurePostgresSchema, queryPostgres, usesPostgresStorage } from './postgresStore.mjs';
 
-const ROOT = process.cwd();
-const USER_STORE_PATH = path.resolve(process.env.USER_STORE_PATH || path.join(ROOT, 'data', 'users.json'));
 const SESSION_TTL_MS = Number(process.env.USER_SESSION_TTL_MS || 1000 * 60 * 60 * 24 * 30);
 const SCRYPT_KEY_LENGTH = 32;
-let writeQueue = Promise.resolve();
 let libSqlClientPromise = null;
 let libSqlSchemaPromise = null;
 
@@ -23,7 +17,7 @@ export function usesPostgresUserStore() {
 export async function readUserStore() {
   if (usesPostgresUserStore()) return readPostgresUserStore();
   if (usesLibSqlUserStore()) return readLibSqlUserStore();
-  return readJsonUserStore();
+  throw missingUserDatabaseError();
 }
 
 export function normalizeUserIdentifier(value = '') {
@@ -36,25 +30,7 @@ export async function registerUser({ identifier, password, displayName } = {}) {
   assertPersistentUserStore();
   if (usesPostgresUserStore()) return registerPostgresUser({ identifier: normalized, password, displayName });
   if (usesLibSqlUserStore()) return registerLibSqlUser({ identifier: normalized, password, displayName });
-
-  const store = await readJsonUserStore();
-  if (findUser(store, normalized)) {
-    throw Object.assign(new Error('Tài khoản đã tồn tại.'), { status: 409 });
-  }
-
-  const now = new Date().toISOString();
-  const user = {
-    id: createUserId(normalized),
-    identifier: normalized,
-    displayName: String(displayName || displayNameFromIdentifier(normalized)).trim(),
-    passwordHash: await hashPassword(password),
-    createdAt: now,
-    updatedAt: now
-  };
-  store.users.push(user);
-  const session = await createSessionForUser(store, user);
-  await writeJsonUserStore(store);
-  return publicSession(user, session.token);
+  throw missingUserDatabaseError();
 }
 
 export async function loginUser({ identifier, password } = {}) {
@@ -65,17 +41,7 @@ export async function loginUser({ identifier, password } = {}) {
   assertPersistentUserStore();
   if (usesPostgresUserStore()) return loginPostgresUser({ identifier: normalized, password });
   if (usesLibSqlUserStore()) return loginLibSqlUser({ identifier: normalized, password });
-
-  const store = await readJsonUserStore();
-  const user = findUser(store, normalized);
-  if (!user || !(await verifyPassword(password, user.passwordHash))) {
-    throw Object.assign(new Error('Tài khoản hoặc mật khẩu không đúng.'), { status: 401 });
-  }
-
-  user.updatedAt = new Date().toISOString();
-  const session = await createSessionForUser(store, user);
-  await writeJsonUserStore(store);
-  return publicSession(user, session.token);
+  throw missingUserDatabaseError();
 }
 
 export async function authenticateGoogleUser({ email, emailVerified, name, sub } = {}) {
@@ -89,27 +55,7 @@ export async function authenticateGoogleUser({ email, emailVerified, name, sub }
   assertPersistentUserStore();
   if (usesPostgresUserStore()) return authenticatePostgresGoogleUser({ email: normalized, name, sub });
   if (usesLibSqlUserStore()) return authenticateLibSqlGoogleUser({ email: normalized, name, sub });
-
-  const store = await readJsonUserStore();
-  const now = new Date().toISOString();
-  let user = findUser(store, normalized);
-  if (user) {
-    user.displayName = String(user.displayName || name || displayNameFromIdentifier(normalized)).trim();
-    user.updatedAt = now;
-  } else {
-    user = {
-      id: createUserId(normalized),
-      identifier: normalized,
-      displayName: String(name || displayNameFromIdentifier(normalized)).trim(),
-      passwordHash: `oauth:google:${String(sub)}`,
-      createdAt: now,
-      updatedAt: now
-    };
-    store.users.push(user);
-  }
-  const session = await createSessionForUser(store, user);
-  await writeJsonUserStore(store);
-  return publicSession(user, session.token);
+  throw missingUserDatabaseError();
 }
 
 export async function getSessionUser(token = '') {
@@ -118,14 +64,7 @@ export async function getSessionUser(token = '') {
   assertPersistentUserStore();
   if (usesPostgresUserStore()) return getPostgresSessionUser(rawToken);
   if (usesLibSqlUserStore()) return getLibSqlSessionUser(rawToken);
-
-  const store = await readJsonUserStore();
-  const tokenHash = hashToken(rawToken);
-  const now = Date.now();
-  const session = store.sessions.find((item) => item.tokenHash === tokenHash && Date.parse(item.expiresAt) > now);
-  if (!session) return null;
-  const user = store.users.find((item) => item.id === session.userId);
-  return user ? publicUser(user) : null;
+  throw missingUserDatabaseError();
 }
 
 export async function logoutUser(token = '') {
@@ -134,12 +73,7 @@ export async function logoutUser(token = '') {
   assertPersistentUserStore();
   if (usesPostgresUserStore()) return logoutPostgresUser(rawToken);
   if (usesLibSqlUserStore()) return logoutLibSqlUser(rawToken);
-
-  const store = await readJsonUserStore();
-  const tokenHash = hashToken(rawToken);
-  store.sessions = store.sessions.filter((session) => session.tokenHash !== tokenHash);
-  await writeJsonUserStore(store);
-  return { ok: true };
+  throw missingUserDatabaseError();
 }
 
 export function extractUserToken(headers = {}) {
@@ -148,36 +82,6 @@ export function extractUserToken(headers = {}) {
   const authorization = headers.authorization || headers.Authorization || '';
   const match = String(authorization).match(/^Bearer\s+(.+)$/i);
   return match ? match[1] : '';
-}
-
-async function readJsonUserStore() {
-  try {
-    const value = JSON.parse(await fs.readFile(USER_STORE_PATH, 'utf8'));
-    return normalizeStore(value);
-  } catch (error) {
-    if (error.code === 'ENOENT') return { users: [], sessions: [] };
-    throw error;
-  }
-}
-
-function writeJsonUserStore(store) {
-  const pending = writeQueue.then(() => writeJsonUserStoreNow(store));
-  writeQueue = pending.catch(() => {});
-  return pending;
-}
-
-async function writeJsonUserStoreNow(store) {
-  await fs.mkdir(path.dirname(USER_STORE_PATH), { recursive: true });
-  const tempPath = `${USER_STORE_PATH}.${process.pid}.${Date.now()}.tmp`;
-  await fs.writeFile(tempPath, `${JSON.stringify(store, null, 2)}\n`, 'utf8');
-  await fs.rename(tempPath, USER_STORE_PATH);
-}
-
-function normalizeStore(value = {}) {
-  return {
-    users: Array.isArray(value.users) ? value.users : [],
-    sessions: Array.isArray(value.sessions) ? value.sessions : []
-  };
 }
 
 async function registerPostgresUser({ identifier, password, displayName }) {
@@ -489,12 +393,14 @@ function libSqlAuthToken() {
 function assertPersistentUserStore() {
   if (usesPostgresUserStore()) return;
   if (usesLibSqlUserStore()) return;
-  if (process.env.VERCEL) {
-    throw Object.assign(
-      new Error('User auth on Vercel requires DATABASE_URL/POSTGRES_URL for Supabase Postgres, or LIBSQL/TURSO env for legacy storage.'),
-      { status: 503 }
-    );
-  }
+  throw missingUserDatabaseError();
+}
+
+function missingUserDatabaseError() {
+  return Object.assign(
+    new Error('User auth requires DATABASE_URL, POSTGRES_URL, or LIBSQL/TURSO database env.'),
+    { status: 503 }
+  );
 }
 
 function userFromPostgresRow(row = {}) {
@@ -535,10 +441,6 @@ function sessionFromLibSqlRow(row = {}) {
     createdAt: String(row.created_at ?? row.createdAt ?? ''),
     expiresAt: String(row.expires_at ?? row.expiresAt ?? '')
   };
-}
-
-function findUser(store, identifier) {
-  return store.users.find((user) => normalizeUserIdentifier(user.identifier) === identifier) || null;
 }
 
 function assertValidCredentials(identifier, password) {
@@ -584,22 +486,6 @@ function scrypt(password, salt) {
       else resolve(key);
     });
   });
-}
-
-async function createSessionForUser(store, user) {
-  const token = crypto.randomBytes(32).toString('hex');
-  const now = Date.now();
-  const session = {
-    userId: user.id,
-    tokenHash: hashToken(token),
-    createdAt: new Date(now).toISOString(),
-    expiresAt: new Date(now + SESSION_TTL_MS).toISOString()
-  };
-  store.sessions = [
-    session,
-    ...store.sessions.filter((item) => Date.parse(item.expiresAt) > now)
-  ];
-  return { ...session, token };
 }
 
 function hashToken(token) {

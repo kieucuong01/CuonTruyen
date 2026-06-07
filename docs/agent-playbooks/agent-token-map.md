@@ -1,4 +1,4 @@
-# Token-Efficient Agent Map
+﻿# Token-Efficient Agent Map
 
 Use this file first when another AI agent enters the repo. The goal is to avoid reading the whole project or the huge `data/imports/` tree.
 
@@ -40,7 +40,6 @@ These can be large or temporary. Use targeted file paths only.
 | New chapter updates | `server/importer.mjs`, `server/crawlQueue.mjs`, `server/crawlWorker.mjs`, `public/routes/admin.mjs` |
 | Public catalog/filtering | `server/contentStore.mjs`, `server/dataStore.mjs`, `server/postgresStore.mjs` |
 | Vercel frontend/admin API | `vercel.json`, `api/[...path].mjs`, `scripts/write-public-config.mjs`, `public/apiClient.mjs`, `server/index.mjs` |
-| S3 sync/export | `scripts/export-static-api.mjs`, `scripts/sync-vietnix-s3.mjs`, `docs/agent-playbooks/vercel-s3-publishing.md` |
 | SEO shell/sitemap/copy | `server/seo.mjs`, `server/index.mjs`, `scripts/write-public-config.mjs`, `docs/agent-playbooks/seo-launch.md` |
 | Encoding mojibake | `scripts/check-encoding.mjs`, then the reported files |
 
@@ -51,13 +50,11 @@ The live public site is not a normal backend app:
 ```text
 Vercel serves public/
 public/config.js tells the browser to use live Vercel API when catalog storage resolves to PostgreSQL
-S3 can still serve /static-api/*.json as fallback/cache
 S3 serves /imports/* images
 Vercel Node API is for public reads/admin content edits
 Local Node app is for crawler/optimizer/S3 sync
 ```
 
-So for public Vercel bugs, check `public/config.js` first to see whether the live API or static JSON fallback is active, then test the matching API/static payload before changing app logic.
 
 ## Minimal Verification Choices
 
@@ -68,7 +65,6 @@ node --check public\app.js
 node --check public\routes\home.mjs
 node --check public\routes\admin.mjs
 npm run check:encoding
-npm run export:static-api
 npm run sync:s3:dry-run
 npm test
 ```
@@ -83,17 +79,29 @@ Start local app:
 $env:PORT='54533'; npm run dev
 ```
 
-Export public JSON fallback after catalog changes:
 
 ```powershell
-npm run export:static-api
 ```
 
-Upload public JSON/images to S3:
+Vercel uses live Postgres/Supabase API; it only refreshes static fallback JSON.
+Use `publish:series` for DB-aware production publishing.
+
 
 ```powershell
 node scripts/sync-vietnix-s3.mjs --images-only --catalog-only --series-id <series-id> --apply
-node scripts/sync-vietnix-s3.mjs --static-api-only --apply
+```
+
+Promote one local catalog series to production DB:
+
+```powershell
+npm run sync:catalog:production -- --series-id <series-id> --apply
+```
+
+Run the full DB-aware publish flow for one series:
+
+```powershell
+npm run publish:series -- --series-id <series-id> --dry-run
+npm run publish:series -- --series-id <series-id>
 ```
 
 Deploy static frontend:

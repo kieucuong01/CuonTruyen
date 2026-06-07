@@ -1,10 +1,5 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-
-const STORE_PATH = path.join(process.cwd(), '.tmp', `users-test-${process.pid}.json`);
-process.env.USER_STORE_PATH = STORE_PATH;
 
 const {
   authenticateGoogleUser,
@@ -14,13 +9,22 @@ const {
   readUserStore,
   registerUser
 } = await import(`../server/userStore.mjs?test=${Date.now()}`);
+const {
+  ensurePostgresSchema,
+  queryPostgres
+} = await import('../server/postgresStore.mjs');
 
 test.beforeEach(async () => {
-  await fs.rm(STORE_PATH, { force: true });
-});
-
-test.after(async () => {
-  await fs.rm(STORE_PATH, { force: true });
+  await ensurePostgresSchema();
+  await queryPostgres(
+    `delete from app_users
+     where identifier = any($1::text[])
+        or password_hash = any($2::text[])`,
+    [
+      ['cuong@example.com', 'reader@example.com', 'googleuser@example.com'],
+      ['oauth:google:google-subject-1', 'oauth:google:google-subject-2']
+    ]
+  );
 });
 
 test('registerUser stores a password hash and returns a session token', async () => {

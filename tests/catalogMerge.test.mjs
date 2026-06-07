@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { mergeSeries } from '../server/catalogStore.mjs';
+import { mergeSeries } from '../server/catalogMerge.mjs';
 
 test('mergeSeries keeps previously imported chapters when a later crawl imports fewer chapters', () => {
   const existing = {

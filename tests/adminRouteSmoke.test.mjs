@@ -177,8 +177,9 @@ test('admin route renders dashboard and series detail with required handlers bou
     assert.match(app.innerHTML, /Crawl chapter/);
     assert.match(app.innerHTML, /Optimize/);
     assert.match(app.innerHTML, /Sync .*S3/);
-    assert.match(app.innerHTML, /Export static API/);
-    assert.match(app.innerHTML, /Sync static API/);
+    assert.doesNotMatch(app.innerHTML, /Export static API/);
+    assert.doesNotMatch(app.innerHTML, /Sync static API/);
+    assert.doesNotMatch(app.innerHTML, /static API/i);
     assert.match(app.innerHTML, /Check production/);
 
     const boundNames = new Set(listeners.map((item) => item.handlerName));

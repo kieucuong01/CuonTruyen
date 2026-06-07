@@ -1,8 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
 
 import {
   claimNextImportJob,
@@ -14,12 +11,11 @@ import {
   resetStaleRunningImportJobs,
   updateImportJobProgress
 } from '../server/importJobs.mjs';
-
-const queuePath = path.join(os.tmpdir(), `comic-reader-crawl-jobs-${process.pid}.json`);
-process.env.CRAWL_QUEUE_PATH = queuePath;
+import { ensurePostgresSchema, queryPostgres } from '../server/postgresStore.mjs';
 
 test.beforeEach(async () => {
-  await fs.rm(queuePath, { force: true });
+  await ensurePostgresSchema();
+  await queryPostgres("delete from crawl_jobs where source_url like 'https://example.test/%'");
 });
 
 test('createImportJob persists queued progress and dedupes active source URLs', async () => {

@@ -184,7 +184,6 @@ export function buildRobotsTxt(baseUrl) {
     'Allow: /',
     'Disallow: /admin',
     'Disallow: /api/',
-    'Disallow: /static-api/',
     'Disallow: /fallback-api/',
     'Allow: /imports/',
     `Sitemap: ${baseUrl}/sitemap.xml`,

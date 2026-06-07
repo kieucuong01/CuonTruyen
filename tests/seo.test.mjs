@@ -66,13 +66,13 @@ test('buildSitemapXml includes series, chapter, and tag URLs', () => {
   assert.doesNotMatch(xml, /\/the-loai\/empty/);
 });
 
-test('buildRobotsTxt allows public pages but blocks admin and JSON surfaces', () => {
+test('buildRobotsTxt allows public pages but blocks admin and API surfaces', () => {
   const robots = buildRobotsTxt('https://example.com');
 
   assert.match(robots, /Allow: \//);
   assert.match(robots, /Disallow: \/admin/);
   assert.match(robots, /Disallow: \/api\//);
-  assert.match(robots, /Disallow: \/static-api\//);
+  assert.doesNotMatch(robots, /\/static-api\//);
   assert.match(robots, /Sitemap: https:\/\/example.com\/sitemap\.xml/);
 });
 

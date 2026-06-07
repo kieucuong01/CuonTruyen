@@ -89,6 +89,39 @@ test('normalizes local imported image URLs through the configured public base UR
   }
 });
 
+test('keeps local import URLs local unless public base rewrite is enabled or production', () => {
+  const previousBaseUrl = process.env.PUBLIC_IMPORTS_BASE_URL;
+  const previousEnabled = process.env.PUBLIC_IMPORTS_BASE_URL_ENABLED;
+  const previousVercel = process.env.VERCEL;
+  const previousNodeEnv = process.env.NODE_ENV;
+  process.env.PUBLIC_IMPORTS_BASE_URL = 'https://s3.example.com/comics';
+  delete process.env.PUBLIC_IMPORTS_BASE_URL_ENABLED;
+  delete process.env.VERCEL;
+  process.env.NODE_ENV = 'development';
+
+  try {
+    assert.equal(
+      normalizeSeries(catalog.series[0]).chapters[0].pages[0].imageUrl,
+      '/imports/manh/chapter-1/001.jpg'
+    );
+
+    process.env.VERCEL = '1';
+    assert.equal(
+      normalizeSeries(catalog.series[0]).chapters[0].pages[0].imageUrl,
+      'https://s3.example.com/comics/imports/manh/chapter-1/001.jpg'
+    );
+  } finally {
+    if (previousBaseUrl === undefined) delete process.env.PUBLIC_IMPORTS_BASE_URL;
+    else process.env.PUBLIC_IMPORTS_BASE_URL = previousBaseUrl;
+    if (previousEnabled === undefined) delete process.env.PUBLIC_IMPORTS_BASE_URL_ENABLED;
+    else process.env.PUBLIC_IMPORTS_BASE_URL_ENABLED = previousEnabled;
+    if (previousVercel === undefined) delete process.env.VERCEL;
+    else process.env.VERCEL = previousVercel;
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+  }
+});
+
 test('finds public series and chapters by stable slug', () => {
   const series = findSeriesBySlug(catalog, 'manh-nhat-lich-su');
   const chapter = findChapterBySlug(series, 'chapter-1');

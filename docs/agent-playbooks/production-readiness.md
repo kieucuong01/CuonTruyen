@@ -17,7 +17,7 @@ Implemented:
 - Crawl, update chapters, optimize images, S3 sync, and production pipeline controls are local-only.
 - Vercel also rejects direct production pipeline API calls unless local crawler UI is explicitly enabled.
 - Series and chapter statuses: `public`, `draft`, `removed`.
-- New imports default to `draft`.
+- New imports with downloaded pages default to `public`; admin can move content back to `draft` or `removed` intentionally after review.
 - Recrawls preserve existing public moderation where appropriate.
 - Public catalog, home, search, tag pages, reader payloads, and sitemap filter to public content only.
 - Admin catalog endpoint can still see draft/removed content.
@@ -102,13 +102,32 @@ Run worker separately when crawling:
 npm run worker:crawl
 ```
 
+Publish one reviewed series to production with the DB-aware flow:
+
+```powershell
+npm run publish:series -- --series-id <series-id> --dry-run
+npm run publish:series -- --series-id <series-id>
+```
+
+Required publish env:
+
+```text
+PRODUCTION_CATALOG_DATABASE_URL=<production Supabase/Postgres connection string>
+S3_ENDPOINT=<S3-compatible endpoint>
+S3_BUCKET=<bucket>
+S3_ACCESS_KEY_ID=<access key>
+S3_SECRET_ACCESS_KEY=<secret key>
+PUBLIC_IMPORTS_BASE_URL=<public S3 imports base>
+```
+
+If the local source DB and production target DB are different, `sync-catalog-db`
+is the step that promotes the selected series rows. If they are the same DB,
+that step is idempotent and the admin panel reports `same as source DB`.
+
 Back up runtime data regularly:
 
 ```text
 PostgreSQL catalog database dump
-data/imports/catalog.json
-data/imports/crawl-jobs.json
-data/imports/analytics-events.jsonl
 data/imports/<seriesId>/...
 ```
 

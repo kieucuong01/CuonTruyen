@@ -1,4 +1,4 @@
-# Agent Playbooks Index
+﻿# Agent Playbooks Index
 
 Read these in order for the least-token onboarding path:
 

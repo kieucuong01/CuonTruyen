@@ -32,12 +32,17 @@ Run from the repo root:
 npm test
 npm run dev
 npm run worker:crawl
-npm run export:static-api
+npm run publish:series -- --series-id <series-id> --dry-run
+npm run publish:series -- --series-id <series-id>
+npm run sync:catalog:production -- --series-id <series-id> --apply
 npm run sync:s3:dry-run
 npm run sync:s3
 npm run sync:s3:retry-failed
 npm run smoke:import
 ```
+
+Use `npm run publish:series -- --series-id <series-id>` for DB-aware per-series
+publishing.
 
 The local server defaults to `http://localhost:4173`. In this desktop session the user commonly runs it on `http://localhost:54533` with:
 
@@ -49,8 +54,8 @@ $env:PORT='54533'; npm run dev
 
 - Node 18 ESM HTTP server, no framework.
 - Static frontend in `public/`.
-- DB-first catalog facade; local and production default to PostgreSQL, and `CATALOG_DATABASE_URL`, `DATABASE_URL`, or `POSTGRES_URL` is required unless `CATALOG_STORAGE=json` is set explicitly.
-- Local JSON under `data/imports/catalog.json` remains only as a deliberate legacy fallback/escape hatch; image cache still lives under `data/imports/`.
+- PostgreSQL-only catalog facade; local and production require `CATALOG_DATABASE_URL`, `DATABASE_URL`, or `POSTGRES_URL`.
+- Image cache still lives under `data/imports/` or `IMPORT_ROOT`; catalog, crawl jobs, users, events, and admin content live in PostgreSQL.
 - Separate crawl worker process for durable import jobs.
 - Current preferred public hosting mode: Vercel serves the frontend plus lightweight Node API for public reads/admin content management, Supabase Postgres stores catalog/users/events, Vietnix S3 serves `/imports/*` images, and the local machine runs crawler/optimizer/S3 sync.
 - Browser reading history, follow list, and resume state in `localStorage`, with in-memory fallback for restricted storage.
@@ -73,6 +78,7 @@ $env:PORT='54533'; npm run dev
 
 - Do not delete or rewrite `data/imports/` unless the user explicitly asks. It can contain large local crawl output.
 - Do not run full image S3 sync by default. Use `node scripts/sync-vietnix-s3.mjs --images-only --catalog-only --series-id <series-id> --apply` for normal image publish, `npm run sync:s3:retry-failed` for missing failed files, and only use `--all` when the owner explicitly wants a full image sync.
+- Image sync is not enough. Use `npm run publish:series -- --series-id <series-id> --dry-run` first, then `npm run publish:series -- --series-id <series-id>` to run the DB-aware per-series production flow: optimize -> sync S3 images -> sync catalog DB.
 - Do not commit `.env`, `.env.local`, S3 credentials, Vercel project metadata, logs, `.runtime/`, or `data/imports/`.
 - Do not assume images should move to Supabase Storage. The current owner preference is Vietnix S3 Object Storage for public images, with local crawl/admin.
 - Do not revert unrelated local changes. This workspace is often dirty.
@@ -80,7 +86,7 @@ $env:PORT='54533'; npm run dev
 - Add tests for crawler parsing, progress/resume, URL normalization, catalog merge behavior, moderation, and sitemap filtering when changing those surfaces.
 - After frontend behavior changes, verify on the exact local URL the user reports when browser tooling is available.
 - If the user reports a broken URL, test both the API endpoint and the rendered browser route.
-- For public Vercel issues, check `public/config.js`, DB-backed API behavior, `STATIC_API_BASE_URL`, and S3 public JSON fallback before changing app logic.
+- For public Vercel issues, check `public/config.js`, DB-backed API behavior, and S3 image URLs before changing app logic.
 
 ## Verification Checklist
 
@@ -89,7 +95,6 @@ Before saying a bug is fixed:
 - `node --check public\app.js` if `public/app.js` changed.
 - `node --check public\routes\home.mjs` or `public\routes\admin.mjs` if those route modules changed.
 - `npm test` for server/frontend logic tests.
-- `npm run export:static-api` after changing public catalog or static API export logic.
 - `npm run sync:s3:dry-run` before a real S3 sync.
 - Browser or HTTP smoke check for the target route:
   - Page is not blank.

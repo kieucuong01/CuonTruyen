@@ -12,7 +12,7 @@ test('vercel config lets live API routes reach serverless functions', () => {
   );
   assert.equal(
     rewrites.some((rewrite) => String(rewrite.source || '').startsWith('/static-api/')),
-    true
+    false
   );
 });
 
@@ -36,9 +36,7 @@ test('vercel build and public config honor DB-first catalog mode', () => {
   const buildSource = fs.readFileSync('scripts/build-vercel.mjs', 'utf8');
   const configSource = fs.readFileSync('scripts/write-public-config.mjs', 'utf8');
 
-  assert.match(buildSource, /catalogStorageMode/);
   assert.match(buildSource, /requirePostgresCatalogUrl/);
-  assert.match(configSource, /catalogStorageMode/);
-  assert.match(configSource, /hasPostgresCatalogUrl/);
-  assert.match(configSource, /FORCE_STATIC_API_MODE/);
+  assert.doesNotMatch(buildSource, /exportStaticApi|VERCEL_EXPORT_STATIC_API|STATIC_API_OUTPUT_DIR/);
+  assert.doesNotMatch(configSource, /staticApiMode|staticApiBaseUrl|FORCE_STATIC_API_MODE|STATIC_API_BASE_URL/);
 });

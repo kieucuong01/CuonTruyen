@@ -1193,13 +1193,8 @@ function resolveReaderImageUrl(value = '') {
   if (!url || /^https?:\/\//i.test(url)) return url;
   if (!url.startsWith('/imports/')) return url;
   const config = getRuntimeConfig();
-  const importsBase = String(config.importsBaseUrl || '').replace(/\/$/, '')
-    || inferImportsBaseFromStaticApi(config.staticApiBaseUrl || '');
+  const importsBase = String(config.importsBaseUrl || '').replace(/\/$/, '');
   return importsBase ? `${importsBase}${url}` : url;
-}
-
-function inferImportsBaseFromStaticApi(staticApiBaseUrl = '') {
-  return String(staticApiBaseUrl || '').replace(/\/static-api\/?$/, '');
 }
 
 function isStandaloneBoundaryAdPage(page = {}, index = 0, total = 0) {

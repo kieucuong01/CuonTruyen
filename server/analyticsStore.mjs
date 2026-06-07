@@ -1,10 +1,4 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
-
-import { IMPORT_ROOT } from './catalogStore.mjs';
-import { queryPostgres, usesPostgresStorage } from './postgresStore.mjs';
-
-const EVENTS_PATH = path.join(IMPORT_ROOT, 'analytics-events.jsonl');
+import { ensurePostgresSchema, queryPostgres } from './postgresStore.mjs';
 
 export function normalizeAnalyticsEvent(event = {}) {
   return {
@@ -23,70 +17,46 @@ export function normalizeAnalyticsEvent(event = {}) {
 
 export async function appendAnalyticsEvent(event) {
   const safeEvent = normalizeAnalyticsEvent(event);
-  if (usesPostgresStorage()) {
-    await queryPostgres(`
-      insert into analytics_events (
-        type, series_slug, chapter_slug, value, placement, source, url, raw, created_at
-      ) values (
-        $1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9
-      )
-    `, [
-      safeEvent.type,
-      safeEvent.seriesSlug,
-      safeEvent.chapterSlug,
-      safeEvent.value,
-      safeEvent.placement,
-      safeEvent.source,
-      safeEvent.url,
-      JSON.stringify(safeEvent),
-      safeEvent.at
-    ]);
-    return safeEvent;
-  }
-  await fs.mkdir(IMPORT_ROOT, { recursive: true });
-  await fs.appendFile(EVENTS_PATH, `${JSON.stringify(safeEvent)}\n`);
+  await ensurePostgresSchema();
+  await queryPostgres(`
+    insert into analytics_events (
+      type, series_slug, chapter_slug, value, placement, source, url, raw, created_at
+    ) values (
+      $1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9
+    )
+  `, [
+    safeEvent.type,
+    safeEvent.seriesSlug,
+    safeEvent.chapterSlug,
+    safeEvent.value,
+    safeEvent.placement,
+    safeEvent.source,
+    safeEvent.url,
+    JSON.stringify(safeEvent),
+    safeEvent.at
+  ]);
   return safeEvent;
 }
 
 export async function listAnalyticsEvents({ limit = 200 } = {}) {
-  if (usesPostgresStorage()) {
-    const result = await queryPostgres(`
-      select type, series_slug, chapter_slug, value, placement, source, url, raw, created_at
-      from analytics_events
-      order by created_at desc
-      limit $1
-    `, [Math.max(1, Number(limit || 200))]);
-    return result.rows.map((row) => ({
-      ...(row.raw || {}),
-      type: row.type,
-      seriesSlug: row.series_slug || '',
-      chapterSlug: row.chapter_slug || '',
-      value: Number(row.value || 0),
-      placement: row.placement || '',
-      source: row.source || '',
-      url: row.url || '',
-      at: row.raw?.at || row.created_at?.toISOString?.() || row.created_at
-    }));
-  }
-  try {
-    const text = await fs.readFile(EVENTS_PATH, 'utf8');
-    const rows = text
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line) => {
-        try {
-          return JSON.parse(line);
-        } catch {
-          return null;
-        }
-      })
-      .filter(Boolean);
-    return rows.slice(-Math.max(1, Number(limit || 200))).reverse();
-  } catch (error) {
-    if (error.code === 'ENOENT') return [];
-    throw error;
-  }
+  await ensurePostgresSchema();
+  const result = await queryPostgres(`
+    select type, series_slug, chapter_slug, value, placement, source, url, raw, created_at
+    from analytics_events
+    order by created_at desc
+    limit $1
+  `, [Math.max(1, Number(limit || 200))]);
+  return result.rows.map((row) => ({
+    ...(row.raw || {}),
+    type: row.type,
+    seriesSlug: row.series_slug || '',
+    chapterSlug: row.chapter_slug || '',
+    value: Number(row.value || 0),
+    placement: row.placement || '',
+    source: row.source || '',
+    url: row.url || '',
+    at: row.raw?.at || row.created_at?.toISOString?.() || row.created_at
+  }));
 }
 
 function rangeStartDate(range = '30d', now = new Date()) {

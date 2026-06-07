@@ -21,25 +21,20 @@ const sampleSeries = {
   }]
 };
 
-test('production check targets include series page, cover, chapter image, and static API', () => {
+test('production check targets include series page, cover, and chapter image', () => {
   const targets = buildProductionCheckTargets({
     series: sampleSeries,
     productionUrl: 'https://cuontruyen.vercel.app/truyen/sample-series',
-    importsBaseUrl: 'https://s3.vn-hcm-1.vietnix.cloud/cuontruyen/imports',
-    staticApiBaseUrl: 'https://s3.vn-hcm-1.vietnix.cloud/cuontruyen/static-api'
+    importsBaseUrl: 'https://s3.vn-hcm-1.vietnix.cloud/cuontruyen/imports'
   });
 
   assert.deepEqual(targets.map((target) => target.key), [
     'series-page',
     'cover-image',
-    'chapter-image',
-    'static-series-api',
-    'static-reader-api'
+    'chapter-image'
   ]);
   assert.equal(targets[1].url, 'https://s3.vn-hcm-1.vietnix.cloud/cuontruyen/imports/sample-series/_cover/cover.webp');
   assert.equal(targets[2].url, 'https://s3.vn-hcm-1.vietnix.cloud/cuontruyen/imports/sample-series/chuong-1/001.webp');
-  assert.equal(targets[3].url, 'https://s3.vn-hcm-1.vietnix.cloud/cuontruyen/static-api/series/sample-series.json');
-  assert.equal(targets[4].url, 'https://s3.vn-hcm-1.vietnix.cloud/cuontruyen/static-api/reader/sample-series/chuong-1.json');
 });
 
 test('production asset URL resolver keeps absolute URLs and maps local imports to S3 imports base', () => {

@@ -1,43 +1,21 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
-
-import { IMPORT_ROOT } from './catalogStore.mjs';
 import {
   ensurePostgresSchema,
   queryPostgres,
-  usesPostgresStorage,
   withPostgresTransaction
 } from './postgresStore.mjs';
 import {
   ACTIVE_JOB_STATUSES,
   createQueuedImportJob,
-  mergeProgress,
   nextRetryAt,
   normalizeSourceUrl,
-  publicJob,
-  shouldReuseActiveJob
+  publicJob
 } from './crawlQueue.mjs';
 
-const DEFAULT_JSON_QUEUE_PATH = path.join(IMPORT_ROOT, 'crawl-jobs.json');
-const JSON_READ_RETRY_COUNT = 3;
-const JSON_WRITE_RETRY_COUNT = 8;
 const DEFAULT_RUNNING_JOB_STALE_MS = 20 * 60 * 1000;
-let jsonWriteQueue = Promise.resolve();
-let lastJsonJobsSnapshot = [];
 
 export async function ensureCrawlQueueStorage() {
-  if (usesPostgresStorage()) {
-    await ensurePostgresSchema();
-    return 'postgres';
-  }
-  await fs.mkdir(path.dirname(jsonQueuePath()), { recursive: true });
-  try {
-    await fs.access(jsonQueuePath());
-  } catch (error) {
-    if (error.code !== 'ENOENT') throw error;
-    await fs.writeFile(jsonQueuePath(), `${JSON.stringify({ jobs: [] }, null, 2)}\n`);
-  }
-  return 'json';
+  await ensurePostgresSchema();
+  return 'postgres';
 }
 
 export async function createImportJob(payload, options = {}) {
@@ -45,8 +23,7 @@ export async function createImportJob(payload, options = {}) {
   const runningJob = await getRunningImportJobForUrl(payload.url);
   if (runningJob) return { job: runningJob, reused: true };
   const job = createQueuedImportJob(payload, options);
-  if (usesPostgresStorage()) await insertPostgresJob(job);
-  else await writeJsonJobs([...(await readJsonJobs()), job]);
+  await insertPostgresJob(job);
   return { job: publicJob(job), reused: false };
 }
 
@@ -71,69 +48,35 @@ export async function createImportJobs(payloads, options = {}) {
 
 export async function getImportJob(id) {
   await ensureCrawlQueueStorage();
-  if (usesPostgresStorage()) {
-    const result = await queryPostgres('select * from crawl_jobs where id = $1', [id]);
-    return publicJob(jobFromRow(result.rows[0]));
-  }
-  return publicJob((await readJsonJobs()).find((job) => job.id === id));
+  const result = await queryPostgres('select * from crawl_jobs where id = $1', [id]);
+  return publicJob(jobFromRow(result.rows[0]));
 }
 
 export async function listImportJobs({ limit = 50 } = {}) {
   await ensureCrawlQueueStorage();
-  if (usesPostgresStorage()) {
-    const result = await queryPostgres(
-      'select * from crawl_jobs order by created_at desc limit $1',
-      [Math.max(1, Math.min(200, Number(limit || 50)))]
-    );
-    return result.rows.map(jobFromRow).map(publicJob);
-  }
-  return (await readJsonJobs())
-    .sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0))
-    .slice(0, Math.max(1, Math.min(200, Number(limit || 50))))
-    .map(publicJob);
+  const result = await queryPostgres(
+    'select * from crawl_jobs order by created_at desc limit $1',
+    [Math.max(1, Math.min(200, Number(limit || 50)))]
+  );
+  return result.rows.map(jobFromRow).map(publicJob);
 }
 
 export async function getRunningImportJobForUrl(url) {
   await ensureCrawlQueueStorage();
   const sourceUrl = normalizeSourceUrl(url);
-  if (usesPostgresStorage()) {
-    const result = await queryPostgres(
-      `select * from crawl_jobs
-       where source_url = $1 and status = any($2::text[])
-       order by created_at asc
-       limit 1`,
-      [sourceUrl, [...ACTIVE_JOB_STATUSES]]
-    );
-    return publicJob(jobFromRow(result.rows[0]));
-  }
-  return publicJob((await readJsonJobs()).find((job) => shouldReuseActiveJob(job, sourceUrl)));
+  const result = await queryPostgres(
+    `select * from crawl_jobs
+     where source_url = $1 and status = any($2::text[])
+     order by created_at asc
+     limit 1`,
+    [sourceUrl, [...ACTIVE_JOB_STATUSES]]
+  );
+  return publicJob(jobFromRow(result.rows[0]));
 }
 
 export async function claimNextImportJob({ workerId = 'worker', now = new Date().toISOString() } = {}) {
   await ensureCrawlQueueStorage();
-  if (usesPostgresStorage()) return claimNextPostgresJob(workerId, now);
-  const jobs = await readJsonJobs();
-  const next = jobs
-    .filter((job) => ['queued', 'retrying'].includes(job.status) && Date.parse(job.runAfter || 0) <= Date.parse(now))
-    .sort((a, b) => Number(b.priority || 0) - Number(a.priority || 0) || Date.parse(a.createdAt || 0) - Date.parse(b.createdAt || 0))[0];
-  if (!next) return null;
-  const index = jobs.findIndex((job) => job.id === next.id);
-  const updated = {
-    ...next,
-    status: 'running',
-    attempts: Number(next.attempts || 0) + 1,
-    lockedBy: workerId,
-    lockedAt: now,
-    startedAt: next.startedAt || now,
-    updatedAt: now,
-    progress: mergeProgress(next, {
-      phase: 'running',
-      message: 'Worker đã nhận job, bắt đầu crawl.'
-    }, now)
-  };
-  jobs[index] = updated;
-  await writeJsonJobs(jobs);
-  return publicJob(updated);
+  return claimNextPostgresJob(workerId, now);
 }
 
 export async function resetStaleRunningImportJobs({
@@ -143,103 +86,93 @@ export async function resetStaleRunningImportJobs({
   await ensureCrawlQueueStorage();
   const thresholdMs = Date.parse(now) - Math.max(60_000, Number(staleMs || DEFAULT_RUNNING_JOB_STALE_MS));
   const message = 'Reset stale running job to retrying before worker claim.';
-  if (usesPostgresStorage()) {
-    const result = await queryPostgres(
-      `update crawl_jobs
-       set status = 'retrying',
-           progress = progress || $2::jsonb,
-           logs = logs || $3::jsonb,
-           run_after = $4,
-           updated_at = $4,
-           locked_by = null,
-           locked_at = null,
-           last_error = null
-       where status = 'running'
-         and extract(epoch from coalesce(locked_at, updated_at, started_at, created_at)) * 1000 < $1
-       returning id`,
-      [
-        thresholdMs,
-        JSON.stringify({ phase: 'retrying', message, updatedAt: now }),
-        JSON.stringify([jobLog(message, now)]),
-        now
-      ]
-    );
-    return result.rows.length;
-  }
+  const result = await queryPostgres(
+    `update crawl_jobs
+     set status = 'retrying',
+         progress = progress || $2::jsonb,
+         logs = logs || $3::jsonb,
+         run_after = $4,
+         updated_at = $4,
+         locked_by = null,
+         locked_at = null,
+         last_error = null
+     where status = 'running'
+       and extract(epoch from coalesce(locked_at, updated_at, started_at, created_at)) * 1000 < $1
+     returning id`,
+    [
+      thresholdMs,
+      JSON.stringify({ phase: 'retrying', message, updatedAt: now }),
+      JSON.stringify([jobLog(message, now)]),
+      now
+    ]
+  );
+  const deadOwnerRows = await queryPostgres(
+    `select id, locked_by from crawl_jobs
+     where status = 'running'
+       and locked_by is not null`
+  );
+  const deadOwnerIds = deadOwnerRows.rows
+    .filter((row) => isJobLockOwnerDead(row.locked_by))
+    .map((row) => row.id);
+  if (!deadOwnerIds.length) return result.rows.length;
 
-  let resetCount = 0;
-  await updateJsonJobs((jobs) => jobs.map((job) => {
-    if (job.status !== 'running') return job;
-    const lastActiveAt = Date.parse(job.lockedAt || job.updatedAt || job.startedAt || job.createdAt || 0);
-    const ownerIsDead = isJobLockOwnerDead(job.lockedBy);
-    if (!ownerIsDead && (!lastActiveAt || lastActiveAt >= thresholdMs)) return job;
-    resetCount += 1;
-    return {
-      ...job,
-      status: 'retrying',
-      runAfter: now,
-      lockedBy: null,
-      lockedAt: null,
-      lastError: null,
-      error: null,
-      progress: mergeProgress(job, {
-        phase: 'retrying',
-        message,
-        updatedAt: now
-      }, now),
-      logs: [...(job.logs || []), jobLog(message, now)]
-    };
-  }));
-  return resetCount;
+  const deadOwnerMessage = 'Reset running job locked by a dead worker.';
+  const deadOwnerResult = await queryPostgres(
+    `update crawl_jobs
+     set status = 'retrying',
+         progress = progress || $2::jsonb,
+         logs = logs || $3::jsonb,
+         run_after = $4,
+         updated_at = $4,
+         locked_by = null,
+         locked_at = null,
+         last_error = null
+     where id = any($1::text[])
+     returning id`,
+    [
+      deadOwnerIds,
+      JSON.stringify({ phase: 'retrying', message: deadOwnerMessage, updatedAt: now }),
+      JSON.stringify([jobLog(deadOwnerMessage, now)]),
+      now
+    ]
+  );
+  return result.rows.length + deadOwnerResult.rows.length;
 }
 
 export async function updateImportJobProgress(id, patch = {}, { log = null, now = new Date().toISOString(), workerId = '' } = {}) {
   await ensureCrawlQueueStorage();
-  if (usesPostgresStorage()) {
-    const logsPatch = log ? [jobLog(log, now)] : [];
-    if (workerId) {
-      const result = await queryPostgres(
-        `update crawl_jobs
-         set progress = progress || $2::jsonb,
-             logs = logs || $3::jsonb,
-             updated_at = $4,
-             locked_at = $4,
-             locked_by = coalesce(locked_by, $5),
-             started_at = coalesce(started_at, $4),
-             status = case
-               when status in ('queued', 'retrying') and locked_by is null then 'running'
-               else status
-             end
-         where id = $1
-           and status = any($6::text[])
-           and (locked_by = $5 or locked_by is null)
-         returning *`,
-        [id, JSON.stringify({ ...patch, updatedAt: now }), JSON.stringify(logsPatch), now, workerId, ['running', 'queued', 'retrying']]
-      );
-      return publicJob(jobFromRow(result.rows[0]));
-    }
+  const logsPatch = log ? [jobLog(log, now)] : [];
+  if (workerId) {
     const result = await queryPostgres(
       `update crawl_jobs
        set progress = progress || $2::jsonb,
            logs = logs || $3::jsonb,
-           updated_at = $4
+           updated_at = $4,
+           locked_at = $4,
+           locked_by = coalesce(locked_by, $5),
+           started_at = coalesce(started_at, $4),
+           status = case
+             when status in ('queued', 'retrying') and locked_by is null then 'running'
+             else status
+           end
        where id = $1
+         and status = any($6::text[])
+         and (locked_by = $5 or locked_by is null)
        returning *`,
-      [id, JSON.stringify({ ...patch, updatedAt: now }), JSON.stringify(logsPatch), now]
+      [id, JSON.stringify({ ...patch, updatedAt: now }), JSON.stringify(logsPatch), now, workerId, ['running', 'queued', 'retrying']]
     );
     return publicJob(jobFromRow(result.rows[0]));
   }
-  return updateJsonJob(id, (job) => {
-    const ownership = resolveProgressOwnership(job, workerId, now);
-    if (ownership.blocked) return job;
-    return {
-      ...job,
-      ...ownership.fields,
-      progress: mergeProgress(job, patch, now),
-      logs: log ? [...(job.logs || []), jobLog(log, now)] : job.logs || [],
-      updatedAt: now
-    };
-  });
+  const result = await queryPostgres(
+    `update crawl_jobs
+     set progress = progress || $2::jsonb,
+         logs = logs || $3::jsonb,
+         updated_at = $4
+     where id = $1
+     returning *`,
+    [id, JSON.stringify({ ...patch, updatedAt: now }), JSON.stringify(logsPatch), now]
+  );
+  return publicJob(jobFromRow(result.rows[0]));
 }
 
 export async function completeImportJob(id, series, { now = new Date().toISOString() } = {}) {
@@ -253,9 +186,9 @@ export async function completeImportJob(id, series, { now = new Date().toISOStri
   const mode = importSummary.mode || current?.payload?.mode || 'full';
   const message = mode === 'new-chapters'
     ? (newChapterCount > 0
-      ? `Đã cập nhật ${newChapterCount} chapter mới cho ${series.title}.`
-      : `Chưa có chapter mới cho ${series.title}.`)
-    : `Đã crawl xong ${series.title}.`;
+      ? `ÄÃ£ cáº­p nháº­t ${newChapterCount} chapter má»›i cho ${series.title}.`
+      : `ChÆ°a cÃ³ chapter má»›i cho ${series.title}.`)
+    : `ÄÃ£ crawl xong ${series.title}.`;
   const progressPatch = {
     phase: mode === 'new-chapters' && newChapterCount === 0 ? 'completed-no-new-chapters' : 'completed',
     message,
@@ -265,36 +198,22 @@ export async function completeImportJob(id, series, { now = new Date().toISOStri
     processedSeries: Math.min(totalSeries, seriesIndex),
     updatedAt: now
   };
-  if (usesPostgresStorage()) {
-    const result = await queryPostgres(
-      `update crawl_jobs
-       set status = 'completed',
-           result = $2::jsonb,
-           series_id = $3,
-           progress = progress || $4::jsonb,
-           finished_at = $5,
-           updated_at = $5,
-           locked_by = null,
-           locked_at = null,
-           last_error = null
-       where id = $1
-       returning *`,
-      [id, JSON.stringify({ series: storedSeries }), series.id, JSON.stringify(progressPatch), now]
-    );
-    return publicJob(jobFromRow(result.rows[0]));
-  }
-  return updateJsonJob(id, (job) => ({
-    ...job,
-    status: 'completed',
-    result: { series: storedSeries },
-    series: storedSeries,
-    error: null,
-    progress: mergeProgress(job, progressPatch, now),
-    finishedAt: now,
-    updatedAt: now,
-    lockedBy: null,
-    lockedAt: null
-  }));
+  const result = await queryPostgres(
+    `update crawl_jobs
+     set status = 'completed',
+         result = $2::jsonb,
+         series_id = $3,
+         progress = progress || $4::jsonb,
+         finished_at = $5,
+         updated_at = $5,
+         locked_by = null,
+         locked_at = null,
+         last_error = null
+     where id = $1
+     returning *`,
+    [id, JSON.stringify({ series: storedSeries }), series.id, JSON.stringify(progressPatch), now]
+  );
+  return publicJob(jobFromRow(result.rows[0]));
 }
 
 export async function failImportJob(id, error, { now = new Date().toISOString(), retry = true } = {}) {
@@ -310,44 +229,29 @@ export async function failImportJob(id, error, { now = new Date().toISOString(),
   const progressPatch = {
     phase: status,
     message: shouldRetry
-      ? `Lỗi: ${message}. Sẽ retry job lần ${attempts + 1}/${maxAttempts}.`
+      ? `Lá»—i: ${message}. Sáº½ retry job láº§n ${attempts + 1}/${maxAttempts}.`
       : message,
     errors: [...(current.progress?.errors || []), message].slice(-20),
     errorCount: Number(current.progress?.errorCount || 0) + 1,
     updatedAt: now
   };
 
-  if (usesPostgresStorage()) {
-    const result = await queryPostgres(
-      `update crawl_jobs
-       set status = $2,
-           progress = progress || $3::jsonb,
-           logs = logs || $4::jsonb,
-           run_after = $5,
-           finished_at = case when $2 = 'failed' then $6 else finished_at end,
-           updated_at = $6,
-           locked_by = null,
-           locked_at = null,
-           last_error = $7
-       where id = $1
-       returning *`,
-      [id, status, JSON.stringify(progressPatch), JSON.stringify([jobLog(message, now, 'error')]), runAfter, now, message]
-    );
-    return publicJob(jobFromRow(result.rows[0]));
-  }
-  return updateJsonJob(id, (job) => ({
-    ...job,
-    status,
-    error: message,
-    lastError: message,
-    runAfter,
-    progress: mergeProgress(job, progressPatch, now),
-    logs: [...(job.logs || []), jobLog(message, now, 'error')],
-    finishedAt: status === 'failed' ? now : job.finishedAt,
-    updatedAt: now,
-    lockedBy: null,
-    lockedAt: null
-  }));
+  const result = await queryPostgres(
+    `update crawl_jobs
+     set status = $2,
+         progress = progress || $3::jsonb,
+         logs = logs || $4::jsonb,
+         run_after = $5,
+         finished_at = case when $2 = 'failed' then $6 else finished_at end,
+         updated_at = $6,
+         locked_by = null,
+         locked_at = null,
+         last_error = $7
+     where id = $1
+     returning *`,
+    [id, status, JSON.stringify(progressPatch), JSON.stringify([jobLog(message, now, 'error')]), runAfter, now, message]
+  );
+  return publicJob(jobFromRow(result.rows[0]));
 }
 
 async function claimNextPostgresJob(workerId, now) {
@@ -375,7 +279,7 @@ async function claimNextPostgresJob(workerId, now) {
        returning *`,
       [row.id, workerId, now, JSON.stringify({
         phase: 'running',
-        message: 'Worker đã nhận job, bắt đầu crawl.',
+        message: 'Worker Ä‘Ã£ nháº­n job, báº¯t Ä‘áº§u crawl.',
         updatedAt: now
       })]
     );
@@ -448,102 +352,8 @@ function resolveProgressOwnership(job = {}, workerId = '', now = new Date().toIS
 }
 
 async function getInternalJob(id) {
-  if (usesPostgresStorage()) {
-    const result = await queryPostgres('select * from crawl_jobs where id = $1', [id]);
-    return jobFromRow(result.rows[0]);
-  }
-  return (await readJsonJobs()).find((job) => job.id === id) || null;
-}
-
-async function updateJsonJob(id, updater) {
-  let updatedJob = null;
-  await updateJsonJobs((jobs) => {
-    const index = jobs.findIndex((job) => job.id === id);
-    if (index < 0) return jobs;
-    const nextJobs = [...jobs];
-    updatedJob = updater(nextJobs[index]);
-    nextJobs[index] = updatedJob;
-    return nextJobs;
-  });
-  return updatedJob ? publicJob(updatedJob) : null;
-}
-
-async function updateJsonJobs(updater) {
-  const jobs = await readJsonJobs();
-  const updatedJobs = updater(jobs);
-  await writeJsonJobs(updatedJobs);
-  return updatedJobs;
-}
-
-async function readJsonJobs() {
-  await ensureCrawlQueueStorage();
-  for (let attempt = 0; attempt <= JSON_READ_RETRY_COUNT; attempt += 1) {
-    try {
-      const value = JSON.parse(await fs.readFile(jsonQueuePath(), 'utf8'));
-      const jobs = Array.isArray(value.jobs) ? value.jobs : [];
-      lastJsonJobsSnapshot = jobs;
-      return jobs;
-    } catch (error) {
-      if (error.code === 'ENOENT') return [];
-      if (!(error instanceof SyntaxError) && !isRetryableJsonFileError(error)) throw error;
-      if (attempt < JSON_READ_RETRY_COUNT) {
-        await delay(25 * (attempt + 1));
-        continue;
-      }
-      if (lastJsonJobsSnapshot.length) return lastJsonJobsSnapshot;
-      throw error;
-    }
-  }
-  return lastJsonJobsSnapshot;
-}
-
-function writeJsonJobs(jobs) {
-  const pending = jsonWriteQueue.then(async () => {
-    const nextJobs = jobs.map(compactJobForStorage);
-    const queuePath = jsonQueuePath();
-    await fs.mkdir(IMPORT_ROOT, { recursive: true });
-    await fs.mkdir(path.dirname(queuePath), { recursive: true });
-    await writeJsonAtomic(queuePath, `${JSON.stringify({ jobs: nextJobs }, null, 2)}\n`);
-    lastJsonJobsSnapshot = nextJobs;
-  });
-  jsonWriteQueue = pending.catch(() => {});
-  return pending;
-}
-
-async function writeJsonAtomic(filePath, contents) {
-  for (let attempt = 0; attempt <= JSON_WRITE_RETRY_COUNT; attempt += 1) {
-    const tempPath = `${filePath}.${process.pid}.${Date.now()}.${attempt}.tmp`;
-    try {
-      await fs.writeFile(tempPath, contents);
-      await fs.rename(tempPath, filePath);
-      return;
-    } catch (error) {
-      await fs.rm(tempPath, { force: true }).catch(() => {});
-      if (!isRetryableJsonFileError(error) || attempt >= JSON_WRITE_RETRY_COUNT) throw error;
-      await delay(75 * (attempt + 1));
-    }
-  }
-}
-
-function isRetryableJsonFileError(error) {
-  return ['EBUSY', 'EACCES', 'EPERM'].includes(error?.code);
-}
-
-function isJobLockOwnerDead(lockedBy = '') {
-  const match = String(lockedBy || '').match(/(?:^|-)worker-(\d+)$/);
-  if (!match) return false;
-  const pid = Number(match[1]);
-  if (!pid || pid === process.pid) return false;
-  try {
-    process.kill(pid, 0);
-    return false;
-  } catch {
-    return true;
-  }
-}
-
-function jsonQueuePath() {
-  return process.env.CRAWL_QUEUE_PATH || DEFAULT_JSON_QUEUE_PATH;
+  const result = await queryPostgres('select * from crawl_jobs where id = $1', [id]);
+  return jobFromRow(result.rows[0]);
 }
 
 function jobFromRow(row) {
@@ -575,15 +385,6 @@ function jobFromRow(row) {
   };
 }
 
-function compactJobForStorage(job = {}) {
-  const series = compactSeriesForJob(job.series || job.result?.series);
-  return {
-    ...job,
-    result: job.result?.series ? { ...job.result, series } : job.result,
-    series: series || job.series || null
-  };
-}
-
 function compactSeriesForJob(series) {
   if (!series) return null;
   const chapters = Array.isArray(series.chapters) ? series.chapters : [];
@@ -612,8 +413,17 @@ function jobLog(message, timestamp, level = 'info') {
   };
 }
 
-function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms || 0))));
+function isJobLockOwnerDead(lockedBy = '') {
+  const match = String(lockedBy || '').match(/(?:^|-)worker-(\d+)$/);
+  if (!match) return false;
+  const pid = Number(match[1]);
+  if (!pid || pid === process.pid) return false;
+  try {
+    process.kill(pid, 0);
+    return false;
+  } catch {
+    return true;
+  }
 }
 
 function iso(value) {

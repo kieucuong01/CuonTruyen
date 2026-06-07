@@ -2,6 +2,8 @@ import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { catalogStorageSummary, productionPostgresCatalogUrl } from './storageConfig.mjs';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const MAX_LOG_LINES = 80;
@@ -33,6 +35,7 @@ export function createProductionPublishJob({ seriesId, seriesSlug = '', title = 
     error: '',
     logs: [],
     requestedSteps,
+    storage: catalogStorageSummary(),
     steps: buildProductionPublishSteps(normalizedSeriesId, { requestedSteps }),
     result: {}
   };
@@ -46,35 +49,44 @@ export function getProductionPublishJob(id) {
   return job ? publicJob(job) : null;
 }
 
+export function productionPublishPreflightError(steps = []) {
+  const requestedSteps = normalizeRequestedSteps(steps);
+  const includesCatalogDb = requestedSteps.length
+    ? requestedSteps.includes('sync-catalog-db')
+    : true;
+  if (!includesCatalogDb || productionDatabaseUrl()) return null;
+  return {
+    error: 'Missing PRODUCTION_CATALOG_DATABASE_URL or PRODUCTION_DATABASE_URL.',
+    detail: 'Set a dedicated production Supabase/Postgres URL before running Sync catalog DB.',
+    storage: catalogStorageSummary(),
+    hints: [
+      'Set PRODUCTION_CATALOG_DATABASE_URL in .env.local for local production pipeline.'
+    ]
+  };
+}
+
 export function buildProductionPublishSteps(seriesId, { requestedSteps = [] } = {}) {
   const includeDeepMaintenance = String(process.env.PRODUCTION_PUBLISH_DEEP_MAINTENANCE || '').toLowerCase() === 'true';
   const optimizeLimit = String(process.env.PRODUCTION_PUBLISH_OPTIMIZE_LIMIT || '800');
   const allSteps = [
     {
       key: 'optimize',
-      label: 'Tối ưu ảnh nhanh',
-      description: 'Fast publish: chỉ tối ưu một lô ảnh lớn/chưa tối ưu để tránh kẹt job quá lâu.',
+      label: 'Tá»‘i Æ°u áº£nh nhanh',
+      description: 'Fast publish: chá»‰ tá»‘i Æ°u má»™t lÃ´ áº£nh lá»›n/chÆ°a tá»‘i Æ°u Ä‘á»ƒ trÃ¡nh káº¹t job quÃ¡ lÃ¢u.',
       command: [process.execPath, 'scripts/optimize-import-images.mjs', '--catalog-only', '--series-id', seriesId, '--limit', optimizeLimit, '--apply', '--json']
     },
     {
       key: 'sync-images',
-      label: 'Sync ảnh truyện lên S3',
-      description: 'Đẩy riêng thư mục ảnh của truyện lên Vietnix S3.',
+      label: 'Sync áº£nh truyá»‡n lÃªn S3',
+      description: 'Äáº©y riÃªng thÆ° má»¥c áº£nh cá»§a truyá»‡n lÃªn Vietnix S3.',
       command: [process.execPath, 'scripts/sync-vietnix-s3.mjs', '--images-only', '--catalog-only', '--series-id', seriesId, '--apply'],
       s3Step: true
     },
     {
-      key: 'export-static-api',
-      label: 'Export static API',
-      description: 'Sinh lại JSON public để Vercel đọc dữ liệu mới.',
-      command: [process.execPath, 'scripts/export-static-api.mjs']
-    },
-    {
-      key: 'sync-static-api',
-      label: 'Sync static API lên S3',
-      description: 'Đẩy JSON public mới lên Vietnix S3 để production cập nhật.',
-      command: [process.execPath, 'scripts/sync-vietnix-s3.mjs', '--static-api-only', '--apply'],
-      s3Step: true
+      key: 'sync-catalog-db',
+      label: 'Sync catalog DB production',
+      description: 'Day metadata/chapter/page cua truyen nay len production Postgres sau khi anh da len S3.',
+      command: [process.execPath, 'scripts/sync-catalog-to-production-db.mjs', '--series-id', seriesId, '--apply']
     }
   ];
 
@@ -95,7 +107,7 @@ export function buildProductionPublishSteps(seriesId, { requestedSteps = [] } = 
     );
   }
 
-  const wanted = new Set(requestedSteps.length ? requestedSteps : ['optimize', 'export-static-api', 'sync-images', 'sync-static-api']);
+  const wanted = new Set(requestedSteps.length ? requestedSteps : ['optimize', 'sync-images', 'sync-catalog-db']);
   const steps = allSteps.filter((step) => wanted.has(step.key));
   return steps.map((step) => ({
     ...step,
@@ -109,7 +121,7 @@ export function buildProductionPublishSteps(seriesId, { requestedSteps = [] } = 
 }
 
 function normalizeRequestedSteps(steps = []) {
-  const allowed = new Set(['optimize', 'relink', 'cleanup', 'export-static-api', 'sync-images', 'sync-static-api']);
+  const allowed = new Set(['optimize', 'relink', 'cleanup', 'sync-images', 'sync-catalog-db']);
   return [...new Set((Array.isArray(steps) ? steps : [])
     .map((step) => String(step || '').trim())
     .filter((step) => allowed.has(step)))];
@@ -124,13 +136,14 @@ async function runProductionPublishJob(job) {
   job.status = 'running';
   touch(job);
   try {
+    preflightProductionPublishJob(job);
     for (let index = 0; index < job.steps.length; index += 1) {
       job.stepIndex = index;
       const step = job.steps[index];
       step.status = 'running';
       step.startedAt = new Date().toISOString();
       touch(job);
-      appendLog(job, `Bắt đầu: ${step.label}`);
+      appendLog(job, `Báº¯t Ä‘áº§u: ${step.label}`);
       const result = await runCommand(step.command, {
         s3Step: step.s3Step,
         onOutput: (text) => handleStepOutput(job, step, text)
@@ -145,13 +158,13 @@ async function runProductionPublishJob(job) {
       }
       step.status = 'completed';
       step.finishedAt = new Date().toISOString();
-      appendLog(job, `Hoàn tất: ${step.label}`);
+      appendLog(job, `HoÃ n táº¥t: ${step.label}`);
       touch(job);
     }
     job.status = 'completed';
     job.finishedAt = new Date().toISOString();
     job.result = {
-      message: 'Đã tối ưu, export và sync production xong.',
+      message: 'ÄÃ£ tá»‘i Æ°u, export vÃ  sync production xong.',
       completedAt: job.finishedAt
     };
     appendLog(job, job.result.message);
@@ -159,10 +172,20 @@ async function runProductionPublishJob(job) {
     job.status = 'failed';
     job.error = cleanLog(error?.message || 'Production workflow failed.');
     job.finishedAt = new Date().toISOString();
-    appendLog(job, `Lỗi: ${job.error}`);
+    appendLog(job, `Lá»—i: ${job.error}`);
   } finally {
     touch(job);
   }
+}
+
+function preflightProductionPublishJob(job) {
+  const payload = productionPublishPreflightError(job.requestedSteps);
+  if (!payload) return;
+  throw new Error([payload.error, payload.detail].filter(Boolean).join(' '));
+}
+
+function productionDatabaseUrl() {
+  return productionPostgresCatalogUrl();
 }
 
 function runCommand(command, { s3Step = false, onOutput = null } = {}) {
@@ -179,6 +202,11 @@ function runCommand(command, { s3Step = false, onOutput = null } = {}) {
         S3_SYNC_STATE_SAVE_INTERVAL_MS: process.env.S3_SYNC_STATE_SAVE_INTERVAL_MS || process.env.VIETNIX_S3_SYNC_STATE_SAVE_INTERVAL_MS || '10000'
       } : {})
     };
+    const publishStorage = process.env.PRODUCTION_PUBLISH_CATALOG_STORAGE || process.env.CATALOG_STORAGE || process.env.CATALOG_STORAGE_MODE || '';
+    if (publishStorage) {
+      env.CATALOG_STORAGE = publishStorage;
+      env.CATALOG_STORAGE_MODE = publishStorage;
+    }
     const child = spawn(bin, args, {
       cwd: ROOT,
       env,
@@ -278,6 +306,7 @@ function publicJob(job) {
     finishedAt: job.finishedAt,
     error: job.error,
     logs: job.logs,
+    storage: job.storage || catalogStorageSummary(),
     steps: job.steps.map(({ command, s3Step, ...step }) => step),
     requestedSteps: job.requestedSteps || [],
     result: job.result

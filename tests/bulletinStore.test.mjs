@@ -1,10 +1,5 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-
-const STORE_PATH = path.join(process.cwd(), '.tmp', `bulletin-test-${process.pid}.json`);
-process.env.BULLETIN_STORE_PATH = STORE_PATH;
 
 const {
   createAdminBulletinMessage,
@@ -12,13 +7,26 @@ const {
   listBulletinMessages,
   setAdminBulletinPinned
 } = await import(`../server/bulletinStore.mjs?test=${Date.now()}`);
+const {
+  ensurePostgresSchema,
+  queryPostgres
+} = await import('../server/postgresStore.mjs');
 
 test.beforeEach(async () => {
-  await fs.rm(STORE_PATH, { force: true });
-});
-
-test.after(async () => {
-  await fs.rm(STORE_PATH, { force: true });
+  await ensurePostgresSchema();
+  await queryPostgres(
+    `delete from bulletin_messages
+     where author_id = any($1::text[])
+        or text = any($2::text[])`,
+    [
+      ['user_1', 'admin@example.com'],
+      [
+        'CÃ³ ai Ä‘á»c bá»™ nÃ y chÆ°a?',
+        'Lá»‹ch crawl tá»‘i nay cÃ³ thÃªm chÆ°Æ¡ng má»›i.',
+        'Tin user khÃ´ng Ä‘Æ°á»£c ghim.'
+      ]
+    ]
+  );
 });
 
 test('bulletin messages list pinned admin messages before recent chat', async () => {
@@ -34,7 +42,8 @@ test('bulletin messages list pinned admin messages before recent chat', async ()
     now: '2026-06-04T01:00:00.000Z'
   });
 
-  const messages = await listBulletinMessages();
+  const ids = new Set([adminMessage.id, userMessage.id]);
+  const messages = (await listBulletinMessages()).filter((message) => ids.has(message.id));
 
   assert.deepEqual(messages.map((message) => message.id), [adminMessage.id, userMessage.id]);
   assert.equal(messages[0].authorRole, 'admin');

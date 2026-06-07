@@ -54,20 +54,16 @@ export function buildProductionCheckTargets({
   series = {},
   productionUrl = '',
   productionBaseUrl = '',
-  importsBaseUrl = '',
-  staticApiBaseUrl = ''
+  importsBaseUrl = ''
 } = {}) {
   const targets = [];
-  const seriesSlug = String(series.slug || '').trim();
   const chapter = firstReadableChapter(series);
-  const chapterSlug = String(chapter?.slug || chapter?.id || '').trim();
   const baseUrl = trimTrailingSlash(productionBaseUrl || productionUrl.replace(/\/truyen\/.*$/, ''));
-  const staticBase = trimTrailingSlash(staticApiBaseUrl);
 
   if (productionUrl) {
     targets.push({
       key: 'series-page',
-      label: 'Trang truyện production',
+      label: 'Trang truyá»‡n production',
       kind: 'html',
       required: true,
       url: productionUrl
@@ -83,7 +79,7 @@ export function buildProductionCheckTargets({
   if (coverUrl) {
     targets.push({
       key: 'cover-image',
-      label: 'Ảnh cover',
+      label: 'áº¢nh cover',
       kind: 'image',
       required: true,
       url: coverUrl
@@ -97,30 +93,10 @@ export function buildProductionCheckTargets({
   if (chapterImageUrl) {
     targets.push({
       key: 'chapter-image',
-      label: 'Ảnh trang truyện',
+      label: 'áº¢nh trang truyá»‡n',
       kind: 'image',
       required: true,
       url: chapterImageUrl
-    });
-  }
-
-  if (staticBase && seriesSlug) {
-    targets.push({
-      key: 'static-series-api',
-      label: 'Static API truyện',
-      kind: 'json',
-      required: true,
-      url: `${staticBase}/series/${encodeURIComponent(seriesSlug)}.json`
-    });
-  }
-
-  if (staticBase && seriesSlug && chapterSlug) {
-    targets.push({
-      key: 'static-reader-api',
-      label: 'Static API reader',
-      kind: 'json',
-      required: true,
-      url: `${staticBase}/reader/${encodeURIComponent(seriesSlug)}/${encodeURIComponent(chapterSlug)}.json`
     });
   }
 

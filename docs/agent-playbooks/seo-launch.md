@@ -1,4 +1,4 @@
-# SEO launch checklist
+﻿# SEO launch checklist
 
 Use this when preparing Cuon Truyen for public indexing.
 
@@ -6,7 +6,6 @@ Use this when preparing Cuon Truyen for public indexing.
 
 - Set `PUBLIC_SITE_URL` or `PRODUCTION_BASE_URL` to the final public domain before export/deploy.
 - Open `/sitemap.xml` and confirm every URL uses the production domain, not localhost.
-- Open `/robots.txt` and confirm it allows public pages but blocks admin/API/static JSON surfaces.
 - Confirm public images use the Vietnix S3 `importsBaseUrl` and load from a browser without admin login.
 
 ## Clean sitemap rules
@@ -27,7 +26,6 @@ Expected production behavior:
 - `Allow: /`
 - `Disallow: /admin`
 - `Disallow: /api/`
-- `Disallow: /static-api/`
 - `Disallow: /fallback-api/`
 - `Allow: /imports/`
 - `Sitemap: https://<domain>/sitemap.xml`
@@ -83,8 +81,6 @@ npm run check:encoding
 npm test
 ```
 
-If exporting static API for Vercel/S3:
 
 ```powershell
-npm run export:static-api
 ```

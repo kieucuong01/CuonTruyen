@@ -1,7 +1,5 @@
 const DEFAULT_CONFIG = {
   apiBaseUrl: '',
-  staticApiMode: false,
-  staticApiBaseUrl: '',
   importsBaseUrl: '',
   publicSiteUrl: '',
   productionBaseUrl: '',

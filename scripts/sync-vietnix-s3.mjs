@@ -8,7 +8,6 @@ import { readCatalog } from '../server/dataStore.mjs';
 const ROOT = process.cwd();
 const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.avif', '.gif']);
 const DEFAULT_IMPORT_ROOT = path.join(ROOT, 'data', 'imports');
-const DEFAULT_STATIC_API_ROOT = path.join(ROOT, '.runtime', 'static-api');
 const DEFAULT_SYNC_STATE_PATH = path.join(ROOT, '.runtime', 's3-sync-state.json');
 const DEFAULT_SYNC_STATUS_PATH = path.join(ROOT, '.runtime', 's3-sync-status.json');
 
@@ -84,7 +83,6 @@ function contentTypeFor(filePath) {
 
 function cacheControlFor(kind) {
   if (kind === 'image') return env('S3_IMAGE_CACHE_CONTROL') || 'public, max-age=31536000, immutable';
-  return env('S3_STATIC_API_CACHE_CONTROL') || 'public, max-age=60';
 }
 
 async function walkFiles(root, filter = () => true) {
@@ -252,71 +250,30 @@ async function putObject(client, item) {
 
 async function mapUploadItems() {
   const importRoot = path.resolve(env('IMPORT_ROOT') || DEFAULT_IMPORT_ROOT);
-  const staticApiRoot = path.resolve(env('STATIC_API_OUTPUT_DIR') || DEFAULT_STATIC_API_ROOT);
   const importsPrefix = env('S3_IMPORTS_PREFIX', 'VIETNIX_S3_IMPORTS_PREFIX') || 'imports';
-  const staticApiPrefix = env('S3_STATIC_API_PREFIX', 'VIETNIX_S3_STATIC_API_PREFIX') || 'static-api';
-  const imagesOnly = arg('--images-only');
-  const staticApiOnly = arg('--static-api-only');
   const catalogOnly = arg('--catalog-only');
   const seriesId = argValue('--series-id', '').trim();
   const explicitImageFiles = argValues('--image-file');
-  const explicitStaticFiles = argValues('--static-file');
   const items = [];
 
-  if (!staticApiOnly) {
-    const imageRoot = seriesId ? path.join(importRoot, seriesId) : importRoot;
-    const imageFiles = explicitImageFiles.length
-      ? await collectExplicitImageFiles(importRoot, explicitImageFiles)
-      : catalogOnly
-      ? await collectCatalogImageFiles(importRoot, seriesId)
-      : await walkFiles(imageRoot, (filePath) => IMAGE_EXTENSIONS.has(path.extname(filePath).toLowerCase()));
-    for (const filePath of imageFiles) {
-      const relative = path.relative(importRoot, filePath).replace(/\\/g, '/');
-      items.push({
-        kind: 'image',
-        filePath,
-        key: toS3Key(importsPrefix, relative),
-        contentType: contentTypeFor(filePath),
-        cacheControl: cacheControlFor('image')
-      });
-    }
-  }
-
-  if (!imagesOnly) {
-    const staticFiles = explicitStaticFiles.length
-      ? await collectExplicitStaticFiles(staticApiRoot, explicitStaticFiles)
-      : await walkFiles(staticApiRoot);
-    for (const filePath of staticFiles) {
-      const relative = path.relative(staticApiRoot, filePath).replace(/\\/g, '/');
-      items.push({
-        kind: 'static-api',
-        filePath,
-        key: toS3Key(staticApiPrefix, relative),
-        contentType: contentTypeFor(filePath),
-        cacheControl: cacheControlFor('static-api')
-      });
-    }
+  const imageRoot = seriesId ? path.join(importRoot, seriesId) : importRoot;
+  const imageFiles = explicitImageFiles.length
+    ? await collectExplicitImageFiles(importRoot, explicitImageFiles)
+    : catalogOnly
+    ? await collectCatalogImageFiles(importRoot, seriesId)
+    : await walkFiles(imageRoot, (filePath) => IMAGE_EXTENSIONS.has(path.extname(filePath).toLowerCase()));
+  for (const filePath of imageFiles) {
+    const relative = path.relative(importRoot, filePath).replace(/\\/g, '/');
+    items.push({
+      kind: 'image',
+      filePath,
+      key: toS3Key(importsPrefix, relative),
+      contentType: contentTypeFor(filePath),
+      cacheControl: cacheControlFor('image')
+    });
   }
 
   return items;
-}
-
-async function collectExplicitStaticFiles(staticApiRoot, values = []) {
-  const root = path.resolve(staticApiRoot);
-  const files = new Set();
-  for (const value of values) {
-    const raw = String(value || '').replace(/\\/g, '/').replace(/^\/+/, '');
-    const normalized = path.posix.normalize(raw);
-    const filePath = path.isAbsolute(value)
-      ? path.resolve(value)
-      : path.resolve(root, ...normalized.split('/'));
-    if (!isInsideDirectory(filePath, root)) continue;
-    try {
-      const stat = await fs.stat(filePath);
-      if (stat.isFile()) files.add(filePath);
-    } catch {}
-  }
-  return [...files].sort((a, b) => a.localeCompare(b));
 }
 
 async function collectExplicitImageFiles(importRoot, values = []) {
@@ -513,7 +470,7 @@ async function main() {
   const seriesId = argValue('--series-id', '').trim();
   const retryFailed = arg('--retry-failed');
   const allowFull = arg('--all') || ['1', 'true', 'yes', 'on'].includes(String(env('S3_SYNC_ALLOW_FULL', 'VIETNIX_S3_SYNC_ALLOW_FULL') || '').toLowerCase());
-  const includesImages = !arg('--static-api-only');
+  const includesImages = true;
   const concurrency = Math.max(1, Number(env('S3_SYNC_CONCURRENCY', 'VIETNIX_S3_SYNC_CONCURRENCY') || 8));
   const useState = !arg('--no-state') && String(env('S3_SYNC_STATE', 'VIETNIX_S3_SYNC_STATE') || '1').toLowerCase() !== '0';
   const stateFile = path.resolve(argValue('--state-file', env('S3_SYNC_STATE_FILE', 'VIETNIX_S3_SYNC_STATE_FILE') || DEFAULT_SYNC_STATE_PATH));
@@ -778,9 +735,9 @@ export function isRetryableS3Failure({ status = 0, text = '' } = {}) {
 }
 
 export function s3SyncScopeMessage({ retryFailed = false, failedCount = 0, seriesId = '' } = {}) {
-  if (retryFailed) return `Retry ${Number(failedCount || 0)} file thiếu/lỗi trên S3...`;
-  if (seriesId) return `Đang đồng bộ S3 cho truyện ${seriesId}...`;
-  return 'Đang đồng bộ S3...';
+  if (retryFailed) return `Retry ${Number(failedCount || 0)} file thiáº¿u/lá»—i trÃªn S3...`;
+  if (seriesId) return `Äang Ä‘á»“ng bá»™ S3 cho truyá»‡n ${seriesId}...`;
+  return 'Äang Ä‘á»“ng bá»™ S3...';
 }
 
 async function loadFailedKeysFromStatus(filePath) {

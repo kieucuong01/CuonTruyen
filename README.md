@@ -17,9 +17,9 @@ Local-first comic reader and crawler for Vietnamese manhua/manhwa workflows. The
 - Local user session, follow list, and reading history using browser storage.
 - Admin login for crawl/import and content management.
 - Multi-URL durable crawl jobs with worker mode, retries, per-domain delay, and progress counters.
-- DB-first catalog facade: local and production default to PostgreSQL; local JSON is only an explicit legacy fallback/escape hatch.
+- PostgreSQL-only catalog facade for local and production.
 - Cached images served from `data/imports/` or `IMPORT_ROOT` through `/imports/*`.
-- Optional Vercel static frontend mode with images and public JSON served from S3-compatible storage.
+- Vercel frontend uses live API backed by Postgres; S3-compatible storage serves public images.
 - Series and chapter moderation with `public`, `draft`, and `removed` statuses.
 - Static SEO/policy pages: `/gioi-thieu`, `/lien-he`, `/chinh-sach-noi-dung`, `/privacy`.
 - Sitemap and public APIs exclude draft/removed content.
@@ -55,10 +55,9 @@ npm run dev
 npm run worker:crawl
 npm run worker:crawl:once
 npm run smoke:import
-npm run export:static-api
 npm run sync:s3:dry-run
 npm run sync:s3
-npm run db:migrate:catalog
+npm run db:setup:schema
 npm run db:local:setup
 npm test
 ```
@@ -117,12 +116,12 @@ server/
   index.mjs              HTTP server, APIs, SEO/static routes
   contentStore.mjs       public/admin catalog shaping and moderation
   catalogMerge.mjs       catalog merge rules shared by all storage backends
-  catalogStore.mjs       legacy local JSON catalog and image path helpers
-  dataStore.mjs          storage facade: PostgreSQL first, JSON fallback
+  catalogStore.mjs       local image path helpers
+  dataStore.mjs          PostgreSQL storage facade
   storageConfig.mjs      catalog storage mode and database URL resolution
   postgresStore.mjs      PostgreSQL schema and catalog persistence
   importer.mjs           crawl orchestration and image caching
-  crawlJobStore.mjs      durable crawl queue: PostgreSQL or JSON
+  crawlJobStore.mjs      durable PostgreSQL crawl queue
   crawlWorker.mjs        separate crawl worker process
   adapters/              source-specific parsers
 migrations/
@@ -158,9 +157,7 @@ Status behavior:
 Default local runtime data:
 
 ```text
-data/imports/catalog.json
-data/imports/crawl-jobs.json
-data/imports/analytics-events.jsonl
+PostgreSQL catalog/crawl/auth/message/analytics database
 data/imports/<seriesId>/<chapterId>/*.jpg
 ```
 
@@ -172,15 +169,13 @@ For low-cost public hosting, the recommended split is:
 
 ```text
 Local machine: admin, crawler, data/imports
-Vietnix S3/Object Storage: /imports/* images and /static-api/* public JSON
-Vercel: static frontend from public/
+Vietnix S3/Object Storage: /imports/* images
+Vercel: frontend plus live API backed by Postgres
 ```
 
 Local publish flow:
 
 ```powershell
-$env:PUBLIC_IMPORTS_BASE_URL='https://img.your-domain.com'
-npm run export:static-api
 npm run sync:s3:dry-run
 npm run sync:s3
 ```
@@ -188,8 +183,7 @@ npm run sync:s3
 Vercel environment variables:
 
 ```text
-STATIC_API_MODE=true
-STATIC_API_BASE_URL=https://img.your-domain.com/static-api
+PUBLIC_IMPORTS_BASE_URL=https://img.your-domain.com
 API_BASE_URL=
 ```
 
@@ -206,11 +200,11 @@ npm run dev
 ```
 
 The setup command starts `docker-compose.local.yml`, writes these catalog values
-to `.env.local`, and migrates the existing JSON catalog into Postgres:
+to `.env.local`, and ensures the Postgres schema exists:
 
 ```env
 CATALOG_STORAGE=postgres
-CATALOG_DATABASE_URL=postgres://comic_user:comic_local_password@127.0.0.1:5432/comic_reader_local
+CATALOG_DATABASE_URL=postgres://comic_user:comic_local_password@127.0.0.1:55432/comic_reader_local
 POSTGRES_SSL=false
 ```
 
@@ -218,8 +212,6 @@ POSTGRES_SSL=false
 is active, metadata, tags, chapters, pages, crawl schedules, crawl jobs,
 bulletin messages, users, sessions, and analytics events live in PostgreSQL.
 Images still stay on local/VPS disk under `IMPORT_ROOT` or `data/imports/`.
-Set `CATALOG_STORAGE=json` only when you intentionally need the legacy local
-JSON fallback.
 
 ## Local Production Direction Before VPS
 
@@ -247,12 +239,10 @@ See `.env.example` for the full list. Important ones:
 - `PORT` - local HTTP port, usually `54533`.
 - `PUBLIC_SITE_URL` - canonical public site URL for SEO.
 - `PUBLIC_IMPORTS_BASE_URL` - public URL for `/imports/*` image links when frontend/API are split.
-- `STATIC_API_MODE` and `STATIC_API_BASE_URL` - make the Vercel frontend read public JSON from S3 fallback/cache.
-- `S3_*` - Vietnix S3 sync settings for images and static API JSON.
+- `S3_*` - Vietnix S3 sync settings for images.
 - `CORS_ALLOW_ORIGIN` - exact frontend origin in production.
 - `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_TOKEN` - required admin login/session values.
 - `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_ADMIN_MAX`, `RATE_LIMIT_EVENTS_MAX` - basic in-memory protection for admin/import/events.
-- `CATALOG_STORAGE` - defaults to `postgres`; set to `json` only for the legacy local fallback.
 - `CATALOG_DATABASE_URL`, `DATABASE_URL`, or `POSTGRES_URL` - required for PostgreSQL catalog mode and supplies the connection string.
 - `IMPORT_ROOT` - moves runtime image/catalog files to another disk path.
 - `CRAWL_*` variables - worker polling, retry, rate-limit, and schedule tuning.
@@ -301,5 +291,5 @@ Key rules:
 - Do not commit `.env.local`, S3 credentials, logs, or Vercel metadata.
 - Keep source adapters modular.
 - Keep public APIs/sitemap filtered to `public` content only.
-- For public Vercel issues, check S3 static API and `public/config.js` before debugging the local backend.
+- For public Vercel issues, check `public/config.js`, live `/api/*` payloads, and S3 image URLs before debugging unrelated code.
 - Verify exact user-reported routes when debugging broken URLs.

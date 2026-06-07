@@ -8,14 +8,14 @@ writing directly to the production database.
 
 ## Decisions
 
-- Default catalog storage is PostgreSQL when no explicit storage mode is set.
-- `CATALOG_STORAGE=json` remains the only legacy JSON escape hatch.
+- Catalog storage is PostgreSQL for local and production.
+- File-based catalog storage has been removed instead of kept as a fallback.
 - PostgreSQL mode must fail early when no `CATALOG_DATABASE_URL`, `DATABASE_URL`,
   or `POSTGRES_URL` is configured.
-- Tests run with an explicit JSON storage override so the suite stays fast and
-  does not require a local database.
-- Local setup uses Docker Compose for a private database named
-  `comic_reader_local`, then runs the existing JSON-to-Postgres migration.
+- Tests load the local test database configuration and exercise the same
+  database-backed code path as production.
+- Local setup creates a private database named `comic_reader_local`, then runs
+  schema setup.
 
 ## Data Flow
 
@@ -27,13 +27,11 @@ bulletins, and analytics move through PostgreSQL.
 
 ## Error Handling
 
-Missing DB configuration in PostgreSQL mode produces one direct error message
-that tells the operator to run local setup or explicitly opt into
-`CATALOG_STORAGE=json`. The app should not silently fall back to JSON.
+Missing DB configuration produces one direct error message that tells the
+operator to run local setup. The app should not silently fall back to JSON.
 
 ## Verification
 
-- Storage config tests cover the default Postgres mode, the JSON escape hatch,
-  and the missing-URL failure.
-- Script/docs checks cover the local setup command and Docker Compose defaults.
-- Full `npm test` must pass with the test-only JSON override.
+- Storage config tests cover the Postgres-only mode and the missing-URL failure.
+- Script/docs checks cover the local setup command.
+- Full `npm test` must pass against the database-backed storage path.

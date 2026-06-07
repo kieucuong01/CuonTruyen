@@ -1,4 +1,4 @@
-# Revenue tracking and ads
+﻿# Revenue tracking and ads
 
 Cuon Truyen supports lightweight public ads plus donate tracking. Admin routes never show ads by default.
 

@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import { catalogStorageMode, hasPostgresCatalogUrl } from '../server/storageConfig.mjs';
+import '../server/env.mjs';
 
 const ROOT = process.cwd();
 const PUBLIC_DIR = path.join(ROOT, 'public');
@@ -21,16 +21,13 @@ function serializeConfig(config) {
 }
 
 const publicSiteUrl = siteBaseUrl();
-const staticApiMode = resolveStaticApiMode();
 
 const config = {
   apiBaseUrl: trimTrailingSlash(
     process.env.API_BASE_URL
     || process.env.PUBLIC_API_BASE_URL
-    || (!staticApiMode && process.env.VERCEL === '1' ? publicSiteUrl : '')
+    || (process.env.VERCEL === '1' ? publicSiteUrl : '')
   ),
-  staticApiMode,
-  staticApiBaseUrl: trimTrailingSlash(process.env.STATIC_API_BASE_URL || process.env.PUBLIC_STATIC_API_BASE_URL || ''),
   importsBaseUrl: trimTrailingSlash(
     process.env.PUBLIC_IMPORTS_BASE_URL
     || process.env.S3_PUBLIC_BASE_URL
@@ -53,15 +50,6 @@ const config = {
   productionBaseUrl: trimTrailingSlash(process.env.PRODUCTION_BASE_URL || process.env.PUBLIC_SITE_URL || publicSiteUrl),
   enableLocalCrawlerUi: String(process.env.ENABLE_LOCAL_CRAWLER_UI || '').toLowerCase() === 'true'
 };
-
-function resolveStaticApiMode() {
-  const storageMode = catalogStorageMode(process.env);
-  if (process.env.FORCE_STATIC_API_MODE) {
-    return String(process.env.FORCE_STATIC_API_MODE || '').toLowerCase() === 'true';
-  }
-  if (storageMode === 'postgres' || hasPostgresCatalogUrl(process.env)) return false;
-  return String(process.env.STATIC_API_MODE || '').toLowerCase() === 'true';
-}
 
 function siteBaseUrl() {
   return trimTrailingSlash(
@@ -88,15 +76,6 @@ function escapeHtml(value = '') {
     .replace(/'/g, '&#39;');
 }
 
-async function readPublicJson(relativePath) {
-  try {
-    return JSON.parse(await fs.readFile(path.join(PUBLIC_DIR, relativePath), 'utf8'));
-  } catch (error) {
-    if (error.code === 'ENOENT') return null;
-    throw error;
-  }
-}
-
 async function writeRouteIndex(routePath, html) {
   const parts = routePath.split('/').map(safeRoutePart).filter(Boolean);
   if (!parts.length) return false;
@@ -118,17 +97,17 @@ async function writeStaticInfoPages() {
     tagPageJsonLd,
     tagSeoCopy
   } = await import('../server/seo.mjs');
+  const {
+    buildHomeCollections,
+    readPublicCatalog
+  } = await import('../server/contentStore.mjs');
   const baseUrl = siteBaseUrl();
   for (const page of STATIC_PAGES) {
     await writeRouteIndex(page.path, renderStaticPageShell(page.path, baseUrl));
   }
 
-  const publicData = await readPublicJson(path.join('static-api', 'series.json'))
-    || await readPublicJson(path.join('fallback-api', 'series.json'))
-    || { series: [] };
-  const homeData = await readPublicJson(path.join('static-api', 'home.json'))
-    || await readPublicJson(path.join('fallback-api', 'home.json'))
-    || { tags: [] };
+  const publicData = await readPublicCatalog();
+  const homeData = buildHomeCollections(publicData);
   let seriesPageCount = 0;
   let chapterPageCount = 0;
   let tagPageCount = 0;

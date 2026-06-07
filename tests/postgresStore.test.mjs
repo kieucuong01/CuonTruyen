@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { POSTGRES_SCHEMA_SQL } from '../server/postgresStore.mjs';
+import { POSTGRES_SCHEMA_SQL, makeUniqueChapterSlugForStorage } from '../server/postgresStore.mjs';
 
 test('postgres schema includes production catalog tables and indexes', () => {
   for (const table of ['series', 'chapters', 'pages', 'tags', 'series_tags', 'crawl_jobs', 'analytics_events']) {
@@ -35,4 +35,12 @@ test('postgres schema includes durable crawl worker queue columns', () => {
   ]) {
     assert.match(POSTGRES_SCHEMA_SQL, new RegExp(column));
   }
+});
+
+test('postgres chapter storage keeps duplicate slugs unique per series', () => {
+  const used = new Set();
+
+  assert.equal(makeUniqueChapterSlugForStorage('doc-tu-dau', 'chapter-a', 0, used), 'doc-tu-dau');
+  assert.equal(makeUniqueChapterSlugForStorage('doc-tu-dau', 'chapter-b', 1, used), 'doc-tu-dau-chapter-b');
+  assert.equal(makeUniqueChapterSlugForStorage('doc-tu-dau', 'chapter-b', 2, used), 'doc-tu-dau-3');
 });

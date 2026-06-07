@@ -7,7 +7,7 @@ $envFile = Join-Path $root ".env.local"
 $dbUser = if ($env:LOCAL_POSTGRES_USER) { $env:LOCAL_POSTGRES_USER } else { "comic_user" }
 $dbPassword = if ($env:LOCAL_POSTGRES_PASSWORD) { $env:LOCAL_POSTGRES_PASSWORD } else { "comic_local_password" }
 $dbName = if ($env:LOCAL_POSTGRES_DB) { $env:LOCAL_POSTGRES_DB } else { "comic_reader_local" }
-$dbPort = if ($env:LOCAL_POSTGRES_PORT) { $env:LOCAL_POSTGRES_PORT } else { "5432" }
+$dbPort = if ($env:LOCAL_POSTGRES_PORT) { $env:LOCAL_POSTGRES_PORT } else { "55432" }
 
 function Invoke-Checked {
   param(
@@ -90,7 +90,7 @@ try {
   $env:POSTGRES_SSL = "false"
 
   Write-Host "[local-postgres] .env.local points catalog storage to 127.0.0.1:$dbPort/$dbName"
-  Invoke-Checked "npm" @("run", "db:migrate:catalog")
+  Invoke-Checked "npm" @("run", "db:setup:schema")
   Write-Host "[local-postgres] setup complete"
 } finally {
   Pop-Location

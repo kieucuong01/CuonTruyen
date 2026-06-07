@@ -1,4 +1,4 @@
-# Current Deployment State
+﻿# Current Deployment State
 
 This file records the current production-ish setup so future developers and AI agents do not have to rediscover it.
 
@@ -50,17 +50,21 @@ POSTGRES_SSL_REJECT_UNAUTHORIZED=false
 ADMIN_EMAIL=<admin email>
 ADMIN_PASSWORD=<admin password>
 ADMIN_TOKEN=<strong random token>
-STATIC_API_MODE=false
 API_BASE_URL=https://cuontruyen.vercel.app
 PUBLIC_SITE_URL=https://cuontruyen.vercel.app
 PUBLIC_IMPORTS_BASE_URL=https://s3.vn-hcm-1.vietnix.cloud/cuontruyen
 ```
 
+On Vercel/production, `PUBLIC_IMPORTS_BASE_URL` makes live API payloads rewrite
+`/imports/*` image paths to the public S3 base automatically. Local development
+keeps raw `/imports/*` paths by default so the reader can use local files while
+crawling. Set `PUBLIC_IMPORTS_BASE_URL_ENABLED=true` locally only when you want
+to force S3 URLs, or `PUBLIC_IMPORTS_BASE_URL_ENABLED=false` to force raw local
+paths.
+
 When catalog storage resolves to PostgreSQL on Vercel, the build writes
-`staticApiMode=false` unless `FORCE_STATIC_API_MODE=true` is explicitly set. If
 `CATALOG_STORAGE=postgres` is set without `CATALOG_DATABASE_URL`,
 `DATABASE_URL`, or `POSTGRES_URL`, the build fails loudly instead of silently
-shipping stale static JSON. This lets the public site and production admin use
 live Vercel API routes backed by Supabase Postgres.
 
 ## Public Storage
@@ -83,17 +87,13 @@ Public image prefix:
 /imports/
 ```
 
-Public static API prefix:
 
 ```text
-/static-api/
 ```
 
 Expected examples:
 
 ```text
-https://s3.vn-hcm-1.vietnix.cloud/cuontruyen/static-api/home.json
-https://s3.vn-hcm-1.vietnix.cloud/cuontruyen/static-api/series.json
 https://s3.vn-hcm-1.vietnix.cloud/cuontruyen/imports/<seriesId>/<chapterId>/<image>
 ```
 
@@ -133,8 +133,17 @@ npm run db:local:setup
 ```
 
 That starts `docker-compose.local.yml`, writes the local catalog DB URL to
-`.env.local`, and migrates the legacy JSON catalog into Postgres. Use
-`CATALOG_STORAGE=json` only as an intentional emergency fallback.
+
+sync all read the catalog through the same `server/dataStore.mjs` facade. That
+means switching local from JSON to Postgres changes the source of truth for the
+whole production pipeline. Start the local server and the crawl worker with the
+same catalog env, otherwise admin may show one catalog while the worker writes
+jobs/content to another storage backend.
+
+If local crawl suddenly fails with a Postgres error such as `role "comic_user"
+does not exist`, fix the local DB with `npm run db:local:setup` or intentionally
+`npm run worker:crawl`. The admin local S3 panel shows the active catalog
+storage to make this mismatch easier to spot.
 
 Local crawler:
 
@@ -157,7 +166,6 @@ rate-limits or returns many `fetch failed` errors; raise to `8` only when the
 source is stable. Keep `CRAWL_OPTIMIZE_DURING_CRAWL=false` for faster crawling,
 then run the image optimization scripts after the crawl completes.
 
-Local image root and legacy JSON fallback root:
 
 ```text
 data/imports/
@@ -176,23 +184,69 @@ Do not commit `.env.local`.
 After importing or updating chapters locally:
 
 ```powershell
-npm run export:static-api
 npm run sync:s3:dry-run
 npm run sync:s3
 ```
 
+Those commands are static fallback/S3 utilities, not the complete production
+publish flow when Vercel reads live Postgres/Supabase API. Prefer
+`npm run publish:series -- --series-id <series-id>` for one-series production
+publishing.
+
 If production uses live Supabase API, the most important publish step is syncing
 images to S3 after catalog changes have been promoted to the production
 database. Local development uses its own Postgres database by default, so do not
-assume local admin edits automatically change production. Static API export/sync
-can still be used as fallback/cache, but Vercel no longer needs it for admin
 edits that already exist in the production DB.
+
+For local crawler -> production DB promotion, set one dedicated target env var
+on the local machine:
+
+```text
+PRODUCTION_CATALOG_DATABASE_URL=<production Supabase/Postgres connection string>
+```
+
+`DATABASE_URL` or `CATALOG_DATABASE_URL` remains the source catalog for the
+running local server/worker. The production pipeline syncs one selected series
+to the target DB with:
+
+```powershell
+npm run sync:catalog:production -- --series-id <series-id> --apply
+```
+
+For the full DB-aware local publish flow from CLI, use:
+
+```powershell
+npm run publish:series -- --series-id <series-id> --dry-run
+npm run publish:series -- --series-id <series-id>
+```
+
+This command fails fast if required S3 env vars or production DB target env vars
+are missing, before running optimize/upload work. The `--dry-run` form only
+prints the planned commands and does not optimize, upload, export, or upsert.
+Some planned commands include `--apply` because that is what the real run will
+execute, but dry-run never starts those child commands.
+
+Retry only selected steps when needed:
+
+```powershell
+npm run publish:series -- --series-id <series-id> --steps sync-images,sync-catalog-db
+```
+
+Valid `--steps` values are `optimize`, `sync-images`, `sync-catalog-db`,
+
+The script logs `sameDatabase=true` when the local source catalog and production
+target URL are identical; in that setup crawls already write to the production
+DB and the DB sync step is effectively an idempotent confirmation.
+
+The local admin pipeline fails fast before optimize/S3 work if `Sync catalog DB`
+is selected but no production DB target env is configured. This prevents a
+half-published state where images were uploaded but the live Vercel API cannot
+see the new series/chapter rows.
 
 For normal image publish, sync by series instead of full bucket:
 
 ```powershell
 node scripts/sync-vietnix-s3.mjs --images-only --catalog-only --series-id <series-id> --apply
-node scripts/sync-vietnix-s3.mjs --static-api-only --apply
 ```
 
 The admin local production check verifies:
@@ -210,7 +264,6 @@ from Git automatically.
 
 - Full image sync can take a long time because the library has tens of thousands of image files.
 - S3 image sync is fail-safe by default: normal image publish must pass `--series-id <series-id>`, retry failed files uses `--retry-failed`, and full image sync requires explicit `--all`.
-- If Vietnix S3 returns `RequestTimeTooSkewed`, sync the Windows clock (`w32tm /resync`) and use the admin "Retry file thiếu" button or `npm run sync:s3:retry-failed`.
+- If Vietnix S3 returns `RequestTimeTooSkewed`, sync the Windows clock (`w32tm /resync`) and use the admin "Retry file thiáº¿u" button or `npm run sync:s3:retry-failed`.
 - `S3_ACL=public-read` is needed for objects to be readable through the current S3 public URL.
 - `.vercelignore` must keep `data/`, `logs/`, `.runtime/`, and local env files out of deploy uploads.
-- Custom domain `img.cuontruyen.com` is not configured yet. If added, update `PUBLIC_IMPORTS_BASE_URL`, `S3_PUBLIC_BASE_URL`, and `STATIC_API_BASE_URL`.
