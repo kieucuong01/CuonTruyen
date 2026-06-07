@@ -19,9 +19,9 @@ For monetization, the likely direction is SEO traffic plus light display ads. Av
 - Server: `server/index.mjs`, built on `node:http`.
 - Frontend: plain HTML/CSS/JS in `public/`.
 - Tests: built-in `node:test`.
-- Storage: local JSON/images under `data/imports/`, or PostgreSQL catalog mode when `DATABASE_URL` is set.
+- Storage: DB-first catalog facade; PostgreSQL mode when `CATALOG_DATABASE_URL`, `DATABASE_URL`, or `POSTGRES_URL` is set, with local JSON/images under `data/imports/` as the legacy fallback.
 - Crawler execution: API enqueues durable jobs; `server/crawlWorker.mjs` runs them in a separate process.
-- Hosting preference: Vercel static frontend, Vietnix S3 public images/static JSON, and local machine for admin/crawler.
+- Hosting preference: Vercel frontend plus lightweight API backed by Supabase Postgres, Vietnix S3 public images/static JSON fallback, and local machine for crawler/optimizer/S3 sync.
 - No React/Vite in the current implementation, even though the earliest spec mentioned them.
 
 ## Key Files
@@ -33,7 +33,8 @@ For monetization, the likely direction is SEO traffic plus light display ads. Av
 | UI styling | `public/styles.css` |
 | HTTP server and API routes | `server/index.mjs` |
 | Catalog normalization/search/public shape | `server/contentStore.mjs` |
-| JSON catalog and filesystem image helpers | `server/catalogStore.mjs` |
+| Storage facade and DB catalog | `server/dataStore.mjs`, `server/postgresStore.mjs`, `server/storageConfig.mjs` |
+| Legacy JSON catalog and filesystem image helpers | `server/catalogStore.mjs` |
 | Crawl orchestration | `server/importer.mjs` |
 | Crawl job progress/dedup | `server/importJobs.mjs`, `server/crawlJobStore.mjs` |
 | Crawl worker process | `server/crawlWorker.mjs` |
@@ -46,7 +47,7 @@ For monetization, the likely direction is SEO traffic plus light display ads. Av
 
 ## Data Model Snapshot
 
-The local catalog is `data/imports/catalog.json`. It contains:
+The DB catalog and legacy `data/imports/catalog.json` fallback use this shape:
 
 - `series[]`
   - `id`, `title`, `slug`, `coverUrl`, `description`, `status`
@@ -165,12 +166,12 @@ SEO/static:
 - `/imports/*`
 
 When `PUBLIC_IMPORTS_BASE_URL` is set, local `/imports/...` image paths are emitted as absolute URLs under that public base. This is for a Vercel frontend reading images from the user's local machine through a public tunnel/domain.
-When `IMPORT_ROOT` is set, local catalog/image runtime files move from `data/imports/` to that disk path. Use this on a VPS with a larger mounted volume.
+When `IMPORT_ROOT` is set, local image runtime files and the legacy JSON fallback move from `data/imports/` to that disk path. Use this on a VPS with a larger mounted volume.
 
 When the frontend is deployed away from the Node server, use one of two modes:
 
 - `apiBaseUrl`: points browser API calls to a public backend.
-- `staticApiMode/staticApiBaseUrl`: points public read APIs to S3 static JSON. This is the current public Vercel mode.
+- `staticApiMode/staticApiBaseUrl`: points public read APIs to S3 static JSON fallback/cache. Normal production should use live API routes backed by PostgreSQL.
 
 ## Common Debug Flow
 
@@ -183,7 +184,7 @@ $ProgressPreference='SilentlyContinue'
 Invoke-WebRequest -UseBasicParsing -TimeoutSec 20 'http://localhost:54533/api/series/<seriesSlug>/chapters/<chapterSlug>'
 ```
 
-2. Inspect matching series/chapter in `data/imports/catalog.json`.
+2. Inspect matching series/chapter through `server/dataStore.mjs`; if forced into JSON fallback, inspect `data/imports/catalog.json`.
 3. Open the exact browser route the user gave.
 4. Check for:
    - route empty state
@@ -227,19 +228,19 @@ For exact user reports, always use the exact URL they give.
 
 ## Known Gotchas
 
-- `data/imports/catalog.json` can become large; avoid repeatedly fetching full `/api/series` while debugging if a narrower API call will work.
+- Catalog payloads can become large; avoid repeatedly fetching full `/api/series` while debugging if a narrower API call will work.
 - Some crawled chapter labels are Vietnamese and may slugify poorly if encoding is bad.
 - `slugify()` returns `series` as a default for unusable input, which is not safe as a chapter slug. `normalizeChapter()` handles this.
 - Source sites may return 404 or block crawler requests even when the browser can view the page.
-- The app currently uses local storage and local files; production needs persistent object storage/database.
+- Production catalog state should stay in PostgreSQL; images stay on persistent disk locally and S3 publicly.
 
 ## Production Migration Notes
 
 The current owner-preferred production architecture is:
 
 - Vercel for the public static frontend.
-- Vietnix S3 Object Storage for public `/imports/*` images and `/static-api/*` JSON.
-- The user's own machine for admin, crawler jobs, local catalog, and cached images.
+- Vietnix S3 Object Storage for public `/imports/*` images and `/static-api/*` JSON fallback.
+- The user's own machine for crawler jobs, optimizer/S3 sync, and cached images while writing catalog changes to the same PostgreSQL database as production.
 - Local `data/imports/` backups as the first storage safety net.
 
 Do not move crawler jobs into short-lived frontend serverless functions unless the job is tiny. Long crawls need retries, durable progress, and a process that can keep running.

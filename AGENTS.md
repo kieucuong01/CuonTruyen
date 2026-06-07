@@ -49,8 +49,8 @@ $env:PORT='54533'; npm run dev
 
 - Node 18 ESM HTTP server, no framework.
 - Static frontend in `public/`.
-- Local JSON catalog and image cache under `data/imports/` by default.
-- PostgreSQL catalog mode when `DATABASE_URL` or `POSTGRES_URL` is set.
+- DB-first catalog facade; PostgreSQL mode when `CATALOG_DATABASE_URL`, `DATABASE_URL`, or `POSTGRES_URL` is set.
+- Local JSON under `data/imports/catalog.json` remains only as a legacy fallback/escape hatch; image cache still lives under `data/imports/`.
 - Separate crawl worker process for durable import jobs.
 - Current preferred public hosting mode: Vercel serves the frontend plus lightweight Node API for public reads/admin content management, Supabase Postgres stores catalog/users/events, Vietnix S3 serves `/imports/*` images, and the local machine runs crawler/optimizer/S3 sync.
 - Browser reading history, follow list, and resume state in `localStorage`, with in-memory fallback for restricted storage.
@@ -80,7 +80,7 @@ $env:PORT='54533'; npm run dev
 - Add tests for crawler parsing, progress/resume, URL normalization, catalog merge behavior, moderation, and sitemap filtering when changing those surfaces.
 - After frontend behavior changes, verify on the exact local URL the user reports when browser tooling is available.
 - If the user reports a broken URL, test both the API endpoint and the rendered browser route.
-- For public Vercel issues, check `public/config.js`, `STATIC_API_BASE_URL`, and S3 public JSON before changing app logic.
+- For public Vercel issues, check `public/config.js`, DB-backed API behavior, `STATIC_API_BASE_URL`, and S3 public JSON fallback before changing app logic.
 
 ## Verification Checklist
 

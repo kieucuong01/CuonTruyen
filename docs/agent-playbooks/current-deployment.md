@@ -44,6 +44,7 @@ npx vercel@latest deploy --prod --yes --archive=tgz
 Production environment variables on Vercel:
 
 ```text
+CATALOG_STORAGE=postgres
 DATABASE_URL=<Supabase pooler connection string>
 POSTGRES_SSL_REJECT_UNAUTHORIZED=false
 ADMIN_EMAIL=<admin email>
@@ -55,10 +56,12 @@ PUBLIC_SITE_URL=https://cuontruyen.vercel.app
 PUBLIC_IMPORTS_BASE_URL=https://s3.vn-hcm-1.vietnix.cloud/cuontruyen
 ```
 
-When `DATABASE_URL` or `POSTGRES_URL` exists on Vercel, the build writes
-`staticApiMode=false` unless `FORCE_STATIC_API_MODE=true` is explicitly set.
-This lets the public site and production admin use live Vercel API routes backed
-by Supabase Postgres.
+When catalog storage resolves to PostgreSQL on Vercel, the build writes
+`staticApiMode=false` unless `FORCE_STATIC_API_MODE=true` is explicitly set. If
+`CATALOG_STORAGE=postgres` is set without `CATALOG_DATABASE_URL`,
+`DATABASE_URL`, or `POSTGRES_URL`, the build fails loudly instead of silently
+shipping stale static JSON. This lets the public site and production admin use
+live Vercel API routes backed by Supabase Postgres.
 
 ## Public Storage
 
@@ -143,7 +146,7 @@ rate-limits or returns many `fetch failed` errors; raise to `8` only when the
 source is stable. Keep `CRAWL_OPTIMIZE_DURING_CRAWL=false` for faster crawling,
 then run the image optimization scripts after the crawl completes.
 
-Local image/catalog root:
+Local image root and legacy JSON fallback root:
 
 ```text
 data/imports/

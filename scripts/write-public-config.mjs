@@ -1,6 +1,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
+import { catalogStorageMode, hasPostgresCatalogUrl } from '../server/storageConfig.mjs';
+
 const ROOT = process.cwd();
 const PUBLIC_DIR = path.join(ROOT, 'public');
 const CONFIG_PATH = path.join(PUBLIC_DIR, 'config.js');
@@ -53,11 +55,11 @@ const config = {
 };
 
 function resolveStaticApiMode() {
-  const hasLiveDatabase = Boolean(process.env.DATABASE_URL || process.env.POSTGRES_URL);
+  const storageMode = catalogStorageMode(process.env);
   if (process.env.FORCE_STATIC_API_MODE) {
     return String(process.env.FORCE_STATIC_API_MODE || '').toLowerCase() === 'true';
   }
-  if (process.env.VERCEL === '1' && hasLiveDatabase) return false;
+  if (storageMode === 'postgres' || hasPostgresCatalogUrl(process.env)) return false;
   return String(process.env.STATIC_API_MODE || '').toLowerCase() === 'true';
 }
 

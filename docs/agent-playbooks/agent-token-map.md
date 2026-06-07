@@ -38,7 +38,7 @@ These can be large or temporary. Use targeted file paths only.
 | Reader scroll/images | `public/app.js`, `public/readerWindow.mjs`, `public/readerRestore.mjs`, `public/readingProgress.mjs` |
 | Admin/crawl UI | `public/routes/admin.mjs`, `server/index.mjs`, `server/crawlJobStore.mjs` |
 | New chapter updates | `server/importer.mjs`, `server/crawlQueue.mjs`, `server/crawlWorker.mjs`, `public/routes/admin.mjs` |
-| Public catalog/filtering | `server/contentStore.mjs`, `server/catalogStore.mjs` |
+| Public catalog/filtering | `server/contentStore.mjs`, `server/dataStore.mjs`, `server/postgresStore.mjs` |
 | Vercel frontend/admin API | `vercel.json`, `api/[...path].mjs`, `scripts/write-public-config.mjs`, `public/apiClient.mjs`, `server/index.mjs` |
 | S3 sync/export | `scripts/export-static-api.mjs`, `scripts/sync-vietnix-s3.mjs`, `docs/agent-playbooks/vercel-s3-publishing.md` |
 | SEO shell/sitemap/copy | `server/seo.mjs`, `server/index.mjs`, `scripts/write-public-config.mjs`, `docs/agent-playbooks/seo-launch.md` |
@@ -50,14 +50,14 @@ The live public site is not a normal backend app:
 
 ```text
 Vercel serves public/
-public/config.js tells the browser to use live Vercel API when DATABASE_URL exists
+public/config.js tells the browser to use live Vercel API when catalog storage resolves to PostgreSQL
 S3 can still serve /static-api/*.json as fallback/cache
 S3 serves /imports/* images
 Vercel Node API is for public reads/admin content edits
 Local Node app is for crawler/optimizer/S3 sync
 ```
 
-So for public Vercel bugs, check static JSON and config first. Do not immediately debug server API routes unless the issue also happens locally.
+So for public Vercel bugs, check `public/config.js` first to see whether the live API or static JSON fallback is active, then test the matching API/static payload before changing app logic.
 
 ## Minimal Verification Choices
 
@@ -83,7 +83,7 @@ Start local app:
 $env:PORT='54533'; npm run dev
 ```
 
-Export public JSON after local catalog changes:
+Export public JSON fallback after catalog changes:
 
 ```powershell
 npm run export:static-api

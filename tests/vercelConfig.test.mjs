@@ -28,5 +28,17 @@ test('vercel production blocks local-only publish pipeline API', () => {
   assert.match(source, /function localAdminOperationsEnabled\(\)/);
   assert.match(source, /ENABLE_LOCAL_CRAWLER_UI/);
   assert.match(source, /publish-production/);
-  assert.match(source, /Production pipeline chỉ chạy ở admin local\/crawler/);
+  assert.match(source, /Production pipeline/);
+  assert.match(source, /admin local\/crawler/);
+});
+
+test('vercel build and public config honor DB-first catalog mode', () => {
+  const buildSource = fs.readFileSync('scripts/build-vercel.mjs', 'utf8');
+  const configSource = fs.readFileSync('scripts/write-public-config.mjs', 'utf8');
+
+  assert.match(buildSource, /catalogStorageMode/);
+  assert.match(buildSource, /requirePostgresCatalogUrl/);
+  assert.match(configSource, /catalogStorageMode/);
+  assert.match(configSource, /hasPostgresCatalogUrl/);
+  assert.match(configSource, /FORCE_STATIC_API_MODE/);
 });

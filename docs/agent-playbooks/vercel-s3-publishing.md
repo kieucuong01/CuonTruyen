@@ -12,7 +12,8 @@ Local machine
 - Admin UI
 - Crawler
 - data/imports image library
-- catalog.json / PostgreSQL catalog
+- PostgreSQL catalog through the same DB URL as production
+- optional legacy catalog.json fallback only when DB mode is intentionally disabled
 
 Vietnix S3 Object Storage
 - /imports/* optimized images
@@ -193,6 +194,7 @@ new images.
 Set these in Vercel:
 
 ```text
+CATALOG_STORAGE=postgres
 DATABASE_URL=<Supabase pooler connection string>
 POSTGRES_SSL_REJECT_UNAUTHORIZED=false
 ADMIN_EMAIL=<admin email>
@@ -220,7 +222,7 @@ public
 - Admin content management is available on production `/admin`.
 - Crawl, optimize, and S3 sync still happen locally at `http://localhost:54533/admin`.
 - The production admin hides crawl, optimize, S3 sync, and production pipeline controls unless `ENABLE_LOCAL_CRAWLER_UI=true` is explicitly set.
-- If production uses live Supabase API, newly crawled catalog changes appear after the local crawler writes to Supabase and images are synced to S3.
+- With `CATALOG_STORAGE=postgres`, newly crawled catalog changes appear after the local crawler writes to Supabase and images are synced to S3.
 - If production is forced back to static API mode, the public Vercel site does not show newly crawled chapters until `export:static-api` and `sync:s3` run.
 - If images are missing on Vercel, check `PUBLIC_IMPORTS_BASE_URL` during `export:static-api`.
 - If data is stale, check `STATIC_API_BASE_URL` and S3 cache headers.

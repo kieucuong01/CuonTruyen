@@ -105,6 +105,7 @@ npm run worker:crawl
 Back up runtime data regularly:
 
 ```text
+PostgreSQL catalog database dump
 data/imports/catalog.json
 data/imports/crawl-jobs.json
 data/imports/analytics-events.jsonl

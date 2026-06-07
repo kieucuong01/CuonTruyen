@@ -1,9 +1,11 @@
+import '../server/env.mjs';
+
 import { readCatalog as readJsonCatalog } from '../server/catalogStore.mjs';
 import { ensureStorageSchema, usesPostgresStorage, writeCatalog } from '../server/dataStore.mjs';
 import { closePostgresPool, upsertSeriesInPostgres } from '../server/postgresStore.mjs';
 
 if (!usesPostgresStorage()) {
-  console.error('DATABASE_URL or POSTGRES_URL is required before running this migration.');
+  console.error('Set CATALOG_STORAGE=postgres and CATALOG_DATABASE_URL, DATABASE_URL, or POSTGRES_URL before running this migration.');
   process.exitCode = 1;
 } else {
   const catalog = await readJsonCatalog();

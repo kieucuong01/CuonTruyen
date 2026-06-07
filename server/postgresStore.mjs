@@ -1,8 +1,9 @@
-import { mergeSeries } from './catalogStore.mjs';
+import { mergeSeries } from './catalogMerge.mjs';
+import { catalogStorageMode, requirePostgresCatalogUrl } from './storageConfig.mjs';
 import { slugify } from './utils.mjs';
 
-const DATABASE_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL || '';
 let poolPromise = null;
+let poolUrl = '';
 let schemaPromise = null;
 
 export const POSTGRES_SCHEMA_SQL = `
@@ -166,7 +167,7 @@ create index if not exists idx_analytics_events_type on analytics_events(type, c
 `;
 
 export function usesPostgresStorage() {
-  return Boolean(DATABASE_URL);
+  return catalogStorageMode() === 'postgres';
 }
 
 export async function ensurePostgresSchema() {
@@ -260,16 +261,25 @@ export async function writeCatalogToPostgres(catalog) {
 }
 
 async function getPool() {
+  const databaseUrl = requirePostgresCatalogUrl();
+  if (poolPromise && poolUrl && poolUrl !== databaseUrl) {
+    const pool = await poolPromise;
+    await pool.end().catch(() => {});
+    poolPromise = null;
+    schemaPromise = null;
+    poolUrl = '';
+  }
   if (!poolPromise) {
+    poolUrl = databaseUrl;
     poolPromise = import('pg').then((module) => {
       const Pool = module.Pool || module.default?.Pool;
       if (!Pool) throw new Error('The pg package is installed but did not expose Pool.');
       return new Pool({
-        connectionString: DATABASE_URL,
+        connectionString: databaseUrl,
         max: Number(process.env.POSTGRES_POOL_MAX || 10),
         idleTimeoutMillis: 30_000,
         connectionTimeoutMillis: 10_000,
-        ssl: postgresSslConfig()
+        ssl: postgresSslConfig(databaseUrl)
       });
     });
   }
@@ -285,6 +295,7 @@ export async function closePostgresPool() {
   if (!poolPromise) return;
   const pool = await poolPromise;
   poolPromise = null;
+  poolUrl = '';
   schemaPromise = null;
   await pool.end().catch(() => {});
 }
@@ -305,9 +316,9 @@ export async function withPostgresTransaction(work) {
   }
 }
 
-function postgresSslConfig() {
+function postgresSslConfig(databaseUrl = requirePostgresCatalogUrl()) {
   if (process.env.POSTGRES_SSL === 'false') return false;
-  if (/localhost|127\.0\.0\.1|::1/i.test(DATABASE_URL)) return false;
+  if (/localhost|127\.0\.0\.1|::1/i.test(databaseUrl)) return false;
   return { rejectUnauthorized: process.env.POSTGRES_SSL_REJECT_UNAUTHORIZED !== 'false' };
 }
 

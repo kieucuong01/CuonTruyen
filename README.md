@@ -17,7 +17,7 @@ Local-first comic reader and crawler for Vietnamese manhua/manhwa workflows. The
 - Local user session, follow list, and reading history using browser storage.
 - Admin login for crawl/import and content management.
 - Multi-URL durable crawl jobs with worker mode, retries, per-domain delay, and progress counters.
-- Local JSON storage by default, PostgreSQL catalog mode when `DATABASE_URL` or `POSTGRES_URL` is set.
+- DB-first catalog facade: PostgreSQL mode when `CATALOG_DATABASE_URL`, `DATABASE_URL`, or `POSTGRES_URL` is set; local JSON is a legacy fallback/escape hatch.
 - Cached images served from `data/imports/` or `IMPORT_ROOT` through `/imports/*`.
 - Optional Vercel static frontend mode with images and public JSON served from S3-compatible storage.
 - Series and chapter moderation with `public`, `draft`, and `removed` statuses.
@@ -114,8 +114,10 @@ public/
 server/
   index.mjs              HTTP server, APIs, SEO/static routes
   contentStore.mjs       public/admin catalog shaping and moderation
-  catalogStore.mjs       local JSON catalog and image helpers
-  dataStore.mjs          storage facade: PostgreSQL or local JSON
+  catalogMerge.mjs       catalog merge rules shared by all storage backends
+  catalogStore.mjs       legacy local JSON catalog and image path helpers
+  dataStore.mjs          storage facade: PostgreSQL first, JSON fallback
+  storageConfig.mjs      catalog storage mode and database URL resolution
   postgresStore.mjs      PostgreSQL schema and catalog persistence
   importer.mjs           crawl orchestration and image caching
   crawlJobStore.mjs      durable crawl queue: PostgreSQL or JSON
@@ -193,16 +195,22 @@ S3 credentials belong in `.env.local`, not in Git. See `.env.example` and `docs/
 
 ## PostgreSQL Catalog Mode
 
-Set `DATABASE_URL` or `POSTGRES_URL` when local JSON becomes too large:
+Use PostgreSQL for normal catalog/admin management:
 
 ```powershell
-$env:DATABASE_URL='postgres://comic_user:password@127.0.0.1:5432/comic_reader'
+$env:CATALOG_STORAGE='postgres'
+$env:CATALOG_DATABASE_URL='postgres://comic_user:password@127.0.0.1:5432/comic_reader'
 npm install
 npm run db:migrate:catalog
 npm run dev
 ```
 
-When enabled, metadata, tags, chapters, pages, crawl schedules, and crawl jobs live in PostgreSQL. Images still stay on local/VPS disk under `IMPORT_ROOT` or `data/imports/`.
+`DATABASE_URL` or `POSTGRES_URL` also enable the same mode. When enabled,
+metadata, tags, chapters, pages, crawl schedules, crawl jobs, bulletin messages,
+users, sessions, and analytics events live in PostgreSQL. Images still stay on
+local/VPS disk under `IMPORT_ROOT` or `data/imports/`. Set
+`CATALOG_STORAGE=json` only when you intentionally need the legacy local JSON
+fallback.
 
 ## Local Production Direction Before VPS
 
@@ -230,12 +238,13 @@ See `.env.example` for the full list. Important ones:
 - `PORT` - local HTTP port, usually `54533`.
 - `PUBLIC_SITE_URL` - canonical public site URL for SEO.
 - `PUBLIC_IMPORTS_BASE_URL` - public URL for `/imports/*` image links when frontend/API are split.
-- `STATIC_API_MODE` and `STATIC_API_BASE_URL` - make the Vercel frontend read public JSON from S3.
+- `STATIC_API_MODE` and `STATIC_API_BASE_URL` - make the Vercel frontend read public JSON from S3 fallback/cache.
 - `S3_*` - Vietnix S3 sync settings for images and static API JSON.
 - `CORS_ALLOW_ORIGIN` - exact frontend origin in production.
 - `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_TOKEN` - required admin login/session values.
 - `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_ADMIN_MAX`, `RATE_LIMIT_EVENTS_MAX` - basic in-memory protection for admin/import/events.
-- `DATABASE_URL` or `POSTGRES_URL` - enables PostgreSQL catalog mode.
+- `CATALOG_STORAGE` - set to `postgres` for DB-first catalog mode, or `json` for the legacy local fallback.
+- `CATALOG_DATABASE_URL`, `DATABASE_URL`, or `POSTGRES_URL` - enables PostgreSQL catalog mode and supplies the connection string.
 - `IMPORT_ROOT` - moves runtime image/catalog files to another disk path.
 - `CRAWL_*` variables - worker polling, retry, rate-limit, and schedule tuning.
 

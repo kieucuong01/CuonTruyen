@@ -28,7 +28,7 @@ export function tagSeoCopy(tag = {}) {
   const slug = String(tag.slug || '').trim();
   const catalog = {
     manhwa: {
-      title: 'Truyện Manhwa - Đọc manhwa Hàn Quốc online tại Cuộn Truyện',
+      title: 'Truyện Manhwa Hàn Quốc - Đọc manhwa online tại Cuộn Truyện',
       description: 'Tuyển tập truyện Manhwa Hàn Quốc đang cập nhật trên Cuộn Truyện, tối ưu đọc dọc trên điện thoại, lưu lịch sử đọc và mở lại đúng chương.'
     },
     manhua: {
