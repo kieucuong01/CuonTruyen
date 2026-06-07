@@ -1116,20 +1116,30 @@ async function ensureReaderSeriesDetail(payload, seriesSlug) {
 
 async function loadReaderChapter(seriesSlug, chapterSlug) {
   try {
-    return await fetchJson(`/api/series/${encodeURIComponent(seriesSlug)}/chapters/${encodeURIComponent(chapterSlug)}?window=0`);
+    return await fetchJson(readerChapterApiPath(seriesSlug, chapterSlug, { window: 0 }));
   } catch (error) {
     const series = await fetchJson(`/api/series/${encodeURIComponent(seriesSlug)}`);
     const chapter = findChapterByRoute(series.chapters, chapterSlug);
     if (chapter && hasReadableChapter(chapter)) {
-      return await fetchJson(`/api/series/${encodeURIComponent(series.slug)}/chapters/${chapterHrefSegment(chapter)}?window=0`);
+      return await fetchJson(readerChapterApiPath(series.slug, chapterHrefSegment(chapter), { window: 0 }));
     }
     const fallback = nearestReadableChapter(series.chapters, chapter);
     if (fallback) {
       history.replaceState({}, '', `/truyen/${series.slug}/${chapterHrefSegment(fallback)}`);
-      return await fetchJson(`/api/series/${encodeURIComponent(series.slug)}/chapters/${chapterHrefSegment(fallback)}?window=0`);
+      return await fetchJson(readerChapterApiPath(series.slug, chapterHrefSegment(fallback), { window: 0 }));
     }
     throw error;
   }
+}
+
+function readerChapterApiPath(seriesSlug, chapterSlug, { window = 0, start = '' } = {}) {
+  const params = new URLSearchParams({
+    series: String(seriesSlug || ''),
+    chapter: String(chapterSlug || ''),
+    window: String(window)
+  });
+  if (start) params.set('start', start);
+  return `/api/reader?${params.toString()}`;
 }
 
 function applyReaderPayload(payload, { reset = false, currentChapterId = '' } = {}) {
@@ -1809,7 +1819,7 @@ function prefetchTarget(element) {
   const href = element.getAttribute('href') || '';
   const chapterMatch = href.match(/^\/truyen\/([^/]+)\/([^/]+)$/);
   if (chapterMatch) {
-    fetchJson(`/api/series/${encodeURIComponent(chapterMatch[1])}/chapters/${encodeURIComponent(chapterMatch[2])}?window=1`).catch(() => {});
+    fetchJson(readerChapterApiPath(chapterMatch[1], chapterMatch[2], { window: 1 })).catch(() => {});
     return;
   }
   const seriesMatch = href.match(/^\/truyen\/([^/]+)$/);
@@ -1979,7 +1989,7 @@ async function loadNextReaderChapter() {
 
   state.loadingNextChapter = true;
   try {
-    const payload = await fetchJson(`/api/series/${encodeURIComponent(state.series.slug)}/chapters/${chapterHrefSegment(next)}?window=0`);
+    const payload = await fetchJson(readerChapterApiPath(state.series.slug, chapterHrefSegment(next), { window: 0 }));
     const { added } = applyReaderPayload(payload);
     appendReaderChapters(added);
     releaseFarBehindReaderImages();
@@ -2011,7 +2021,7 @@ function chapterIndex(chapterId) {
 function prefetchNextReaderChapter() {
   const next = nextSummaryAfterLastLoaded();
   if (!next) return;
-  fetchJson(`/api/series/${encodeURIComponent(state.series.slug)}/chapters/${chapterHrefSegment(next)}?window=0`).catch(() => {});
+  fetchJson(readerChapterApiPath(state.series.slug, chapterHrefSegment(next), { window: 0 })).catch(() => {});
 }
 
 function currentChapter() {

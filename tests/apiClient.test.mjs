@@ -52,9 +52,9 @@ test('reader payloads use the live API', async () => {
 
   try {
     const client = createApiClient();
-    const payload = await client.fetchJson('/api/series/demo-series/chapters/chuong-1?window=1');
+    const payload = await client.fetchJson('/api/reader?series=demo-series&chapter=chuong-1&window=1');
     assert.equal(payload.chapter.id, 'chuong-1');
-    assert.deepEqual(requested, ['/api/series/demo-series/chapters/chuong-1?window=1']);
+    assert.deepEqual(requested, ['/api/reader?series=demo-series&chapter=chuong-1&window=1']);
   } finally {
     globalThis.fetch = originalFetch;
     if (originalConfig === undefined) delete globalThis.COMIC_READER_CONFIG;

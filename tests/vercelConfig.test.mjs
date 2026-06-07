@@ -20,6 +20,10 @@ test('vercel serverless API catch-all exists for admin production', () => {
   assert.equal(fs.existsSync('api/[...path].mjs'), true);
   const source = fs.readFileSync('api/[...path].mjs', 'utf8');
   assert.match(source, /handleNodeRequest/);
+
+  assert.equal(fs.existsSync('api/reader.js'), true);
+  const readerSource = fs.readFileSync('api/reader.js', 'utf8');
+  assert.match(readerSource, /handleNodeRequest/);
 });
 
 test('vercel exposes nested public series API routes', () => {

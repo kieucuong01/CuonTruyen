@@ -205,7 +205,7 @@ function kickEmbeddedCrawlWorker(reason = 'manual') {
 
 function crawlDisabledPayload() {
   return {
-    error: 'Crawl chá»‰ cháº¡y á»Ÿ backend local/crawler. Production Vercel chá»‰ dÃ¹ng cho admin nháº¹ vÃ  Ä‘á»c truyá»‡n.',
+    error: 'Crawl chỉ chạy ở backend local/crawler. Production Vercel chỉ dùng cho admin nhẹ và đọc truyện.',
     hint: 'Hãy mở admin local để crawl, rồi sync ảnh lên Vietnix S3 và sync catalog DB production.'
   };
 }
@@ -224,7 +224,7 @@ async function readS3SyncStatus() {
       return {
         exists: false,
         status: 'idle',
-        message: 'ChÆ°a cÃ³ job Ä‘á»“ng bá»™ S3 nÃ o ghi tráº¡ng thÃ¡i.',
+        message: 'Chưa có job đồng bộ S3 nào ghi trạng thái.',
         total: 0,
         checked: 0,
         uploaded: 0,
@@ -252,10 +252,10 @@ function isImportAssetReference(value = '') {
 
 function productionStatusLabel(state) {
   if (state === 'ok') return 'Production OK';
-  if (state === 'syncing') return 'Äang sync';
-  if (state === 'missing-images') return 'Thiáº¿u áº£nh S3';
-  if (state === 'not-public') return 'ChÆ°a public';
-  return 'ChÆ°a kiá»ƒm tra';
+  if (state === 'syncing') return 'Đang sync';
+  if (state === 'missing-images') return 'Thiếu ảnh S3';
+  if (state === 'not-public') return 'Chưa public';
+  return 'Chưa kiểm tra';
 }
 
 function estimateProductionImageTotal(series = {}) {
@@ -335,17 +335,17 @@ function catalogStorageErrorPayload(error, action = 'catalog') {
   const hints = [];
 
   if (storage.mode === 'postgres') {
-    hints.push('Catalog dang dung Postgres. Kiem tra CATALOG_DATABASE_URL, DATABASE_URL hoac POSTGRES_URL.');
+    hints.push('Catalog đang dùng Postgres. Kiểm tra CATALOG_DATABASE_URL, DATABASE_URL hoặc POSTGRES_URL.');
     if (/role ".*" does not exist/i.test(cause)) {
-      hints.push('DB role khong ton tai. Chay npm run db:local:setup hoac cap nhat DB URL dung.');
+      hints.push('DB role không tồn tại. Chạy npm run db:local:setup hoặc cập nhật DB URL đúng.');
     }
     if (/ECONNREFUSED|timeout|ENOTFOUND|does not exist|password authentication/i.test(cause)) {
-      hints.push('Kiem tra local Postgres dang chay va CATALOG_DATABASE_URL tro dung DB.');
+      hints.push('Kiểm tra local Postgres đang chạy và CATALOG_DATABASE_URL trỏ đúng DB.');
     }
   }
 
   return {
-    error: `Khong doc duoc ${action}.`,
+    error: `Không đọc được ${action}.`,
     cause,
     storage,
     hints
@@ -371,7 +371,7 @@ async function readAdminProductionStatus() {
         stateFileExists: false,
         storage: catalogStorageSummary(),
         statuses: {},
-        message: 'ChÆ°a cÃ³ dá»¯ liá»‡u S3 sync state local.'
+        message: 'Chưa có dữ liệu S3 sync state local.'
       };
     }
     throw error;
@@ -393,12 +393,12 @@ async function startRetryFailedS3Sync() {
     && Number.isFinite(updatedAtMs)
     && Date.now() - updatedAtMs < 90_000;
   if (freshRunning) {
-    const error = new Error('S3 sync Ä‘ang cháº¡y, hÃ£y Ä‘á»£i job hiá»‡n táº¡i xong hoáº·c káº¹t quÃ¡ 90 giÃ¢y rá»“i retry.');
+    const error = new Error('S3 sync đang chạy, hãy đợi job hiện tại xong hoặc kẹt quá 90 giây rồi retry.');
     error.status = 409;
     throw error;
   }
   if (!Array.isArray(status.failedItems) || !status.failedItems.length) {
-    const error = new Error('ChÆ°a cÃ³ file S3 lá»—i Ä‘á»ƒ retry.');
+    const error = new Error('Chưa có file S3 lỗi để retry.');
     error.status = 400;
     throw error;
   }
@@ -541,11 +541,11 @@ async function readerCatalogForSeries(seriesSlug) {
 
 function importErrorPayload(error) {
   const message = error.message?.startsWith('Source returned')
-    ? 'Nguá»“n Ä‘ang tráº£ trang lá»—i hoáº·c cháº·n crawler, chÆ°a thá»ƒ láº¥y áº£nh truyá»‡n lÃºc nÃ y.'
+    ? 'Nguồn đang trả trang lỗi hoặc chặn crawler, chưa thể lấy ảnh truyện lúc này.'
     : error.message;
   return {
-    error: message || 'KhÃ´ng thá»ƒ import truyá»‡n.',
-    hint: 'Nguá»“n cÃ³ thá»ƒ cháº·n crawler hoáº·c cáº¥u trÃºc trang Ä‘Ã£ thay Ä‘á»•i.'
+    error: message || 'Không thể import truyện.',
+    hint: 'Nguồn có thể chặn crawler hoặc cấu trúc trang đã thay đổi.'
   };
 }
 
@@ -568,7 +568,7 @@ async function handleApi(req, res, url) {
       return true;
     }
     const session = createAdminSession(await readJsonBody(req));
-    jsonResponse(res, session ? 200 : 401, session || { error: 'Email hoáº·c máº­t kháº©u admin khÃ´ng Ä‘Ãºng.' });
+    jsonResponse(res, session ? 200 : 401, session || { error: 'Email hoặc mật khẩu admin không đúng.' });
     return true;
   }
 
@@ -620,7 +620,7 @@ async function handleApi(req, res, url) {
     try {
       const user = await getSessionUser(extractUserToken(req.headers));
       if (!user) {
-        jsonResponse(res, 401, { error: 'Báº¡n cáº§n Ä‘Äƒng nháº­p Ä‘á»ƒ gá»­i tin nháº¯n.' });
+        jsonResponse(res, 401, { error: 'Bạn cần đăng nhập để gửi tin nhắn.' });
         return true;
       }
       const message = await createUserBulletinMessage({
@@ -629,7 +629,7 @@ async function handleApi(req, res, url) {
       });
       jsonResponse(res, 201, { message });
     } catch (error) {
-      jsonResponse(res, error.status || 500, { error: error.message || 'KhÃ´ng thá»ƒ gá»­i tin nháº¯n.' });
+      jsonResponse(res, error.status || 500, { error: error.message || 'Không thể gửi tin nhắn.' });
     }
     return true;
   }
@@ -665,7 +665,7 @@ async function handleApi(req, res, url) {
       });
       jsonResponse(res, 201, { message });
     } catch (error) {
-      jsonResponse(res, error.status || 500, { error: error.message || 'KhÃ´ng thá»ƒ gá»­i tin admin.' });
+      jsonResponse(res, error.status || 500, { error: error.message || 'Không thể gửi tin admin.' });
     }
     return true;
   }
@@ -677,7 +677,7 @@ async function handleApi(req, res, url) {
       const message = await setAdminBulletinPinned(id, Boolean(body.pinned));
       jsonResponse(res, 200, { message });
     } catch (error) {
-      jsonResponse(res, error.status || 500, { error: error.message || 'KhÃ´ng thá»ƒ cáº­p nháº­t tin nháº¯n.' });
+      jsonResponse(res, error.status || 500, { error: error.message || 'Không thể cập nhật tin nhắn.' });
     }
     return true;
   }
@@ -722,14 +722,14 @@ async function handleApi(req, res, url) {
   if (req.method === 'POST' && url.pathname === '/api/admin/s3-sync/retry-failed') {
     if (!localS3SyncEnabled()) {
       jsonResponse(res, 503, {
-        error: 'Retry S3 chá»‰ cháº¡y á»Ÿ admin local/crawler, khÃ´ng cháº¡y trÃªn Vercel production.'
+        error: 'Retry S3 chỉ chạy ở admin local/crawler, không chạy trên Vercel production.'
       });
       return true;
     }
     try {
       jsonResponse(res, 202, await startRetryFailedS3Sync());
     } catch (error) {
-      jsonResponse(res, error.status || 500, { error: error.message || 'KhÃ´ng thá»ƒ retry file S3 lá»—i.' });
+      jsonResponse(res, error.status || 500, { error: error.message || 'Không thể retry file S3 lỗi.' });
     }
     return true;
   }
@@ -742,7 +742,7 @@ async function handleApi(req, res, url) {
       const seriesId = String(body.seriesId || '').trim();
       let targets = [{
         key: 'series-page',
-        label: 'Trang truyá»‡n production',
+        label: 'Trang truyện production',
         kind: 'html',
         required: true,
         url: target.toString()
@@ -818,6 +818,22 @@ async function handleApi(req, res, url) {
       const payload = buildReaderChapterPayload(await readerCatalogForSeries(seriesSlug), decodeURIComponent(seriesSlug), decodeURIComponent(chapterSlug), {
         window: Number(url.searchParams.get('window') || 0)
       });
+      return { status: payload ? 200 : 404, body: payload || { error: 'Chapter not found' } };
+    });
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/reader') {
+    const seriesSlug = String(url.searchParams.get('series') || '').trim();
+    const chapterSlug = String(url.searchParams.get('chapter') || '').trim();
+    const start = String(url.searchParams.get('start') || 'current').trim() || 'current';
+    await cachedJsonResponse(req, res, url.pathname + url.search, async () => {
+      const payload = seriesSlug && chapterSlug
+        ? buildReaderChapterPayload(await readerCatalogForSeries(seriesSlug), seriesSlug, chapterSlug, {
+            window: Number(url.searchParams.get('window') || 0),
+            start
+          })
+        : null;
       return { status: payload ? 200 : 404, body: payload || { error: 'Chapter not found' } };
     });
     return true;
@@ -904,7 +920,7 @@ async function handleApi(req, res, url) {
       return true;
     }
     if (!sourceUrlForSeries(series)) {
-      jsonResponse(res, 400, { error: 'Truyá»‡n nÃ y chÆ°a cÃ³ source URL Ä‘á»ƒ cáº­p nháº­t chapter má»›i.' });
+      jsonResponse(res, 400, { error: 'Truyện này chưa có source URL để cập nhật chapter mới.' });
       return true;
     }
     const body = await readJsonBody(req);
@@ -920,7 +936,7 @@ async function handleApi(req, res, url) {
   if (req.method === 'POST' && url.pathname.match(/^\/api\/admin\/series\/[^/]+\/publish-production$/)) {
     if (!localAdminOperationsEnabled()) {
       jsonResponse(res, 503, {
-        error: 'Production pipeline chá»‰ cháº¡y á»Ÿ admin local/crawler, khÃ´ng cháº¡y trÃªn Vercel production.'
+        error: 'Production pipeline chỉ chạy ở admin local/crawler, không chạy trên Vercel production.'
       });
       return true;
     }
@@ -1006,7 +1022,7 @@ async function handleApi(req, res, url) {
     try {
       const body = await readJsonBody(req);
       if (!body.url || !/^https?:\/\//i.test(body.url)) {
-        jsonResponse(res, 400, { error: 'Vui lÃ²ng nháº­p URL truyá»‡n há»£p lá»‡.' });
+        jsonResponse(res, 400, { error: 'Vui lòng nhập URL truyện hợp lệ.' });
         return true;
       }
       const result = await startImportJob(normalizeImportPayload(body));
@@ -1027,7 +1043,7 @@ async function handleApi(req, res, url) {
       const body = await readJsonBody(req);
       const payloads = normalizeImportBatchPayload(body);
       if (!payloads.length || payloads.some((payload) => !/^https?:\/\//i.test(payload.url))) {
-        jsonResponse(res, 400, { error: 'Vui lÃ²ng nháº­p má»—i URL truyá»‡n há»£p lá»‡ trÃªn má»™t dÃ²ng.' });
+        jsonResponse(res, 400, { error: 'Vui lòng nhập mỗi URL truyện hợp lệ trên một dòng.' });
         return true;
       }
       const results = await startImportJobs(payloads);
@@ -1084,8 +1100,8 @@ async function handleSeoRoute(req, res, url) {
       return true;
     }
     textResponse(res, 200, renderHtmlShell({
-      title: `${series.title} - Äá»c truyá»‡n tranh táº¡i Cuá»™n Truyá»‡n`,
-      description: series.description || `Äá»c ${series.title} liá»n máº¡ch táº¡i Cuá»™n Truyá»‡n, tá»± lÆ°u vá»‹ trÃ­ vÃ  má»Ÿ láº¡i Ä‘Ãºng chÆ°Æ¡ng Ä‘ang Ä‘á»c.`,
+      title: `${series.title} - Đọc truyện tranh tại Cuộn Truyện`,
+      description: series.description || `Đọc ${series.title} liền mạch tại Cuộn Truyện, tự lưu vị trí và mở lại đúng chương đang đọc.`,
       canonicalUrl: `${baseUrl}/truyen/${series.slug}`,
       imageUrl: absoluteUrl(series.coverUrl, baseUrl),
       jsonLd: seriesJsonLd(series, baseUrl)
@@ -1108,8 +1124,8 @@ async function handleSeoRoute(req, res, url) {
       return true;
     }
     textResponse(res, 200, renderHtmlShell({
-      title: `${series.title} - ${chapter.title} | Cuá»™n Truyá»‡n`,
-      description: `Äá»c ${series.title} ${chapter.title} online táº¡i Cuá»™n Truyá»‡n vá»›i reader ná»‘i chapter liá»n máº¡ch vÃ  lÆ°u vá»‹ trÃ­ Ä‘á»c.`,
+      title: `${series.title} - ${chapter.title} | Cuộn Truyện`,
+      description: `Đọc ${series.title} ${chapter.title} online tại Cuộn Truyện với reader nối chapter liền mạch và lưu vị trí đọc.`,
       canonicalUrl: `${baseUrl}/truyen/${series.slug}/${chapter.slug}`,
       imageUrl: absoluteUrl(chapter.pages?.[0]?.imageUrl || series.coverUrl, baseUrl),
       jsonLd: chapterJsonLd(series, chapter, baseUrl)
