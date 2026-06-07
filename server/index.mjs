@@ -683,6 +683,15 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === 'GET' && url.pathname === '/api/series') {
+    const id = String(url.searchParams.get('series') || url.searchParams.get('id') || '').trim();
+    if (id) {
+      await cachedJsonResponse(req, res, url.pathname + url.search, async () => {
+        const catalog = await readCatalog({ includePages: false });
+        const series = findSeriesBySlug(catalog, id) || await getSeries(id, { includePages: false });
+        return { status: series ? 200 : 404, body: series ? publicSeriesDetail(series) : { error: 'Series not found' } };
+      });
+      return true;
+    }
     await cachedJsonResponse(req, res, url.pathname, async () => ({ body: await readPublicCatalog() }));
     return true;
   }

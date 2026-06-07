@@ -77,9 +77,9 @@ test('series payloads use the live API', async () => {
 
   try {
     const client = createApiClient();
-    const payload = await client.fetchJson('/api/series/demo-series');
+    const payload = await client.fetchJson('/api/series?series=demo-series');
     assert.equal(payload.chapter.id, 'chuong-1');
-    assert.deepEqual(requested, ['/api/series/demo-series']);
+    assert.deepEqual(requested, ['/api/series?series=demo-series']);
   } finally {
     globalThis.fetch = originalFetch;
     if (originalConfig === undefined) delete globalThis.COMIC_READER_CONFIG;

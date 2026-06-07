@@ -80,7 +80,7 @@ export function createHomeRoute({
     const historyIds = loadReadingHistory();
     const missingHistoryIds = historyIds.filter((seriesId) => !homeSeries.some((series) => series.id === seriesId));
     const historySeries = await Promise.all(
-      missingHistoryIds.map((seriesId) => fetchJson(`/api/series/${encodeURIComponent(seriesId)}`).catch(() => null))
+      missingHistoryIds.map((seriesId) => fetchJson(`/api/series?${new URLSearchParams({ series: String(seriesId || '') }).toString()}`).catch(() => null))
     );
     const seriesLookup = new Map(
       [...homeSeries, ...historySeries.filter(Boolean)].map((series) => [series.id, series])

@@ -26,17 +26,18 @@ test('vercel serverless API catch-all exists for admin production', () => {
   assert.match(readerSource, /handleNodeRequest/);
 });
 
-test('vercel exposes nested public series API routes', () => {
-  assert.equal(fs.existsSync('api/series/[...path].js'), true);
-  const source = fs.readFileSync('api/series/[...path].js', 'utf8');
+test('vercel exposes flat public series and reader API routes', () => {
+  assert.equal(fs.existsSync('api/series.js'), true);
+  const source = fs.readFileSync('api/series.js', 'utf8');
   assert.match(source, /handleNodeRequest/);
 
   for (const conflictingFile of [
+    'api/series/[...path].js',
     'api/series/[id].js',
     'api/series/[series]/chapters/[chapter].js',
     'api/series/[series]/chapters/[chapter]/next.js'
   ]) {
-    assert.equal(fs.existsSync(conflictingFile), false, `${conflictingFile} conflicts with api/series/[...path].js`);
+    assert.equal(fs.existsSync(conflictingFile), false, `${conflictingFile} conflicts with flat api/series.js`);
   }
 });
 

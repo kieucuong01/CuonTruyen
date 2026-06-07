@@ -391,6 +391,11 @@ async function loadHome() {
   return state.home;
 }
 
+function seriesApiPath(seriesId) {
+  const params = new URLSearchParams({ series: String(seriesId || '') });
+  return `/api/series?${params.toString()}`;
+}
+
 
 
 
@@ -726,7 +731,7 @@ function renderSeriesCard(series) {
 
 async function renderSeriesDetailLegacy(slug) {
   stopReaderRuntime();
-  const series = await fetchJson(`/api/series/${encodeURIComponent(slug)}`);
+  const series = await fetchJson(seriesApiPath(slug));
   sendEvent('pageview', { seriesSlug: series.slug });
   const imported = series.chapters.filter(hasReadableChapter);
   const user = loadUserSession();
@@ -770,7 +775,7 @@ async function renderSeriesDetailLegacy(slug) {
 
 async function renderSeriesDetail(slug) {
   stopReaderRuntime();
-  const series = await fetchJson(`/api/series/${encodeURIComponent(slug)}`);
+  const series = await fetchJson(seriesApiPath(slug));
   sendEvent('pageview', { seriesSlug: series.slug });
   const imported = series.chapters.filter(hasReadableChapter);
   const user = loadUserSession();
@@ -1070,7 +1075,7 @@ function renderStatusSelect(name, value) {
 }
 
 async function renderReader(seriesId) {
-  const series = await fetchJson(`/api/series/${encodeURIComponent(seriesId)}`);
+  const series = await fetchJson(seriesApiPath(seriesId));
   const saved = loadProgress(series.id);
   const plan = createResumeLoadPlan(readableChapters(series), saved);
   const target = readableChapters(series).find((chapter) => chapter.id === plan.currentChapterId) || readableChapters(series)[0];
@@ -1105,7 +1110,7 @@ async function renderReaderFromSlug(seriesSlug, chapterSlug) {
 async function ensureReaderSeriesDetail(payload, seriesSlug) {
   if (Array.isArray(payload?.series?.chapters) && payload.series.chapters.length) return payload;
   const seriesKey = payload?.series?.slug || seriesSlug;
-  const detail = await fetchJson(`/api/series/${encodeURIComponent(seriesKey)}`);
+  const detail = await fetchJson(seriesApiPath(seriesKey));
   payload.series = {
     ...(payload.series || {}),
     ...detail,
@@ -1118,7 +1123,7 @@ async function loadReaderChapter(seriesSlug, chapterSlug) {
   try {
     return await fetchJson(readerChapterApiPath(seriesSlug, chapterSlug, { window: 0 }));
   } catch (error) {
-    const series = await fetchJson(`/api/series/${encodeURIComponent(seriesSlug)}`);
+    const series = await fetchJson(seriesApiPath(seriesSlug));
     const chapter = findChapterByRoute(series.chapters, chapterSlug);
     if (chapter && hasReadableChapter(chapter)) {
       return await fetchJson(readerChapterApiPath(series.slug, chapterHrefSegment(chapter), { window: 0 }));
@@ -1813,7 +1818,7 @@ function clearControlPending() {
 function prefetchTarget(element) {
   if (!element) return;
   if (element.dataset.read) {
-    fetchJson(`/api/series/${encodeURIComponent(element.dataset.read)}`).catch(() => {});
+    fetchJson(seriesApiPath(element.dataset.read)).catch(() => {});
     return;
   }
   const href = element.getAttribute('href') || '';
@@ -1824,7 +1829,7 @@ function prefetchTarget(element) {
   }
   const seriesMatch = href.match(/^\/truyen\/([^/]+)$/);
   if (seriesMatch) {
-    fetchJson(`/api/series/${encodeURIComponent(seriesMatch[1])}`).catch(() => {});
+    fetchJson(seriesApiPath(seriesMatch[1])).catch(() => {});
     return;
   }
   const tagMatch = href.match(/^\/the-loai\/([^/]+)$/);

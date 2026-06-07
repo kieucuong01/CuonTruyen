@@ -6,7 +6,7 @@ export { apiUrl };
 export function isCacheableRequest(url, options = {}) {
   const method = String(options?.method || 'GET').toUpperCase();
   if (method !== 'GET') return false;
-  return /^\/api\/(series($|\/)|home|public\/home|tags\/|search)/.test(url);
+  return /^\/api\/(series($|[/?])|home|public\/home|tags\/|search)/.test(url);
 }
 
 export function createApiClient({
