@@ -8,3 +8,10 @@ test('postgres catalog storage does not depend on image path helpers', () => {
   assert.doesNotMatch(source, /from ['"]\.\/catalogStore\.mjs['"]/);
   assert.match(source, /from ['"]\.\/catalogMerge\.mjs['"]/);
 });
+
+test('public content normalization does not depend on import filesystem helpers', () => {
+  const source = fs.readFileSync(new URL('../server/contentStore.mjs', import.meta.url), 'utf8');
+
+  assert.doesNotMatch(source, /from ['"]\.\/catalogStore\.mjs['"]/);
+  assert.match(source, /from ['"]\.\/publicImportUrl\.mjs['"]/);
+});

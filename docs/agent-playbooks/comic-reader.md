@@ -190,10 +190,16 @@ npm test
 npm run worker:crawl
 ```
 
-For server start on the user's current port:
+For the Next app on the user's current port:
 
 ```powershell
 $env:PORT='54533'; npm run dev
+```
+
+For the legacy local crawler/admin pipeline:
+
+```powershell
+$env:PORT='54534'; npm run local:pipeline
 ```
 
 If a previous server process is already listening, stop that PID first. Do not leave multiple dev servers on the same port.

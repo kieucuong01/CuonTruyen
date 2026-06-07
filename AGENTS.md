@@ -17,9 +17,11 @@ Use this file as the first stop for any future AI agent. Keep it short; put deta
 - Production-readiness playbook: `docs/agent-playbooks/production-readiness.md`
 - Original implementation plan: `docs/superpowers/plans/2026-05-22-comic-reader-prototype.md`
 - Original design spec: `docs/superpowers/specs/2026-05-22-korean-comic-reader-prototype-design.md`
-- Main frontend: `public/app.js`
+- Main Next frontend: `src/app/`, `src/components/`
+- Legacy local pipeline frontend: `public/app.js`
 - Reader progress module: `public/readingProgress.mjs`
-- Main server/API routes: `server/index.mjs`
+- Next App Router/API routes: `src/app/`
+- Local pipeline server/API routes: `server/index.mjs`
 - Catalog normalization, public/admin data shape, moderation: `server/contentStore.mjs`
 - Crawl jobs and importer: `server/importJobs.mjs`, `server/importer.mjs`
 - Source adapters: `server/adapters/`
@@ -31,6 +33,7 @@ Run from the repo root:
 ```powershell
 npm test
 npm run dev
+npm run local:pipeline
 npm run worker:crawl
 npm run publish:series -- --series-id <series-id> --dry-run
 npm run publish:series -- --series-id <series-id>
@@ -44,16 +47,19 @@ npm run smoke:import
 Use `npm run publish:series -- --series-id <series-id>` for DB-aware per-series
 publishing.
 
-The local server defaults to `http://localhost:4173`. In this desktop session the user commonly runs it on `http://localhost:54533` with:
+`npm run dev` starts the Next.js App Router app. The local pipeline server
+defaults to `http://localhost:4173`; in this desktop session the user commonly
+runs it on `http://localhost:54534` with:
 
 ```powershell
-$env:PORT='54533'; npm run dev
+$env:PORT='54534'; npm run local:pipeline
 ```
 
 ## Current Architecture
 
-- Node 18 ESM HTTP server, no framework.
-- Static frontend in `public/`.
+- Next.js App Router on Node 20+ is the default public/admin app runtime.
+- The legacy Node ESM HTTP server and static frontend remain for local crawler,
+  optimizer, S3 sync, and production publish workflows.
 - PostgreSQL-only catalog facade; local and production require `CATALOG_DATABASE_URL`, `DATABASE_URL`, or `POSTGRES_URL`.
 - Image cache still lives under `data/imports/` or `IMPORT_ROOT`; catalog, crawl jobs, users, events, and admin content live in PostgreSQL.
 - Separate crawl worker process for durable import jobs.

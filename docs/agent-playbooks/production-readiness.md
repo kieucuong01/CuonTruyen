@@ -96,6 +96,12 @@ Use this while content and product flow are still being shaped:
 $env:PORT='54533'; npm run dev
 ```
 
+Use the legacy local pipeline only for crawl/publish controls:
+
+```powershell
+$env:PORT='54534'; npm run local:pipeline
+```
+
 Run worker separately when crawling:
 
 ```powershell
@@ -162,7 +168,7 @@ npm test
 HTTP smoke example on a temporary port:
 
 ```powershell
-$env:PORT='54534'; npm run dev
+$env:PORT='54535'; npm run dev
 ```
 
 Check:
@@ -173,4 +179,4 @@ Check:
 - `/chinh-sach-noi-dung`
 - one public `/truyen/:slug`
 - one public `/truyen/:slug/:chapterSlug`
-- `/#/admin`
+- `/admin`

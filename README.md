@@ -40,18 +40,31 @@ Open:
 http://localhost:54533/
 ```
 
-Admin/crawl screen:
+Content admin:
 
 ```text
-http://localhost:54533/#/admin
+http://localhost:54533/admin
 ```
 
-The desktop session commonly uses port `54533`.
+Local crawl/pipeline screen:
+
+```powershell
+$env:PORT='54534'; npm run local:pipeline
+```
+
+```text
+http://localhost:54534/#/admin
+```
+
+The desktop session commonly uses port `54533` for Next and `54534` for the
+legacy local pipeline.
 
 ## Useful Scripts
 
 ```powershell
 npm run dev
+npm run local:pipeline
+npm run dev:legacy
 npm run worker:crawl
 npm run worker:crawl:once
 npm run smoke:import
@@ -62,7 +75,11 @@ npm run db:local:setup
 npm test
 ```
 
-`npm run dev` starts the HTTP server and public/admin UI. `npm run worker:crawl` should run in a second terminal when admin crawl jobs need to execute. `npm run smoke:import` runs a tiny direct import with low limits.
+`npm run dev` starts the Next.js App Router app. `npm run local:pipeline` (or
+`npm run dev:legacy`) starts the legacy Node server for local crawl, optimize,
+S3 sync, and publish controls. `npm run worker:crawl` should run in a second
+terminal when admin crawl jobs need to execute. `npm run smoke:import` runs a
+tiny direct import with low limits.
 
 ## Main Routes
 
@@ -112,8 +129,12 @@ public/
   readingProgress.mjs    local resume and reading history logic
   userState.mjs          local user/follow state
   readerWindow.mjs       reader windowing and image release helpers
+src/
+  app/                   Next.js App Router pages and API route handlers
+  components/            route-scoped client islands and shared UI
+  lib/                   Next server/client helper adapters
 server/
-  index.mjs              HTTP server, APIs, SEO/static routes
+  index.mjs              legacy local pipeline HTTP server and APIs
   contentStore.mjs       public/admin catalog shaping and moderation
   catalogMerge.mjs       catalog merge rules shared by all storage backends
   catalogStore.mjs       local image path helpers
@@ -138,12 +159,13 @@ tests/
 
 Newly crawled/imported content defaults to `draft`. Use admin review to publish it.
 
-1. Open `/#/admin`.
-2. Import or inspect series.
-3. Edit title, slug, cover, aliases, tags, description, and crawl schedule.
-4. Review chapter rows for missing images or bad titles.
-5. Set series/chapter status to `public` when ready.
-6. Set status to `removed` for takedown or broken content.
+1. Start the local pipeline server with `$env:PORT='54534'; npm run local:pipeline`.
+2. Open `http://localhost:54534/#/admin`.
+3. Import or inspect series.
+4. Edit title, slug, cover, aliases, tags, description, and crawl schedule.
+5. Review chapter rows for missing images or bad titles.
+6. Set series/chapter status to `public` when ready.
+7. Set status to `removed` for takedown or broken content.
 
 Status behavior:
 
@@ -197,6 +219,7 @@ separate database on the machine by default:
 ```powershell
 npm run db:local:setup
 npm run dev
+npm run local:pipeline
 ```
 
 The setup command starts `docker-compose.local.yml`, writes these catalog values
@@ -217,7 +240,8 @@ Images still stay on local/VPS disk under `IMPORT_ROOT` or `data/imports/`.
 
 Current recommended path before buying a VPS:
 
-1. Keep running locally on port `54533` for development and content review.
+1. Keep Next running locally on port `54533` for development/content review and
+   the legacy local pipeline on port `54534` for crawl/publish operations.
 2. Build a clean public catalog with `public` statuses only.
 3. Use `/chinh-sach-noi-dung` and admin takedown controls before public growth.
 4. Keep backups of `data/imports/`.
@@ -236,7 +260,7 @@ When VPS is purchased later, run the same app with:
 
 See `.env.example` for the full list. Important ones:
 
-- `PORT` - local HTTP port, usually `54533`.
+- `PORT` - local HTTP port, usually `54533` for Next or `54534` for the local pipeline.
 - `PUBLIC_SITE_URL` - canonical public site URL for SEO.
 - `PUBLIC_IMPORTS_BASE_URL` - public URL for `/imports/*` image links when frontend/API are split.
 - `S3_*` - Vietnix S3 sync settings for images.
@@ -270,6 +294,14 @@ Then inspect:
 - Admin can still see draft/removed content.
 - Reader opens, images render, current chapter updates, and "Doc tiep" resumes.
 - `/sitemap.xml` includes only public content and static pages.
+
+After local crawl/pipeline changes, smoke-check the legacy server separately:
+
+```powershell
+$env:PORT='54534'; npm run local:pipeline
+```
+
+Then inspect `http://localhost:54534/#/admin`.
 
 ## Agent Handoff
 

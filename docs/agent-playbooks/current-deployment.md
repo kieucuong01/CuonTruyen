@@ -20,7 +20,7 @@ Vercel project config:
 
 ```text
 Build command: npm run build:vercel
-Output directory: public
+Output directory: Next.js default
 Project config file: vercel.json
 Ignored deploy paths: .vercelignore
 ```
@@ -62,10 +62,41 @@ crawling. Set `PUBLIC_IMPORTS_BASE_URL_ENABLED=true` locally only when you want
 to force S3 URLs, or `PUBLIC_IMPORTS_BASE_URL_ENABLED=false` to force raw local
 paths.
 
-When catalog storage resolves to PostgreSQL on Vercel, the build writes
-`CATALOG_STORAGE=postgres` is set without `CATALOG_DATABASE_URL`,
-`DATABASE_URL`, or `POSTGRES_URL`, the build fails loudly instead of silently
-live Vercel API routes backed by Supabase Postgres.
+When catalog storage resolves to PostgreSQL on Vercel, `npm run build:vercel`
+requires `CATALOG_DATABASE_URL`, `DATABASE_URL`, or `POSTGRES_URL`; the build
+fails loudly instead of silently deploying a reader without catalog data. The
+build writes `public/config.js`, skips the legacy static SEO export, then runs
+`next build`.
+
+Vercel deploy uploads should exclude the legacy SPA/static export surface. The
+local Node app can still use `public/index.html`, `public/app.js`,
+`public/routes/`, `public/static-api/`, and `public/fallback-api/`, but
+`.vercelignore` keeps those files out of production so App Router owns public
+HTML, APIs, sitemap, robots, and policy pages.
+
+Public App Router SEO/read surfaces stay build-safe with `force-dynamic`
+because local and CI builds may not have a live catalog database. They still use
+short CDN cache headers: public HTML routes (`/`, `/truyen/:slug`,
+`/truyen/:slug/:chapter`, `/the-loai/:slug`), static SEO pages
+(`/gioi-thieu`, `/lien-he`, `/chinh-sach-noi-dung`, `/privacy`), public read
+APIs, `robots.txt`, and `sitemap.xml` emit `Cache-Control: public,
+s-maxage=300, stale-while-revalidate=600` for successful public responses.
+Error and 404 JSON responses stay `no-store`. Admin, user/session, analytics
+events, and local-only pipeline routes remain dynamic/no-store.
+
+The public Next SEO pages also render compact JSON-LD:
+`WebSite`/`ItemList` on `/`, `ComicSeries` on series pages, `ComicIssue` on
+reader pages, and `CollectionPage` on tag pages. These scripts are generated in
+the App Router layer without serializing full chapter page arrays.
+
+The homepage "Đọc tiếp" client island is intentionally small. It does not
+receive the full public series/chapter index; when a saved series exists in
+localStorage it fetches only that series through the CDN-cacheable public series
+API.
+
+Internal navigation inside the Next App Router surface uses `next/link` instead
+of raw anchors so public/admin route changes can use App Router prefetching and
+avoid full reloads.
 
 ## Public Storage
 
@@ -118,11 +149,17 @@ The server also blocks local-only production pipeline calls on Vercel. Even if a
 
 ## Local Runtime
 
-Local app/admin:
+Local Next app/content admin:
 
 ```text
 http://localhost:54533
-http://localhost:54533/#/admin
+http://localhost:54533/admin
+```
+
+Local crawler/pipeline admin:
+
+```text
+http://localhost:54534/#/admin
 ```
 
 Local catalog storage defaults to a separate PostgreSQL database on the machine,
@@ -136,9 +173,9 @@ That starts `docker-compose.local.yml`, writes the local catalog DB URL to
 
 sync all read the catalog through the same `server/dataStore.mjs` facade. That
 means switching local from JSON to Postgres changes the source of truth for the
-whole production pipeline. Start the local server and the crawl worker with the
-same catalog env, otherwise admin may show one catalog while the worker writes
-jobs/content to another storage backend.
+whole production pipeline. Start the local pipeline server and the crawl worker
+with the same catalog env, otherwise admin may show one catalog while the worker
+writes jobs/content to another storage backend.
 
 If local crawl suddenly fails with a Postgres error such as `role "comic_user"
 does not exist`, fix the local DB with `npm run db:local:setup` or intentionally
@@ -151,7 +188,8 @@ Local crawler:
 $env:CRAWL_EMBEDDED_WORKER='false'
 $env:CRAWL_IMAGE_CONCURRENCY='6'
 $env:CRAWL_OPTIMIZE_DURING_CRAWL='false'
-npm run dev
+$env:PORT='54534'
+npm run local:pipeline
 npm run worker:crawl
 ```
 
@@ -165,6 +203,57 @@ Use `CRAWL_IMAGE_CONCURRENCY=6` as the fast default. Lower to `4` if the source
 rate-limits or returns many `fetch failed` errors; raise to `8` only when the
 source is stable. Keep `CRAWL_OPTIMIZE_DURING_CRAWL=false` for faster crawling,
 then run the image optimization scripts after the crawl completes.
+
+## Next.js Migration Runtime
+
+The branch `nextjs-layered-app-router` makes Next.js App Router the default app
+runtime for public SEO routes, reader, content admin, and request-scoped API
+handlers. The legacy Node server remains available only for local
+crawler/optimizer/S3/publish workflows.
+
+Default app commands:
+
+```powershell
+npm run dev
+npm run build
+npm run start
+```
+
+Local-only pipeline commands:
+
+```powershell
+npm run local:pipeline
+npm run dev:legacy
+npm run worker:crawl
+```
+
+`npm run dev:next`, `npm run build:next`, and `npm run start:next` remain as
+aliases for the default Next commands. Worker, crawler, optimizer, S3 sync,
+production publish, and crawler-triggering admin APIs remain on the legacy local
+runtime and must not be moved into Vercel Functions.
+
+Public read APIs are mirrored into App Router route handlers under `src/app/api`
+for the Next public layer: home, search, tags, series detail, and reader chapter
+payloads. These public read routes use 300-second CDN cache headers for faster
+Vercel responses while still refreshing shortly after local publish/DB promotion.
+Home, series detail, and tag data adapters read catalog summaries without
+chapter page arrays; reader payloads are the only public App Router path that
+requests page arrays. The public pages use request-level React `cache()`
+wrappers so `generateMetadata()` and route rendering can reuse the same catalog
+lookup for a request.
+Next also owns the static policy pages (`/gioi-thieu`, `/lien-he`,
+`/chinh-sach-noi-dung`, `/privacy`), custom noindex 404, `robots.txt`, and
+`sitemap.xml`.
+User auth, Google auth callbacks, bulletin messages, admin session,
+admin-bulletin messages, `/api/events`, admin catalog/editor endpoints, chapter
+moderation, crawl-schedule metadata, and admin analytics/events now have App
+Router route handlers. `/admin` is a route-scoped Next client dashboard and
+`/admin/series/:id` is a route-scoped Next content editor; neither page loads
+the legacy `/app.js` bundle. Vercel no longer rewrites admin pages to
+`public/index.html`, and there is no legacy Vercel API catch-all wrapper.
+Local-only crawler/import/S3/publish endpoints are represented by App Router
+stubs that return authenticated `503` responses on Vercel with instructions to
+run the workflow in admin local/crawler.
 
 
 ```text
@@ -264,6 +353,8 @@ from Git automatically.
 
 - Full image sync can take a long time because the library has tens of thousands of image files.
 - S3 image sync is fail-safe by default: normal image publish must pass `--series-id <series-id>`, retry failed files uses `--retry-failed`, and full image sync requires explicit `--all`.
-- If Vietnix S3 returns `RequestTimeTooSkewed`, sync the Windows clock (`w32tm /resync`) and use the admin "Retry file thiáº¿u" button or `npm run sync:s3:retry-failed`.
+- If Vietnix S3 returns `RequestTimeTooSkewed`, sync the Windows clock (`w32tm /resync`) and use the admin "Retry file thiếu" button or `npm run sync:s3:retry-failed`.
 - `S3_ACL=public-read` is needed for objects to be readable through the current S3 public URL.
-- `.vercelignore` must keep `data/`, `logs/`, `.runtime/`, and local env files out of deploy uploads.
+- `.vercelignore` must keep `data/`, `logs/`, `.runtime/`, local env files,
+  legacy SPA files, legacy static API exports, and old static SEO HTML out of
+  deploy uploads.

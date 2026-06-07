@@ -71,21 +71,21 @@ export function buildProductionPublishSteps(seriesId, { requestedSteps = [] } = 
   const allSteps = [
     {
       key: 'optimize',
-      label: 'Tá»‘i Æ°u áº£nh nhanh',
-      description: 'Fast publish: chá»‰ tá»‘i Æ°u má»™t lÃ´ áº£nh lá»›n/chÆ°a tá»‘i Æ°u Ä‘á»ƒ trÃ¡nh káº¹t job quÃ¡ lÃ¢u.',
+      label: 'Tối ưu ảnh nhanh',
+      description: 'Fast publish: chỉ tối ưu một lô ảnh lớn/chưa tối ưu để tránh kẹt job quá lâu.',
       command: [process.execPath, 'scripts/optimize-import-images.mjs', '--catalog-only', '--series-id', seriesId, '--limit', optimizeLimit, '--apply', '--json']
     },
     {
       key: 'sync-images',
-      label: 'Sync áº£nh truyá»‡n lÃªn S3',
-      description: 'Äáº©y riÃªng thÆ° má»¥c áº£nh cá»§a truyá»‡n lÃªn Vietnix S3.',
+      label: 'Sync ảnh truyện lên S3',
+      description: 'Đẩy riêng thư mục ảnh của truyện lên Vietnix S3.',
       command: [process.execPath, 'scripts/sync-vietnix-s3.mjs', '--images-only', '--catalog-only', '--series-id', seriesId, '--apply'],
       s3Step: true
     },
     {
       key: 'sync-catalog-db',
       label: 'Sync catalog DB production',
-      description: 'Day metadata/chapter/page cua truyen nay len production Postgres sau khi anh da len S3.',
+      description: 'Đẩy metadata/chapter/page của truyện này lên production Postgres sau khi ảnh đã lên S3.',
       command: [process.execPath, 'scripts/sync-catalog-to-production-db.mjs', '--series-id', seriesId, '--apply']
     }
   ];
@@ -94,14 +94,14 @@ export function buildProductionPublishSteps(seriesId, { requestedSteps = [] } = 
     allSteps.splice(1, 0,
       {
         key: 'relink',
-        label: 'Relink anh da toi uu',
-        description: 'Deep maintenance: cap nhat catalog tro sang WebP da co va don file goc.',
+        label: 'Relink ảnh đã tối ưu',
+        description: 'Deep maintenance: cập nhật catalog trỏ sang WebP đã có và dọn file gốc.',
         command: [process.execPath, 'scripts/relink-existing-optimized-images.mjs', '--series-id', seriesId, '--apply', '--cleanup-originals']
       },
       {
         key: 'cleanup',
-        label: 'Don anh thua cua truyen',
-        description: 'Deep maintenance: xoa anh local khong con duoc catalog tham chieu.',
+        label: 'Dọn ảnh thừa của truyện',
+        description: 'Deep maintenance: xóa ảnh local không còn được catalog tham chiếu.',
         command: [process.execPath, 'scripts/cleanup-unreferenced-import-images.mjs', '--series-id', seriesId, '--apply']
       }
     );
@@ -143,7 +143,7 @@ async function runProductionPublishJob(job) {
       step.status = 'running';
       step.startedAt = new Date().toISOString();
       touch(job);
-      appendLog(job, `Báº¯t Ä‘áº§u: ${step.label}`);
+      appendLog(job, `Bắt đầu: ${step.label}`);
       const result = await runCommand(step.command, {
         s3Step: step.s3Step,
         onOutput: (text) => handleStepOutput(job, step, text)
@@ -158,13 +158,13 @@ async function runProductionPublishJob(job) {
       }
       step.status = 'completed';
       step.finishedAt = new Date().toISOString();
-      appendLog(job, `HoÃ n táº¥t: ${step.label}`);
+      appendLog(job, `Hoàn tất: ${step.label}`);
       touch(job);
     }
     job.status = 'completed';
     job.finishedAt = new Date().toISOString();
     job.result = {
-      message: 'ÄÃ£ tá»‘i Æ°u, export vÃ  sync production xong.',
+      message: 'Đã tối ưu, export và sync production xong.',
       completedAt: job.finishedAt
     };
     appendLog(job, job.result.message);
@@ -172,7 +172,7 @@ async function runProductionPublishJob(job) {
     job.status = 'failed';
     job.error = cleanLog(error?.message || 'Production workflow failed.');
     job.finishedAt = new Date().toISOString();
-    appendLog(job, `Lá»—i: ${job.error}`);
+    appendLog(job, `Lỗi: ${job.error}`);
   } finally {
     touch(job);
   }

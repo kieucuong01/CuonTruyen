@@ -4,7 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node server/index.mjs",
+    "dev": "next dev --hostname 0.0.0.0",
+    "dev:next": "next dev --hostname 0.0.0.0",
+    "dev:legacy": "node server/index.mjs",
+    "local:pipeline": "node server/index.mjs",
+    "build": "next build",
+    "build:next": "next build",
+    "start": "next start",
+    "start:next": "next start",
     "build:vercel": "node scripts/build-vercel.mjs",
     "sync:s3:dry-run": "node scripts/sync-vietnix-s3.mjs",
     "sync:s3": "node scripts/sync-vietnix-s3.mjs --apply",
@@ -12,7 +19,7 @@
     "sync:s3:force": "node scripts/sync-vietnix-s3.mjs --apply --force",
     "sync:catalog:production": "node scripts/sync-catalog-to-production-db.mjs",
     "publish:series": "node scripts/production-publish-series.mjs",
-    "test": "node --require ./tests/setup-env.cjs --test tests",
+    "test": "node --require ./tests/setup-env.cjs --test tests/*.mjs",
     "db:setup:schema": "node scripts/setup-postgres-schema.mjs",
     "db:local:setup": "powershell -ExecutionPolicy Bypass -File ops/setup-local-postgres.ps1",
     "worker:crawl": "node server/crawlWorker.mjs",
@@ -30,10 +37,16 @@
   },
   "dependencies": {
     "@libsql/client": "^0.17.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "next": "^16.2.7",
     "pg": "^8.13.1",
-    "sharp": "^0.32.6"
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "sharp": "^0.32.6",
+    "typescript": "^6.0.3"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20.9.0"
   }
 }

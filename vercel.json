@@ -1,37 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "npm run build:vercel",
-  "outputDirectory": "public",
-  "cleanUrls": true,
-  "trailingSlash": false,
-  "rewrites": [
-    {
-      "source": "/truyen/:path*",
-      "destination": "/index"
-    },
-    {
-      "source": "/the-loai/:path*",
-      "destination": "/index"
-    },
-    {
-      "source": "/admin/:path*",
-      "destination": "/index"
-    },
-    {
-      "source": "/gioi-thieu",
-      "destination": "/index"
-    },
-    {
-      "source": "/lien-he",
-      "destination": "/index"
-    },
-    {
-      "source": "/chinh-sach-noi-dung",
-      "destination": "/index"
-    },
-    {
-      "source": "/privacy",
-      "destination": "/index"
-    }
-  ]
+  "trailingSlash": false
 }

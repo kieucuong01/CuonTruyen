@@ -36,10 +36,12 @@ These can be large or temporary. Use targeted file paths only.
 | --- | --- |
 | Mobile home UI | `public/routes/home.mjs`, `public/styles.css` |
 | Reader scroll/images | `public/app.js`, `public/readerWindow.mjs`, `public/readerRestore.mjs`, `public/readingProgress.mjs` |
-| Admin/crawl UI | `public/routes/admin.mjs`, `server/index.mjs`, `server/crawlJobStore.mjs` |
+| Admin dashboard | `src/app/admin/page.tsx`, `src/components/admin/AdminDashboardIsland.tsx`, `src/components/admin/adminDashboardState.mjs` |
+| Admin detail editor | `src/app/admin/series/[seriesId]/page.tsx`, `src/components/admin/AdminSeriesEditorIsland.tsx`, `src/components/admin/adminSeriesEditorState.mjs` |
+| Admin crawl/local pipeline UI | `public/routes/admin.mjs`, `server/index.mjs`, `server/crawlJobStore.mjs` |
 | New chapter updates | `server/importer.mjs`, `server/crawlQueue.mjs`, `server/crawlWorker.mjs`, `public/routes/admin.mjs` |
 | Public catalog/filtering | `server/contentStore.mjs`, `server/dataStore.mjs`, `server/postgresStore.mjs` |
-| Vercel frontend/admin API | `vercel.json`, `api/[...path].mjs`, `scripts/write-public-config.mjs`, `public/apiClient.mjs`, `server/index.mjs` |
+| Vercel frontend/admin API | `vercel.json`, `src/app/api/`, `src/lib/server/local-pipeline-api.mjs`, `scripts/build-vercel.mjs`, `scripts/write-public-config.mjs`, `public/apiClient.mjs`, `server/index.mjs` |
 | SEO shell/sitemap/copy | `server/seo.mjs`, `server/index.mjs`, `scripts/write-public-config.mjs`, `docs/agent-playbooks/seo-launch.md` |
 | Encoding mojibake | `scripts/check-encoding.mjs`, then the reported files |
 
@@ -48,10 +50,11 @@ These can be large or temporary. Use targeted file paths only.
 The live public site is not a normal backend app:
 
 ```text
-Vercel serves public/
-public/config.js tells the browser to use live Vercel API when catalog storage resolves to PostgreSQL
+Vercel serves Next.js App Router public routes
+public/config.js keeps browser clients on same-origin APIs
 S3 serves /imports/* images
-Vercel Node API is for public reads/admin content edits
+App Router APIs are for public reads, user/auth/bulletin/events, and admin session
+App Router also owns admin catalog/editor, moderation, schedule metadata, analytics, and 503 stubs for local pipeline endpoints
 Local Node app is for crawler/optimizer/S3 sync
 ```
 
@@ -61,9 +64,11 @@ Local Node app is for crawler/optimizer/S3 sync
 Pick the smallest useful check:
 
 ```powershell
+node --check src\components\reader\readerState.mjs
 node --check public\app.js
 node --check public\routes\home.mjs
 node --check public\routes\admin.mjs
+npm run build
 npm run check:encoding
 npm run sync:s3:dry-run
 npm test
@@ -73,12 +78,17 @@ Do not run full image sync or full tests unless the user asks or the change requ
 
 ## Common Safe Commands
 
-Start local app:
+Start Next app:
 
 ```powershell
 $env:PORT='54533'; npm run dev
 ```
 
+Start local crawler/admin pipeline:
+
+```powershell
+$env:PORT='54534'; npm run local:pipeline
+```
 
 ```powershell
 ```

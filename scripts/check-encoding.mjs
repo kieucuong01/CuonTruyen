@@ -23,9 +23,9 @@ export const mojibakePatterns = [
   /Trang thai/g
 ];
 
-const DEFAULT_TARGETS = ['public', 'server', 'docs', 'README.md', 'AGENTS.md'];
+const DEFAULT_TARGETS = ['public', 'server', 'src', 'docs', 'README.md', 'AGENTS.md'];
 const SKIP_DIRS = new Set(['node_modules', '.git', 'data']);
-const TEXT_EXTENSIONS = new Set(['.js', '.mjs', '.html', '.css', '.md', '.json', '.txt']);
+const TEXT_EXTENSIONS = new Set(['.js', '.mjs', '.ts', '.tsx', '.html', '.css', '.md', '.json', '.txt']);
 
 async function walk(target, files = []) {
   let stat;

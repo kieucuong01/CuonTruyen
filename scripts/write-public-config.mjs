@@ -50,6 +50,7 @@ const config = {
   productionBaseUrl: trimTrailingSlash(process.env.PRODUCTION_BASE_URL || process.env.PUBLIC_SITE_URL || publicSiteUrl),
   enableLocalCrawlerUi: String(process.env.ENABLE_LOCAL_CRAWLER_UI || '').toLowerCase() === 'true'
 };
+const skipStaticSeoExport = String(process.env.SKIP_STATIC_SEO_EXPORT || '').toLowerCase() === 'true';
 
 function siteBaseUrl() {
   return trimTrailingSlash(
@@ -171,4 +172,8 @@ async function writeStaticInfoPages() {
 await fs.mkdir(PUBLIC_DIR, { recursive: true });
 await fs.writeFile(CONFIG_PATH, serializeConfig(config), 'utf8');
 console.log(`[vercel-config] wrote public/config.js with apiBaseUrl=${config.apiBaseUrl || '(same-origin)'}`);
-await writeStaticInfoPages();
+if (skipStaticSeoExport) {
+  console.log('[vercel-static-pages] skipped legacy static SEO export because Next App Router owns public SEO routes');
+} else {
+  await writeStaticInfoPages();
+}

@@ -1,6 +1,7 @@
 .superpowers/
 .vercel/
 node_modules/
+.next/
 dist/
 .runtime/
 .tmp/

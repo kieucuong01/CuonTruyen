@@ -63,7 +63,7 @@ export function buildProductionCheckTargets({
   if (productionUrl) {
     targets.push({
       key: 'series-page',
-      label: 'Trang truyá»‡n production',
+      label: 'Trang truyện production',
       kind: 'html',
       required: true,
       url: productionUrl
@@ -79,7 +79,7 @@ export function buildProductionCheckTargets({
   if (coverUrl) {
     targets.push({
       key: 'cover-image',
-      label: 'áº¢nh cover',
+      label: 'Ảnh cover',
       kind: 'image',
       required: true,
       url: coverUrl
@@ -93,7 +93,7 @@ export function buildProductionCheckTargets({
   if (chapterImageUrl) {
     targets.push({
       key: 'chapter-image',
-      label: 'áº¢nh trang truyá»‡n',
+      label: 'Ảnh trang truyện',
       kind: 'image',
       required: true,
       url: chapterImageUrl

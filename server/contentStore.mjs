@@ -1,4 +1,4 @@
-import { publicImportUrl } from './catalogStore.mjs';
+import { publicImportUrl } from './publicImportUrl.mjs';
 import { readCatalog, writeCatalog } from './dataStore.mjs';
 import { slugify, uniqueBy } from './utils.mjs';
 

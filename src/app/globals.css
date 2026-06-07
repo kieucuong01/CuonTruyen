@@ -1,0 +1,493 @@
+:root {
+  color-scheme: light;
+  --bg: #fff8f0;
+  --panel: #ffffff;
+  --text: #241610;
+  --muted: #7b6254;
+  --accent: #f36f21;
+  --line: rgba(83, 51, 31, 0.16);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.next-shell {
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 24px 0 56px;
+}
+
+.next-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0 24px;
+}
+
+.next-brand {
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.next-muted {
+  color: var(--muted);
+}
+
+.next-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 16px;
+}
+
+.next-card {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.next-card-link {
+  display: block;
+}
+
+.next-cover-frame,
+.next-hero-cover {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  background: #f2e7dd;
+}
+
+.next-cover-image,
+.next-hero-cover-image {
+  object-fit: cover;
+}
+
+.next-card img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+}
+
+.next-card-copy {
+  padding: 12px;
+}
+
+.next-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 240px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.next-hero-cover {
+  max-width: 240px;
+}
+
+.next-continue,
+.next-primary-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+}
+
+.next-reader-page img {
+  display: block;
+  width: min(100%, 900px);
+  height: auto;
+  margin: 0 auto;
+}
+
+.next-reader {
+  padding-bottom: 40vh;
+}
+
+.next-reader-current {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  width: min(100%, 900px);
+  margin: 0 auto 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 248, 240, 0.94);
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.next-reader-current strong {
+  color: var(--text);
+}
+
+.next-reader-chapter {
+  scroll-margin-top: 72px;
+}
+
+.next-reader-title {
+  width: min(100%, 900px);
+  margin: 32px auto 12px;
+  font-size: 16px;
+  color: var(--muted);
+}
+
+.next-reader-status {
+  width: min(100%, 900px);
+  margin: 24px auto 0;
+  color: var(--muted);
+  text-align: center;
+}
+
+.next-static-page {
+  max-width: 820px;
+}
+
+.next-static-page h1 {
+  margin: 0 0 14px;
+}
+
+.next-static-page ul {
+  margin: 24px 0 0;
+  padding-left: 22px;
+}
+
+.next-static-page li + li {
+  margin-top: 10px;
+}
+
+.next-admin-shell {
+  max-width: 1180px;
+}
+
+.next-admin-topbar,
+.next-admin-actions,
+.next-admin-panel-head,
+.next-admin-series-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.next-admin-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.next-admin-login,
+.next-admin-panel,
+.next-admin-notice,
+.next-admin-metric {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.next-admin-login {
+  width: min(100%, 420px);
+  margin: 80px auto 0;
+  padding: 24px;
+}
+
+.next-admin-form {
+  display: grid;
+  gap: 14px;
+}
+
+.next-admin-form label {
+  display: grid;
+  gap: 6px;
+  font-weight: 700;
+}
+
+.next-admin-form input {
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  color: var(--text);
+  font: inherit;
+}
+
+.next-admin-primary,
+.next-admin-secondary {
+  min-height: 40px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 0 14px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.next-admin-primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.next-admin-secondary {
+  border-color: var(--line);
+  background: #fff;
+  color: var(--text);
+}
+
+.next-admin-secondary:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.next-admin-notice {
+  margin: 18px 0;
+  padding: 12px 14px;
+  color: var(--muted);
+}
+
+.next-admin-error,
+.next-admin-status,
+.next-admin-empty {
+  padding: 12px 14px;
+  border-radius: 8px;
+}
+
+.next-admin-error {
+  border: 1px solid rgba(178, 40, 40, 0.25);
+  background: #fff1f1;
+  color: #8f1d1d;
+}
+
+.next-admin-status,
+.next-admin-empty {
+  background: #fff3e6;
+  color: var(--muted);
+}
+
+.next-admin-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.next-admin-metric {
+  padding: 14px;
+}
+
+.next-admin-metric strong,
+.next-admin-large {
+  display: block;
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.next-admin-metric span {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+}
+
+.next-admin-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 18px;
+  align-items: start;
+}
+
+.next-admin-panel {
+  padding: 16px;
+}
+
+.next-admin-panel h1,
+.next-admin-panel h2 {
+  margin: 0 0 12px;
+}
+
+.next-admin-series-list,
+.next-admin-message-list {
+  display: grid;
+  gap: 10px;
+}
+
+.next-admin-series-row {
+  min-height: 64px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+
+.next-admin-series-row:first-child {
+  border-top: 0;
+}
+
+.next-admin-series-row a {
+  font-weight: 800;
+}
+
+.next-admin-badge {
+  min-width: 72px;
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: #f3ece4;
+  color: var(--muted);
+  text-align: center;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.next-admin-badge.is-public {
+  background: #e7f8ee;
+  color: #17663b;
+}
+
+.next-admin-badge.is-removed {
+  background: #f8e7e7;
+  color: #842121;
+}
+
+.next-admin-side {
+  display: grid;
+  gap: 18px;
+}
+
+.next-admin-message {
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.next-admin-message:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.next-admin-editor {
+  display: grid;
+  gap: 18px;
+}
+
+.next-admin-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.next-admin-field {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.next-admin-field input,
+.next-admin-field select,
+.next-admin-field textarea,
+.next-admin-chapter-row input,
+.next-admin-chapter-row select {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+}
+
+.next-admin-field textarea {
+  padding-top: 10px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.next-admin-wide {
+  grid-column: 1 / -1;
+}
+
+.next-admin-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  color: var(--text);
+  font-weight: 700;
+}
+
+.next-admin-check input {
+  width: 18px;
+  height: 18px;
+}
+
+.next-admin-chapter-list {
+  display: grid;
+  gap: 10px;
+}
+
+.next-admin-chapter-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 120px minmax(180px, 0.7fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.next-admin-chapter-row:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+@media (max-width: 720px) {
+  .next-shell {
+    width: min(100% - 20px, 680px);
+    padding-top: 12px;
+  }
+
+  .next-hero {
+    grid-template-columns: 112px minmax(0, 1fr);
+    gap: 14px;
+  }
+
+  .next-admin-topbar,
+  .next-admin-series-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .next-admin-actions {
+    justify-content: flex-start;
+  }
+
+  .next-admin-metrics,
+  .next-admin-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .next-admin-editor-grid,
+  .next-admin-chapter-row {
+    grid-template-columns: 1fr;
+  }
+}

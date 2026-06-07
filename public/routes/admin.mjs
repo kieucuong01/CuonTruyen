@@ -108,7 +108,7 @@ export function createAdminRoute({
     } catch (error) {
       if (isAdminAuthError(error)) {
         clearAdminSession();
-        renderAdminLogin('PhiÃªn admin Ä‘Ã£ háº¿t háº¡n, vui lÃ²ng Ä‘Äƒng nháº­p láº¡i.');
+        renderAdminLogin('Phiên admin đã hết hạn, vui lòng đăng nhập lại.');
         return;
       }
       throw error;
@@ -120,19 +120,19 @@ export function createAdminRoute({
         ${renderAdminSessionBar()}
         <section class="admin-grid">
           ${localOps ? `<form class="import-panel admin-panel" data-import-form>
-            <h2>Crawl truyá»‡n</h2>
-            <textarea name="url" required rows="4" placeholder="DÃ¡n má»—i URL truyá»‡n trÃªn má»™t dÃ²ng...">https://truyenqqko.com/truyen-tranh/manh-nhat-lich-su-5968</textarea>
-            <select name="maxChapters" aria-label="Sá»‘ chapter táº£i trÆ°á»›c">
+            <h2>Crawl truyện</h2>
+            <textarea name="url" required rows="4" placeholder="Dán mỗi URL truyện trên một dòng...">https://truyenqqko.com/truyen-tranh/manh-nhat-lich-su-5968</textarea>
+            <select name="maxChapters" aria-label="Số chapter tải trước">
               <option value="1">1 chapter</option>
               <option value="2">2 chapter</option>
               <option value="3" selected>3 chapter</option>
               <option value="5">5 chapter</option>
-              <option value="0">Táº¥t cáº£ chapter</option>
+              <option value="0">Tất cả chapter</option>
             </select>
-            <select name="maxPages" aria-label="Sá»‘ áº£nh má»—i chapter">
-              <option value="0" selected>Táº¥t cáº£ áº£nh</option>
-              <option value="8">8 áº£nh/chapter</option>
-              <option value="20">20 áº£nh/chapter</option>
+            <select name="maxPages" aria-label="Số ảnh mỗi chapter">
+              <option value="0" selected>Tất cả ảnh</option>
+              <option value="8">8 ảnh/chapter</option>
+              <option value="20">20 ảnh/chapter</option>
             </select>
             <button class="primary-btn" type="submit">Crawl</button>
           </form>` : renderProductionAdminNotice()}
@@ -146,11 +146,11 @@ export function createAdminRoute({
         <section class="admin-list">
           <div class="admin-list-head">
             <div>
-              <h2 class="section-title">CMS truyá»‡n</h2>
-              <p class="muted">Chá»n má»™t truyá»‡n Ä‘á»ƒ má»Ÿ trang quáº£n lÃ½ riÃªng. Danh sÃ¡ch nÃ y chá»‰ giá»¯ thÃ´ng tin nháº­n diá»‡n vÃ  thao tÃ¡c nhanh.</p>
+              <h2 class="section-title">CMS truyện</h2>
+              <p class="muted">Chọn một truyện để mở trang quản lý riêng. Danh sách này chỉ giữ thông tin nhận diện và thao tác nhanh.</p>
             </div>
           </div>
-          ${catalog.series.length ? `<div class="admin-series-list-grid">${catalog.series.map(renderAdminSeriesCard).join('')}</div>` : '<div class="empty-state">ChÆ°a cÃ³ truyá»‡n Ä‘á»ƒ quáº£n lÃ½.</div>'}
+          ${catalog.series.length ? `<div class="admin-series-list-grid">${catalog.series.map(renderAdminSeriesCard).join('')}</div>` : '<div class="empty-state">Chưa có truyện để quản lý.</div>'}
         </section>
       </main>
     `;
@@ -184,7 +184,7 @@ export function createAdminRoute({
     } catch (error) {
       if (isAdminAuthError(error)) {
         clearAdminSession();
-        renderAdminLogin('PhiÃªn admin Ä‘Ã£ háº¿t háº¡n, vui lÃ²ng Ä‘Äƒng nháº­p láº¡i.');
+        renderAdminLogin('Phiên admin đã hết hạn, vui lòng đăng nhập lại.');
         return;
       }
       throw error;
@@ -196,12 +196,12 @@ export function createAdminRoute({
         ${renderTopbar()}
         ${renderAdminSessionBar()}
         <div class="admin-detail-nav">
-          <a class="ghost-btn" data-link href="/admin">Quay láº¡i CMS</a>
-          ${series?.slug ? `<a class="ghost-btn" data-link href="/truyen/${escapeAttr(series.slug)}">Má»Ÿ trang public</a>` : ''}
+          <a class="ghost-btn" data-link href="/admin">Quay lại CMS</a>
+          ${series?.slug ? `<a class="ghost-btn" data-link href="/truyen/${escapeAttr(series.slug)}">Mở trang public</a>` : ''}
         </div>
         ${adminFlashMessage ? `<div class="status-line success">${escapeHtml(adminFlashMessage)}</div>` : ''}
         ${!localOps ? renderProductionAdminNotice() : ''}
-        ${series ? renderAdminSeriesEditor(series, { localOps }) : '<section class="empty-state">KhÃ´ng tÃ¬m tháº¥y truyá»‡n trong catalog admin.</section>'}
+        ${series ? renderAdminSeriesEditor(series, { localOps }) : '<section class="empty-state">Không tìm thấy truyện trong catalog admin.</section>'}
       </main>
     `;
     adminFlashMessage = '';
@@ -225,8 +225,8 @@ export function createAdminRoute({
         <section class="admin-panel revenue-dashboard">
           <div class="admin-list-head">
             <div>
-              <h2 class="section-title">Doanh thu & tÆ°Æ¡ng tÃ¡c</h2>
-              <p class="muted">ChÆ°a Ä‘á»c Ä‘Æ°á»£c analytics. Dashboard sáº½ tá»± hiá»‡n khi API sáºµn sÃ ng.</p>
+              <h2 class="section-title">Doanh thu & tương tác</h2>
+              <p class="muted">Chưa đọc được analytics. Dashboard sẽ tự hiện khi API sẵn sàng.</p>
             </div>
           </div>
         </section>
@@ -238,13 +238,13 @@ export function createAdminRoute({
       <section class="admin-panel revenue-dashboard" data-revenue-dashboard>
         <div class="admin-list-head">
           <div>
-            <h2 class="section-title">Doanh thu & tÆ°Æ¡ng tÃ¡c</h2>
-            <p class="muted">Theo dÃµi view, impression quáº£ng cÃ¡o, CTR ná»™i bá»™ vÃ  donate click theo truyá»‡n.</p>
+            <h2 class="section-title">Doanh thu & tương tác</h2>
+            <p class="muted">Theo dõi view, impression quảng cáo, CTR nội bộ và donate click theo truyện.</p>
           </div>
-          <div class="revenue-range-tabs" role="group" aria-label="Khoáº£ng thá»i gian analytics">
+          <div class="revenue-range-tabs" role="group" aria-label="Khoảng thời gian analytics">
             ${['7d', '30d', 'all'].map((range) => `
               <button class="ghost-btn ${summary.range === range ? 'active' : ''}" type="button" data-analytics-range="${range}">
-                ${range === 'all' ? 'Táº¥t cáº£' : range.replace('d', ' ngÃ y')}
+                ${range === 'all' ? 'Tất cả' : range.replace('d', ' ngày')}
               </button>
             `).join('')}
           </div>
@@ -252,14 +252,14 @@ export function createAdminRoute({
         <div class="revenue-metrics">
           <article><span>Views</span><strong>${formatNumber(totals.views)}</strong></article>
           <article><span>Ad impressions</span><strong>${formatNumber(totals.adImpressions)}</strong></article>
-          <article><span>CTR quáº£ng cÃ¡o</span><strong>${formatPercent(totals.adCtr)}</strong></article>
+          <article><span>CTR quảng cáo</span><strong>${formatPercent(totals.adCtr)}</strong></article>
           <article><span>Donate clicks</span><strong>${formatNumber(totals.donateClicks)}</strong></article>
         </div>
         <div class="revenue-table-wrap">
           <table class="revenue-table">
             <thead>
               <tr>
-                <th>Truyá»‡n</th>
+                <th>Truyện</th>
                 <th>Views</th>
                 <th>Ad impressions</th>
                 <th>CTR</th>
@@ -277,7 +277,7 @@ export function createAdminRoute({
                   <td>${formatNumber(row.donateClicks)}</td>
                   <td>${formatNumber(row.readDepth)}%</td>
                 </tr>
-              `).join('') : '<tr><td colspan="6">ChÆ°a cÃ³ dá»¯ liá»‡u tracking trong khoáº£ng nÃ y.</td></tr>'}
+              `).join('') : '<tr><td colspan="6">Chưa có dữ liệu tracking trong khoảng này.</td></tr>'}
             </tbody>
           </table>
         </div>
@@ -297,7 +297,7 @@ export function createAdminRoute({
           dashboard.outerHTML = renderRevenueDashboard(summary);
           bindRevenueDashboard();
         } catch (error) {
-          dashboard.insertAdjacentHTML('afterbegin', `<div class="status-line error">KhÃ´ng táº£i Ä‘Æ°á»£c analytics: ${escapeHtml(error.message)}</div>`);
+          dashboard.insertAdjacentHTML('afterbegin', `<div class="status-line error">Không tải được analytics: ${escapeHtml(error.message)}</div>`);
         } finally {
           button.disabled = false;
         }
@@ -309,7 +309,7 @@ export function createAdminRoute({
     return `
       <section class="admin-session-bar">
         <strong>${escapeHtml(loadAdminEmail())}</strong>
-        <button class="ghost-btn" type="button" data-admin-logout>ÄÄƒng xuáº¥t</button>
+        <button class="ghost-btn" type="button" data-admin-logout>Đăng xuất</button>
       </section>
     `;
   }
@@ -319,18 +319,18 @@ export function createAdminRoute({
       <section class="admin-bulletin-panel">
         <div class="admin-bulletin-head">
           <div>
-            <h2>Báº£ng tin Cuá»‘n Truyá»‡n</h2>
-            <p class="muted">Gá»­i tin admin vÃ  ghim thÃ´ng bÃ¡o lÃªn Ä‘áº§u báº£ng chat public.</p>
+            <h2>Bảng tin Cuốn Truyện</h2>
+            <p class="muted">Gửi tin admin và ghim thông báo lên đầu bảng chat public.</p>
           </div>
         </div>
         <form class="admin-bulletin-form" data-admin-bulletin-form>
-          <textarea name="text" maxlength="500" rows="3" placeholder="Nháº­p thÃ´ng bÃ¡o hoáº·c tin nháº¯n admin..." required></textarea>
-          <label class="toggle-row"><input name="pinned" type="checkbox" /> Ghim tin nÃ y</label>
-          <button class="primary-btn" type="submit">Gá»­i tin</button>
+          <textarea name="text" maxlength="500" rows="3" placeholder="Nhập thông báo hoặc tin nhắn admin..." required></textarea>
+          <label class="toggle-row"><input name="pinned" type="checkbox" /> Ghim tin này</label>
+          <button class="primary-btn" type="submit">Gửi tin</button>
         </form>
         <div class="status-line" data-admin-bulletin-status></div>
         <div class="admin-bulletin-list">
-          ${messages.length ? messages.map(renderAdminBulletinMessage).join('') : '<p class="muted">ChÆ°a cÃ³ tin nháº¯n báº£ng tin.</p>'}
+          ${messages.length ? messages.map(renderAdminBulletinMessage).join('') : '<p class="muted">Chưa có tin nhắn bảng tin.</p>'}
         </div>
       </section>
     `;
@@ -342,7 +342,7 @@ export function createAdminRoute({
         <div class="admin-bulletin-head">
           <div>
             <h2>Production admin</h2>
-            <p class="muted">Cháº¿ Ä‘á»™ production chá»‰ dÃ¹ng Ä‘á»ƒ quáº£n lÃ½ ná»™i dung: sá»­a metadata, duyá»‡t chapter, public/draft/removed vÃ  xem dá»¯ liá»‡u. Crawl, optimize áº£nh, sync S3 vÃ  production pipeline chá»‰ má»Ÿ á»Ÿ local.</p>
+            <p class="muted">Chế độ production chỉ dùng để quản lý nội dung: sửa metadata, duyệt chapter, public/draft/removed và xem dữ liệu. Crawl, optimize ảnh, sync S3 và production pipeline chỉ mở ở local.</p>
           </div>
         </div>
       </section>
@@ -354,12 +354,12 @@ export function createAdminRoute({
       <section class="admin-panel s3-sync-panel">
         <div class="admin-bulletin-head">
           <div>
-            <h2>Äá»“ng bá»™ áº£nh S3</h2>
-            <p class="muted">Theo dÃµi tiáº¿n trÃ¬nh upload áº£nh lÃªn Vietnix S3 tá»« mÃ¡y local.</p>
+            <h2>Đồng bộ ảnh S3</h2>
+            <p class="muted">Theo dõi tiến trình upload ảnh lên Vietnix S3 từ máy local.</p>
           </div>
         </div>
         ${renderCatalogStorageNotice()}
-        <div class="status-line s3-sync-status" data-s3-sync-status>Äang kiá»ƒm tra tiáº¿n trÃ¬nh S3...</div>
+        <div class="status-line s3-sync-status" data-s3-sync-status>Đang kiểm tra tiến trình S3...</div>
       </section>
     `;
   }
@@ -398,12 +398,12 @@ export function createAdminRoute({
       <section class="admin-panel crawl-queue-panel">
         <div class="admin-bulletin-head">
           <div>
-            <h2>Tráº¡ng thÃ¡i crawl</h2>
-            <p class="muted">Server local sáº½ tá»± Ä‘Ã¡nh thá»©c crawler khi cÃ²n job Ä‘ang chá». Báº£ng nÃ y giÃºp biáº¿t crawl Ä‘ang cháº¡y, Ä‘ang chá» hay Ä‘ang lá»—i.</p>
+            <h2>Trạng thái crawl</h2>
+            <p class="muted">Server local sẽ tự đánh thức crawler khi còn job đang chờ. Bảng này giúp biết crawl đang chạy, đang chờ hay đang lỗi.</p>
           </div>
-          <button class="ghost-btn" type="button" data-crawl-queue-wake>ÄÃ¡nh thá»©c crawler</button>
+          <button class="ghost-btn" type="button" data-crawl-queue-wake>Đánh thức crawler</button>
         </div>
-        <div class="status-line crawl-queue-status" data-crawl-queue-status>Äang kiá»ƒm tra queue crawl...</div>
+        <div class="status-line crawl-queue-status" data-crawl-queue-status>Đang kiểm tra queue crawl...</div>
       </section>
     `;
   }
@@ -418,7 +418,7 @@ export function createAdminRoute({
           <small>${escapeHtml(formatAdminBulletinTime(message.createdAt))}</small>
           <p>${escapeHtml(message.text || '')}</p>
         </div>
-        ${isAdmin ? `<button class="ghost-btn" type="button" data-admin-bulletin-pin="${escapeAttr(message.id)}" data-pinned="${message.pinned ? 'true' : 'false'}">${message.pinned ? 'Bá» ghim' : 'Ghim'}</button>` : '<span class="muted">User</span>'}
+        ${isAdmin ? `<button class="ghost-btn" type="button" data-admin-bulletin-pin="${escapeAttr(message.id)}" data-pinned="${message.pinned ? 'true' : 'false'}">${message.pinned ? 'Bỏ ghim' : 'Ghim'}</button>` : '<span class="muted">User</span>'}
       </article>
     `;
   }
@@ -437,7 +437,7 @@ export function createAdminRoute({
     setControlPending(button);
     if (status) {
       status.className = 'status-line';
-      status.textContent = 'Dang gui tin admin...';
+      status.textContent = 'Đang gửi tin admin...';
     }
     try {
       await fetchJson('/api/admin/bulletin/messages', {
@@ -507,7 +507,7 @@ export function createAdminRoute({
         bindS3RetryFailed(target, refresh);
       } catch (error) {
         target.className = 'status-line s3-sync-status error';
-        target.textContent = `KhÃ´ng Ä‘á»c Ä‘Æ°á»£c tiáº¿n trÃ¬nh S3: ${error.message}`;
+        target.textContent = `Không đọc được tiến trình S3: ${error.message}`;
       }
     };
     refresh();
@@ -519,21 +519,21 @@ export function createAdminRoute({
     if (!button) return;
     button.addEventListener('click', async () => {
       button.disabled = true;
-      button.textContent = 'Äang táº¡o retry...';
+      button.textContent = 'Đang tạo retry...';
       try {
         const result = await fetchJson('/api/admin/s3-sync/retry-failed', {
           method: 'POST',
           headers: adminHeaders()
         });
         target.className = 'status-line s3-sync-status success';
-        target.insertAdjacentHTML('afterbegin', `<p class="muted">ÄÃ£ táº¡o job retry ${Number(result.retryCount || 0)} file thiáº¿u/lá»—i trÃªn S3.</p>`);
+        target.insertAdjacentHTML('afterbegin', `<p class="muted">Đã tạo job retry ${Number(result.retryCount || 0)} file thiếu/lỗi trên S3.</p>`);
         await refresh();
       } catch (error) {
         target.className = 'status-line s3-sync-status error';
-        target.insertAdjacentHTML('afterbegin', `<p class="muted">KhÃ´ng thá»ƒ retry file thiáº¿u: ${escapeHtml(error.message)}</p>`);
+        target.insertAdjacentHTML('afterbegin', `<p class="muted">Không thể retry file thiếu: ${escapeHtml(error.message)}</p>`);
       } finally {
         button.disabled = false;
-        button.textContent = 'Retry file thiáº¿u';
+        button.textContent = 'Retry file thiếu';
       }
     });
   }
@@ -555,13 +555,13 @@ export function createAdminRoute({
         renderCrawlQueueStatus(target, summary);
       } catch (error) {
         target.className = 'status-line crawl-queue-status error';
-        target.textContent = `KhÃ´ng Ä‘á»c Ä‘Æ°á»£c queue crawl: ${error.message}`;
+        target.textContent = `Không đọc được queue crawl: ${error.message}`;
       }
     };
 
     wakeButton?.addEventListener('click', async () => {
       wakeButton.disabled = true;
-      wakeButton.textContent = 'Äang Ä‘Ã¡nh thá»©c...';
+      wakeButton.textContent = 'Đang đánh thức...';
       try {
         const summary = await fetchJson('/api/admin/import-jobs/wake', {
           method: 'POST',
@@ -570,10 +570,10 @@ export function createAdminRoute({
         renderCrawlQueueStatus(target, summary);
       } catch (error) {
         target.className = 'status-line crawl-queue-status error';
-        target.textContent = `KhÃ´ng Ä‘Ã¡nh thá»©c Ä‘Æ°á»£c crawler: ${error.message}`;
+        target.textContent = `Không đánh thức được crawler: ${error.message}`;
       } finally {
         wakeButton.disabled = false;
-        wakeButton.textContent = 'ÄÃ¡nh thá»©c crawler';
+        wakeButton.textContent = 'Đánh thức crawler';
       }
     });
 
@@ -590,26 +590,26 @@ export function createAdminRoute({
     const totalWaiting = Number(counts.queued || 0) + Number(counts.retrying || 0);
     const worker = summary.worker || {};
     const workerText = worker.embeddedEnabled
-      ? worker.active ? 'Crawler local Ä‘ang xá»­ lÃ½ queue.' : 'Crawler local sáºµn sÃ ng tá»± cháº¡y khi cÃ³ job chá».'
-      : 'Crawler embedded Ä‘ang táº¯t; cáº§n cháº¡y worker riÃªng.';
+      ? worker.active ? 'Crawler local đang xử lý queue.' : 'Crawler local sẵn sàng tự chạy khi có job chờ.'
+      : 'Crawler embedded đang tắt; cần chạy worker riêng.';
 
     target.className = `status-line crawl-queue-status${failedJobs.length ? ' warning' : ''}`;
     target.innerHTML = `
       <div class="progress-copy">
-        <strong>${runningJob ? escapeHtml(runningJob.progress?.message || 'Äang crawl...') : totalWaiting ? 'CÃ³ job Ä‘ang chá» crawler nháº­n' : 'Queue crawl Ä‘ang ráº£nh'}</strong>
+        <strong>${runningJob ? escapeHtml(runningJob.progress?.message || 'Đang crawl...') : totalWaiting ? 'Có job đang chờ crawler nhận' : 'Queue crawl đang rảnh'}</strong>
         <span>${escapeHtml(workerText)}</span>
       </div>
       <div class="progress-grid">
-        <span>Äang cháº¡y: ${Number(counts.running || 0)}</span>
-        <span>Äang chá»: ${Number(counts.queued || 0)}</span>
+        <span>Đang chạy: ${Number(counts.running || 0)}</span>
+        <span>Đang chờ: ${Number(counts.queued || 0)}</span>
         <span>Retry: ${Number(counts.retrying || 0)}</span>
-        <span>Lá»—i: ${Number(counts.failed || 0)}</span>
+        <span>Lỗi: ${Number(counts.failed || 0)}</span>
       </div>
-      ${summary.staleResetCount ? `<p class="muted">ÄÃ£ tá»± má»Ÿ khÃ³a ${Number(summary.staleResetCount)} job bá»‹ káº¹t.</p>` : ''}
+      ${summary.staleResetCount ? `<p class="muted">Đã tự mở khóa ${Number(summary.staleResetCount)} job bị kẹt.</p>` : ''}
       ${runningJob ? renderCrawlQueueRunningJob(runningJob) : ''}
-      ${queuedJobs.length ? renderCrawlQueueWaitingList('Job chá» tiáº¿p theo', queuedJobs) : ''}
-      ${retryingJobs.length ? renderCrawlQueueWaitingList('Job sáº½ retry', retryingJobs) : ''}
-      ${failedJobs.length ? renderCrawlQueueWaitingList('Job lá»—i gáº§n nháº¥t', failedJobs) : ''}
+      ${queuedJobs.length ? renderCrawlQueueWaitingList('Job chờ tiếp theo', queuedJobs) : ''}
+      ${retryingJobs.length ? renderCrawlQueueWaitingList('Job sẽ retry', retryingJobs) : ''}
+      ${failedJobs.length ? renderCrawlQueueWaitingList('Job lỗi gần nhất', failedJobs) : ''}
     `;
   }
 
@@ -620,16 +620,16 @@ export function createAdminRoute({
     const imageTotal = Number(progress.totalImages || 0);
     const imageDone = Number(progress.processedImages || progress.downloadedImages || 0);
     const imagePercent = imageTotal ? Math.min(100, Math.round((imageDone / imageTotal) * 100)) : 0;
-    const eta = progress.etaSeconds != null ? formatCrawlDuration(progress.etaSeconds) : 'Ä‘ang tÃ­nh';
+    const eta = progress.etaSeconds != null ? formatCrawlDuration(progress.etaSeconds) : 'đang tính';
     return `
       <div class="crawl-queue-current">
-        <div class="crawl-meter" aria-label="Tiáº¿n trÃ¬nh crawl">
+        <div class="crawl-meter" aria-label="Tiến trình crawl">
           <span style="width:${imagePercent}%"></span>
         </div>
         <div class="progress-grid">
           <span>Chapter: ${chapterDone}/${chapterTotal || '?'}</span>
-          <span>áº¢nh: ${imageDone}/${imageTotal || '?'}</span>
-          <span>Tá»‘c Ä‘á»™: ${formatCrawlRate(progress.imagesPerMinute, 'áº£nh/phÃºt')}</span>
+          <span>Ảnh: ${imageDone}/${imageTotal || '?'}</span>
+          <span>Tốc độ: ${formatCrawlRate(progress.imagesPerMinute, 'ảnh/phút')}</span>
           <span>ETA: ${eta}</span>
         </div>
         <p class="muted">${escapeHtml(job.payload?.url || '')}</p>
@@ -666,44 +666,44 @@ export function createAdminRoute({
         : staleRunning
           ? ' warning'
           : '';
-    const title = status.message || (status.status === 'running' ? 'Äang Ä‘á»“ng bá»™ áº£nh lÃªn S3...' : status.exists ? 'Tiáº¿n trÃ¬nh S3 gáº§n nháº¥t' : 'ChÆ°a cÃ³ tiáº¿n trÃ¬nh S3');
+    const title = status.message || (status.status === 'running' ? 'Đang đồng bộ ảnh lên S3...' : status.exists ? 'Tiến trình S3 gần nhất' : 'Chưa có tiến trình S3');
     const failedItems = Array.isArray(status.failedItems) ? status.failedItems : [];
     target.className = `status-line s3-sync-status${statusClass}`;
     target.innerHTML = `
       <div class="progress-copy">
         <strong>${escapeHtml(title)}</strong>
-        <span>${total ? `${percent.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}% - ${checked.toLocaleString('vi-VN')}/${total.toLocaleString('vi-VN')} file` : 'ChÆ°a cÃ³ job sync Ä‘ang ghi tráº¡ng thÃ¡i.'}</span>
+        <span>${total ? `${percent.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}% - ${checked.toLocaleString('vi-VN')}/${total.toLocaleString('vi-VN')} file` : 'Chưa có job sync đang ghi trạng thái.'}</span>
       </div>
       ${staleRunning ? '<p class="muted">Status S3 sync da hon 90 giay chua cap nhat. Job co the dang ket request S3; nen dung/retry thay vi doi vo han.</p>' : ''}
-      <div class="crawl-meter" aria-label="Tiáº¿n Ä‘á»™ Ä‘á»“ng bá»™ S3">
+      <div class="crawl-meter" aria-label="Tiến độ đồng bộ S3">
         <div style="width:${Math.max(total ? 4 : 0, Math.min(100, percent))}%"></div>
       </div>
       <div class="progress-grid">
-        <span>Tráº¡ng thÃ¡i: ${escapeHtml(status.status || 'idle')}</span>
-        <span>Series: ${escapeHtml(status.seriesId || 'táº¥t cáº£')}</span>
-        <span>Chapter hiá»‡n táº¡i: ${escapeHtml(status.currentChapter || 'Ä‘ang tÃ­nh')}</span>
+        <span>Trạng thái: ${escapeHtml(status.status || 'idle')}</span>
+        <span>Series: ${escapeHtml(status.seriesId || 'tất cả')}</span>
+        <span>Chapter hiện tại: ${escapeHtml(status.currentChapter || 'đang tính')}</span>
         <span>Upload: ${Number(status.uploaded || 0).toLocaleString('vi-VN')}</span>
         <span>Skip S3: ${Number(status.skipped || 0).toLocaleString('vi-VN')}</span>
         <span>Skip cache local: ${Number(status.cachedSkipped || 0).toLocaleString('vi-VN')}</span>
-        <span>Lá»—i: ${Number(status.failed || 0).toLocaleString('vi-VN')}</span>
-        <span>Tá»‘c Ä‘á»™: ${Number(status.ratePerMinute || 0).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} file/phÃºt</span>
-        <span>ETA: ${escapeHtml(status.eta || 'Ä‘ang tÃ­nh')}</span>
-        <span>Luá»“ng: ${Number(status.concurrency || 0) || '?'}</span>
+        <span>Lỗi: ${Number(status.failed || 0).toLocaleString('vi-VN')}</span>
+        <span>Tốc độ: ${Number(status.ratePerMinute || 0).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} file/phút</span>
+        <span>ETA: ${escapeHtml(status.eta || 'đang tính')}</span>
+        <span>Luồng: ${Number(status.concurrency || 0) || '?'}</span>
       </div>
       ${status.currentKey ? `<div class="production-log"><span>${escapeHtml(status.currentKey)}</span></div>` : ''}
       ${failedItems.length ? renderS3FailedItems(failedItems) : ''}
-      ${failedItems.length ? '<button class="ghost-btn" type="button" data-s3-retry-failed>Retry file thiáº¿u</button>' : ''}
+      ${failedItems.length ? '<button class="ghost-btn" type="button" data-s3-retry-failed>Retry file thiếu</button>' : ''}
     `;
   }
 
   function renderS3FailedItems(failedItems = []) {
     return `
       <div class="progress-errors">
-        <strong>File S3 lá»—i gáº§n nháº¥t</strong>
+        <strong>File S3 lỗi gần nhất</strong>
         ${failedItems.slice(-8).map((item) => {
           const error = String(item.error || '');
           const clockHint = /RequestTimeTooSkewed|request time|clock skew/i.test(error)
-            ? ' - Gá»£i Ã½: báº­t Ä‘á»“ng bá»™ giá» Windows rá»“i báº¥m retry.'
+            ? ' - Gợi ý: bật đồng bộ giờ Windows rồi bấm retry.'
             : '';
           return `<span>${escapeHtml(item.key || '')}: ${escapeHtml(error)}${escapeHtml(clockHint)}</span>`;
         }).join('')}
@@ -739,10 +739,10 @@ export function createAdminRoute({
         ${renderTopbar()}
         <section class="admin-login-card">
           <form class="import-panel admin-login-panel" data-admin-login-form>
-            <h2>ÄÄƒng nháº­p admin</h2>
+            <h2>Đăng nhập admin</h2>
             <input name="email" type="email" required placeholder="Email admin" value="${escapeAttr(loadAdminEmail())}" autocomplete="username" />
-            <input name="password" type="password" required placeholder="Máº­t kháº©u" autocomplete="current-password" />
-            <button class="primary-btn" type="submit">ÄÄƒng nháº­p</button>
+            <input name="password" type="password" required placeholder="Mật khẩu" autocomplete="current-password" />
+            <button class="primary-btn" type="submit">Đăng nhập</button>
           </form>
           <p class="status-line ${message ? 'error' : ''}" data-status>${escapeHtml(message)}</p>
         </section>
@@ -765,17 +765,17 @@ export function createAdminRoute({
           ${renderAdminSeriesCover(series)}
           <div class="admin-series-summary-copy">
             <strong title="${escapeAttr(series.title)}">${escapeHtml(series.title)}</strong>
-            <span>${stats.importedChapterCount}/${stats.chapterCount} chapter - ${stats.pageCount} áº£nh</span>
+            <span>${stats.importedChapterCount}/${stats.chapterCount} chapter - ${stats.pageCount} ảnh</span>
             ${renderAdminSeriesBadges(stats)}
             ${renderAdminProductionBadge(series)}
           </div>
         </div>
         <div class="admin-series-card-actions">
-          <a class="primary-btn" data-link href="/admin/series/${escapeAttr(series.id)}">Quáº£n lÃ½</a>
-          ${localOps ? `<button class="ghost-btn" type="button" data-update-chapters="${escapeAttr(series.id)}" ${sourceUrl ? '' : 'disabled'}>Cáº­p nháº­t chapter má»›i</button>` : ''}
-          ${localOps ? `<button class="ghost-btn production-quick-btn" type="button" data-publish-production="${escapeAttr(series.id)}" ${adminProductionStatus?.storage?.productionPostgres?.configured ? '' : 'disabled'}>ÄÆ°a lÃªn production</button>` : ''}
+          <a class="primary-btn" data-link href="/admin/series/${escapeAttr(series.id)}">Quản lý</a>
+          ${localOps ? `<button class="ghost-btn" type="button" data-update-chapters="${escapeAttr(series.id)}" ${sourceUrl ? '' : 'disabled'}>Cập nhật chapter mới</button>` : ''}
+          ${localOps ? `<button class="ghost-btn production-quick-btn" type="button" data-publish-production="${escapeAttr(series.id)}" ${adminProductionStatus?.storage?.productionPostgres?.configured ? '' : 'disabled'}>Đưa lên production</button>` : ''}
           ${series.slug ? `<button class="ghost-btn" type="button" data-production-check="${escapeAttr(series.id)}" data-production-url="${escapeAttr(productionSeriesUrl(series))}">Check</button>` : ''}
-          ${series.slug ? `<a class="ghost-btn" data-link href="/truyen/${escapeAttr(series.slug)}">Má»Ÿ public</a>` : ''}
+          ${series.slug ? `<a class="ghost-btn" data-link href="/truyen/${escapeAttr(series.slug)}">Mở public</a>` : ''}
         </div>
         ${localOps ? `<div class="status-line admin-update-status" data-update-chapters-status="${escapeAttr(series.id)}"></div>` : ''}
         <div class="status-line production-publish-status" data-production-publish-status="${escapeAttr(series.id)}"></div>
@@ -793,16 +793,16 @@ export function createAdminRoute({
         <section class="admin-detail-hero">
           ${renderAdminSeriesCover(series, { large: true })}
           <div class="admin-detail-title">
-            <p class="eyebrow">Quáº£n lÃ½ truyá»‡n</p>
+            <p class="eyebrow">Quản lý truyện</p>
             <h2>${escapeHtml(series.title)}</h2>
-            <p>${stats.importedChapterCount}/${stats.chapterCount} chapter - ${stats.pageCount} áº£nh - ${escapeHtml(statusLabel(stats.status))}</p>
+            <p>${stats.importedChapterCount}/${stats.chapterCount} chapter - ${stats.pageCount} ảnh - ${escapeHtml(statusLabel(stats.status))}</p>
             ${renderAdminSeriesBadges(stats)}
             ${renderAdminProductionBadge(series)}
           </div>
           ${localOps ? `<div class="admin-detail-actions">
-            <button class="ghost-btn" type="button" data-update-chapters="${escapeAttr(series.id)}" ${sourceUrl ? '' : 'disabled'}>Cáº­p nháº­t chapter má»›i</button>
-            <span class="muted">${sourceUrl ? 'Chá»‰ táº£i chapter chÆ°a cÃ³, khÃ´ng táº£i láº¡i áº£nh cÅ©.' : 'ChÆ°a cÃ³ source URL Ä‘á»ƒ cáº­p nháº­t.'}</span>
-          </div>` : `<div class="admin-detail-actions"><span class="muted">Production admin chá»‰ quáº£n lÃ½ ná»™i dung; crawl vÃ  sync cháº¡y á»Ÿ local.</span></div>`}
+            <button class="ghost-btn" type="button" data-update-chapters="${escapeAttr(series.id)}" ${sourceUrl ? '' : 'disabled'}>Cập nhật chapter mới</button>
+            <span class="muted">${sourceUrl ? 'Chỉ tải chapter chưa có, không tải lại ảnh cũ.' : 'Chưa có source URL để cập nhật.'}</span>
+          </div>` : `<div class="admin-detail-actions"><span class="muted">Production admin chỉ quản lý nội dung; crawl và sync chạy ở local.</span></div>`}
         </section>
         ${localOps ? `<div class="status-line admin-wide admin-update-status" data-update-chapters-status="${escapeAttr(series.id)}"></div>` : ''}
         ${localOps ? renderProductionPublishPanel(series) : ''}
@@ -810,33 +810,33 @@ export function createAdminRoute({
           <div class="section-head admin-editor-section-head">
             <div>
               <h2>Metadata</h2>
-              <p>Cáº­p nháº­t thÃ´ng tin hiá»ƒn thá»‹ public vÃ  SEO.</p>
+              <p>Cập nhật thông tin hiển thị public và SEO.</p>
             </div>
           </div>
           <div class="admin-series-details-grid">
-            <label>TiÃªu Ä‘á»<input name="title" value="${escapeAttr(series.title)}" /></label>
+            <label>Tiêu đề<input name="title" value="${escapeAttr(series.title)}" /></label>
             <label>Slug<input name="slug" value="${escapeAttr(series.slug || '')}" /></label>
-            <label>Tráº¡ng thÃ¡i${renderStatusSelect('status', stats.status)}</label>
+            <label>Trạng thái${renderStatusSelect('status', stats.status)}</label>
             <label>Cover URL<input name="coverUrl" value="${escapeAttr(series.coverUrl || '')}" /></label>
-            <label>Aliases<input name="aliases" value="${escapeAttr((series.aliases || []).join(', '))}" placeholder="TÃªn khÃ¡c, cÃ¡ch nhau bá»Ÿi dáº¥u pháº©y" /></label>
+            <label>Aliases<input name="aliases" value="${escapeAttr((series.aliases || []).join(', '))}" placeholder="Tên khác, cách nhau bởi dấu phẩy" /></label>
             <label>Tags<input name="tags" value="${escapeAttr(getManualTagNames(series).join(', '))}" placeholder="Action, Fantasy, School Life" /></label>
             ${renderOriginTagPicker(series)}
-            <label class="admin-wide">MÃ´ táº£ SEO<textarea name="description" aria-label="MÃ´ táº£" placeholder="MÃ´ táº£ SEO">${escapeHtml(series.description || '')}</textarea></label>
+            <label class="admin-wide">Mô tả SEO<textarea name="description" aria-label="Mô tả" placeholder="Mô tả SEO">${escapeHtml(series.description || '')}</textarea></label>
             ${localOps ? `<label class="toggle-row"><input name="scheduleEnabled" type="checkbox" ${schedule.enabled ? 'checked' : ''} /> Auto crawl</label>` : ''}
-            ${localOps ? `<label>Interval giá»<input name="intervalHours" type="number" min="1" value="${Number(schedule.intervalHours || 24)}" /></label>` : ''}
+            ${localOps ? `<label>Interval giờ<input name="intervalHours" type="number" min="1" value="${Number(schedule.intervalHours || 24)}" /></label>` : ''}
           </div>
         </section>
         <section class="admin-editor-section">
           <div class="admin-chapter-review admin-wide">
             <div class="admin-chapter-review-head">
-              <strong>Duyá»‡t chapter</strong>
-              <span>áº¨n chapter lá»—i hoáº·c chÆ°a muá»‘n public. KhÃ´ng xÃ³a áº£nh cache.</span>
+              <strong>Duyệt chapter</strong>
+              <span>Ẩn chapter lỗi hoặc chưa muốn public. Không xóa ảnh cache.</span>
             </div>
-            ${chapters.length ? chapters.map((chapter) => renderAdminChapterRow(series, chapter)).join('') : '<p class="muted">ChÆ°a cÃ³ chapter.</p>'}
+            ${chapters.length ? chapters.map((chapter) => renderAdminChapterRow(series, chapter)).join('') : '<p class="muted">Chưa có chapter.</p>'}
           </div>
         </section>
         <div class="admin-editor-savebar">
-          <button class="primary-btn" type="submit">LÆ°u thay Ä‘á»•i</button>
+          <button class="primary-btn" type="submit">Lưu thay đổi</button>
         </div>
       </form>
     `;
@@ -854,38 +854,38 @@ export function createAdminRoute({
     const steps = [
       {
         key: 'update-chapters',
-        label: '1. Crawl chapter má»›i',
-        description: sourceUrl ? 'Chá»‰ táº£i chapter chÆ°a cÃ³, khÃ´ng táº£i láº¡i áº£nh cÅ©.' : 'Cáº§n source URL trÆ°á»›c khi cáº­p nháº­t chapter.',
-        button: 'Cáº­p nháº­t chapter má»›i',
+        label: '1. Crawl chapter mới',
+        description: sourceUrl ? 'Chỉ tải chapter chưa có, không tải lại ảnh cũ.' : 'Cần source URL trước khi cập nhật chapter.',
+        button: 'Cập nhật chapter mới',
         disabled: !sourceUrl,
         buttonAttr: `data-update-chapters="${escapeAttr(series.id)}"`
       },
       {
         key: 'optimize',
-        label: '2. Optimize áº£nh',
-        description: 'Tá»‘i Æ°u nhanh áº£nh má»›i/chÆ°a tá»‘i Æ°u. KhÃ´ng cleanup sÃ¢u máº·c Ä‘á»‹nh.',
-        button: 'Cháº¡y optimize',
+        label: '2. Optimize ảnh',
+        description: 'Tối ưu nhanh ảnh mới/chưa tối ưu. Không cleanup sâu mặc định.',
+        button: 'Chạy optimize',
         steps: ['optimize']
       },
       {
         key: 'sync-images',
-        label: '3. Sync áº£nh S3',
-        description: 'Chá»‰ sync áº£nh cá»§a truyá»‡n Ä‘ang chá»n, cÃ³ retry vÃ  resume checkpoint.',
+        label: '3. Sync ảnh S3',
+        description: 'Chỉ sync ảnh của truyện đang chọn, có retry và resume checkpoint.',
         button: 'Sync S3',
         steps: ['sync-images']
       },
       {
         key: 'sync-catalog-db',
         label: '4. Sync catalog DB',
-        description: 'Cap nhat metadata/chapter/page cua rieng truyen nay len production DB sau khi anh da len S3.',
+        description: 'Cập nhật metadata/chapter/page của riêng truyện này lên production DB sau khi ảnh đã lên S3.',
         button: 'Sync DB',
         steps: ['sync-catalog-db'],
         disabled: !productionDbConfigured
       },
       {
         key: 'production-check',
-        label: '5. Kiá»ƒm tra production',
-        description: 'Má»Ÿ/check URL production cá»§a truyá»‡n sau khi sync xong.',
+        label: '5. Kiểm tra production',
+        description: 'Mở/check URL production của truyện sau khi sync xong.',
         button: 'Check production',
         check: true,
         disabled: !productionUrl
@@ -896,8 +896,8 @@ export function createAdminRoute({
         <div class="section-head admin-editor-section-head">
           <div>
             <p class="eyebrow">Production pipeline</p>
-            <h2>Tá»‘i Æ°u áº£nh vÃ  Ä‘Æ°a truyá»‡n lÃªn production</h2>
-            <p>Cháº¡y tá»«ng bÆ°á»›c Ä‘á»ƒ dá»… theo dÃµi vÃ  retry riÃªng khi káº¹t. Náº¿u S3 lá»—i thÃ¬ chá»‰ báº¥m láº¡i bÆ°á»›c Sync S3, khÃ´ng cáº§n cháº¡y láº¡i toÃ n bá»™.</p>
+            <h2>Tối ưu ảnh và đưa truyện lên production</h2>
+            <p>Chạy từng bước để dễ theo dõi và retry riêng khi kẹt. Nếu S3 lỗi thì chỉ bấm lại bước Sync S3, không cần chạy lại toàn bộ.</p>
           </div>
           <button class="primary-btn" type="button" data-publish-production="${escapeAttr(series.id)}" ${productionDbConfigured ? '' : 'disabled'}>Chạy nhanh: optimize + sync ảnh + sync DB</button>
         </div>
@@ -907,7 +907,7 @@ export function createAdminRoute({
         </div>
         <div class="production-publish-note">
           <span>Khuyến nghị: crawl mới -> optimize -> sync ảnh S3 -> sync catalog DB -> check production.</span>
-          ${productionUrl ? `<a href="${escapeAttr(productionUrl)}" target="_blank" rel="noopener noreferrer">Má»Ÿ production</a>` : '<span>Truyá»‡n chÆ°a cÃ³ slug public Ä‘á»ƒ má»Ÿ production.</span>'}
+          ${productionUrl ? `<a href="${escapeAttr(productionUrl)}" target="_blank" rel="noopener noreferrer">Mở production</a>` : '<span>Truyện chưa có slug public để mở production.</span>'}
         </div>
         <div class="status-line admin-wide production-publish-status" data-production-publish-status="${escapeAttr(series.id)}"></div>
       </section>
@@ -938,7 +938,7 @@ export function createAdminRoute({
   function renderAdminSeriesCover(series, { large = false } = {}) {
     const coverUrl = series.thumbnailUrl || series.coverThumbnailUrl || series.coverUrl || series.imageUrl || '';
     const fallbackUrl = firstReadablePageImage(series);
-    const initial = String(series.title || 'Truyá»‡n').trim().slice(0, 2).toUpperCase();
+    const initial = String(series.title || 'Truyện').trim().slice(0, 2).toUpperCase();
     return `
       <span class="admin-series-cover ${large ? 'is-large' : ''}" aria-hidden="true">
         <span class="admin-series-cover-fallback">${escapeHtml(initial || 'TR')}</span>
@@ -978,8 +978,8 @@ export function createAdminRoute({
       <div class="admin-series-badges">
         <span class="admin-series-status is-${normalizeStatusClass(stats.status)}">${escapeHtml(statusLabel(stats.status))}</span>
         ${stats.draftCount ? `<span>${stats.draftCount} draft</span>` : ''}
-        ${stats.removedCount ? `<span>${stats.removedCount} Ä‘Ã£ áº©n</span>` : ''}
-        ${stats.missingImageCount ? `<span>${stats.missingImageCount} thiáº¿u áº£nh</span>` : ''}
+        ${stats.removedCount ? `<span>${stats.removedCount} đã ẩn</span>` : ''}
+        ${stats.missingImageCount ? `<span>${stats.missingImageCount} thiếu ảnh</span>` : ''}
       </div>
     `;
   }
@@ -995,14 +995,14 @@ export function createAdminRoute({
     const sync = status?.sync || null;
     const title = status
       ? [
-        `áº¢nh S3: ${Number(images.uploaded || 0)}/${Number(images.total || 0)}`,
-        sync ? `Äang sync: ${Number(sync.percent || 0)}% - ETA ${sync.eta || 'Ä‘ang tÃ­nh'}` : ''
-      ].filter(Boolean).join(' Â· ')
-      : 'ChÆ°a cÃ³ dá»¯ liá»‡u sync local Ä‘á»ƒ káº¿t luáº­n.';
+        `Ảnh S3: ${Number(images.uploaded || 0)}/${Number(images.total || 0)}`,
+        sync ? `Đang sync: ${Number(sync.percent || 0)}% - ETA ${sync.eta || 'đang tính'}` : ''
+      ].filter(Boolean).join(' · ')
+      : 'Chưa có dữ liệu sync local để kết luận.';
     return `
       <div class="admin-production-badge-row">
         <span class="admin-production-badge is-${escapeAttr(productionStatusClass(state))}" title="${escapeAttr(title)}">
-          ${productionStatusIcon(state)} ${escapeHtml(status?.label || 'ChÆ°a kiá»ƒm tra')}
+          ${productionStatusIcon(state)} ${escapeHtml(status?.label || 'Chưa kiểm tra')}
         </span>
         ${renderAdminProductionMiniStats(status)}
       </div>
@@ -1010,17 +1010,17 @@ export function createAdminRoute({
   }
 
   function renderAdminProductionMiniStats(status) {
-    if (!status) return '<small>ChÆ°a cÃ³ dá»¯ liá»‡u S3 sync state.</small>';
+    if (!status) return '<small>Chưa có dữ liệu S3 sync state.</small>';
     if (status.state === 'syncing') {
-      return `<small>${Number(status.sync?.percent || 0)}% Â· ETA ${escapeHtml(status.sync?.eta || 'Ä‘ang tÃ­nh')}</small>`;
+      return `<small>${Number(status.sync?.percent || 0)}% · ETA ${escapeHtml(status.sync?.eta || 'đang tính')}</small>`;
     }
     if (status.state === 'missing-images') {
-      return `<small>Thiáº¿u ${Number(status.images?.missing || 0).toLocaleString('vi-VN')} áº£nh</small>`;
+      return `<small>Thiếu ${Number(status.images?.missing || 0).toLocaleString('vi-VN')} ảnh</small>`;
     }
     if (status.state === 'ok') {
       return '<small>Ảnh S3 đã có trong state</small>';
     }
-    return `<small>${escapeHtml(status.label || 'ChÆ°a kiá»ƒm tra')}</small>`;
+    return `<small>${escapeHtml(status.label || 'Chưa kiểm tra')}</small>`;
   }
 
   function productionStatusClass(state = '') {
@@ -1032,10 +1032,10 @@ export function createAdminRoute({
   }
 
   function productionStatusIcon(state = '') {
-    if (state === 'ok') return 'âœ“';
+    if (state === 'ok') return '✓';
     if (state === 'syncing') return '...';
     if (state === 'missing-images') return '!';
-    return 'â—‹';
+    return '○';
   }
 
   function statusLabel(status) {
@@ -1065,19 +1065,19 @@ export function createAdminRoute({
     const readable = hasReadableChapter(chapter);
     const status = chapter.status || (readable ? 'public' : 'draft');
     const flags = [
-      readable ? '' : 'thiáº¿u áº£nh',
-      status === 'removed' ? 'Ä‘Ã£ áº©n' : '',
+      readable ? '' : 'thiếu ảnh',
+      status === 'removed' ? 'đã ẩn' : '',
       status === 'draft' ? 'draft' : ''
     ].filter(Boolean);
     return `
       <div class="admin-chapter-row" data-admin-chapter="${escapeAttr(chapter.id)}">
         <div>
-          <input name="chapterTitle:${escapeAttr(chapter.id)}" value="${escapeAttr(chapter.title || chapter.label || '')}" aria-label="TÃªn chapter" />
-          <span>${chapter.pageCount || 0} áº£nh${flags.length ? ` - ${escapeHtml(flags.join(' - '))}` : ''}</span>
+          <input name="chapterTitle:${escapeAttr(chapter.id)}" value="${escapeAttr(chapter.title || chapter.label || '')}" aria-label="Tên chapter" />
+          <span>${chapter.pageCount || 0} ảnh${flags.length ? ` - ${escapeHtml(flags.join(' - '))}` : ''}</span>
         </div>
         ${renderStatusSelect(`chapterStatus:${escapeAttr(chapter.id)}`, status)}
-        <input name="chapterReason:${escapeAttr(chapter.id)}" value="${escapeAttr(chapter.takedownReason || '')}" placeholder="LÃ½ do áº©n" />
-        <a class="ghost-btn" data-link href="/truyen/${series.slug}/${chapterHrefSegment(chapter)}">Má»Ÿ</a>
+        <input name="chapterReason:${escapeAttr(chapter.id)}" value="${escapeAttr(chapter.takedownReason || '')}" placeholder="Lý do ẩn" />
+        <a class="ghost-btn" data-link href="/truyen/${series.slug}/${chapterHrefSegment(chapter)}">Mở</a>
       </div>
     `;
   }
@@ -1087,8 +1087,8 @@ export function createAdminRoute({
     return `
       <div class="admin-origin-picker admin-wide">
         <div>
-          <strong>PhÃ¢n loáº¡i quá»‘c gia</strong>
-          <span>Quáº£n lÃ½ tag hiá»ƒn thá»‹ á»Ÿ trang chá»§: Truyá»‡n HÃ n / Truyá»‡n Trung.</span>
+          <strong>Phân loại quốc gia</strong>
+          <span>Quản lý tag hiển thị ở trang chủ: Truyện Hàn / Truyện Trung.</span>
         </div>
         <div class="admin-origin-options">
           ${getOriginTagOptions().map((option) => `
@@ -1107,9 +1107,9 @@ export function createAdminRoute({
 
   function getOriginTagOptions() {
     return [
-      { value: '', label: 'ChÆ°a rÃµ', hint: 'KhÃ´ng gáº¯n tag quá»‘c gia', tags: [] },
-      { value: 'manhwa', label: 'Truyá»‡n HÃ n', hint: 'Gáº¯n Manhwa + Truyá»‡n HÃ n', tags: ['Manhwa', 'Truyá»‡n HÃ n'] },
-      { value: 'manhua', label: 'Truyá»‡n Trung', hint: 'Gáº¯n Manhua + Truyá»‡n Trung', tags: ['Manhua', 'Truyá»‡n Trung'] }
+      { value: '', label: 'Chưa rõ', hint: 'Không gắn tag quốc gia', tags: [] },
+      { value: 'manhwa', label: 'Truyện Hàn', hint: 'Gắn Manhwa + Truyện Hàn', tags: ['Manhwa', 'Truyện Hàn'] },
+      { value: 'manhua', label: 'Truyện Trung', hint: 'Gắn Manhua + Truyện Trung', tags: ['Manhua', 'Truyện Trung'] }
     ];
   }
 
@@ -1158,7 +1158,7 @@ export function createAdminRoute({
   function normalizeAdminTagName(value = '') {
     return String(value)
       .toLowerCase()
-      .replace(/Ä‘/g, 'd')
+      .replace(/đ/g, 'd')
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9]+/g, '-')
@@ -1175,7 +1175,7 @@ export function createAdminRoute({
     if (!urls.length) {
       if (status) {
         status.className = 'status-line error';
-        status.textContent = 'Vui long nhap URL truyen hop le.';
+        status.textContent = 'Vui lòng nhập URL truyện hợp lệ.';
       }
       return;
     }
@@ -1183,7 +1183,7 @@ export function createAdminRoute({
     setControlPending(button);
     if (status) {
       status.className = 'status-line';
-      status.textContent = urls.length > 1 ? `Dang tao ${urls.length} job crawl...` : 'Dang tao job crawl...';
+      status.textContent = urls.length > 1 ? `Đang tạo ${urls.length} job crawl...` : 'Đang tạo job crawl...';
     }
 
     try {
@@ -1199,13 +1199,13 @@ export function createAdminRoute({
         body: JSON.stringify(payload)
       });
       const jobs = Array.isArray(result.jobs) ? result.jobs : result.job ? [{ job: result.job, reused: result.reused }] : [];
-      if (!jobs.length) throw new Error('Khong tao duoc job crawl.');
+      if (!jobs.length) throw new Error('Không tạo được job crawl.');
       if (jobs.length === 1) {
         const series = await pollImportJob(jobs[0].job.id, status, { navigateOnComplete: false });
-        adminFlashMessage = `Da crawl xong ${series.title || 'truyen'}.`;
+        adminFlashMessage = `Đã crawl xong ${series.title || 'truyện'}.`;
       } else {
-        if (status) status.textContent = `ÄÃ£ táº¡o ${jobs.length} job crawl. Theo dÃµi trong báº£ng Tráº¡ng thÃ¡i crawl.`;
-        adminFlashMessage = `ÄÃ£ táº¡o ${jobs.length} job crawl.`;
+        if (status) status.textContent = `Đã tạo ${jobs.length} job crawl. Theo dõi trong bảng Trạng thái crawl.`;
+        adminFlashMessage = `Đã tạo ${jobs.length} job crawl.`;
       }
       invalidateContentCache();
       await renderAdmin();
@@ -1273,7 +1273,7 @@ export function createAdminRoute({
     setControlPending(button);
     if (status) {
       status.className = 'status-line';
-      status.textContent = 'Äang Ä‘Äƒng nháº­p...';
+      status.textContent = 'Đang đăng nhập...';
     }
   
     try {
@@ -1303,10 +1303,10 @@ export function createAdminRoute({
     const seriesId = button.dataset.updateChapters;
     const status = app.querySelector(`[data-update-chapters-status="${CSS.escape(seriesId)}"]`);
     button.disabled = true;
-    button.textContent = 'Äang cáº­p nháº­t...';
+    button.textContent = 'Đang cập nhật...';
     if (status) {
       status.className = 'status-line admin-wide admin-update-status';
-      status.textContent = 'Äang táº¡o job cáº­p nháº­t chapter má»›i...';
+      status.textContent = 'Đang tạo job cập nhật chapter mới...';
     }
 
     try {
@@ -1315,13 +1315,13 @@ export function createAdminRoute({
         headers: adminHeaders(),
         body: JSON.stringify({})
       });
-      if (result.reused && status) status.textContent = 'Truyá»‡n nÃ y Ä‘ang cÃ³ job crawl, Ä‘ang theo dÃµi job hiá»‡n táº¡i...';
+      if (result.reused && status) status.textContent = 'Truyện này đang có job crawl, đang theo dõi job hiện tại...';
       const series = await pollImportJob(result.job.id, status, { navigateOnComplete: false });
       const summary = series.importSummary || {};
       const count = Number(summary.newChapterCount || 0);
       adminFlashMessage = count > 0
-        ? `ÄÃ£ thÃªm ${count} chapter má»›i cho ${series.title}.`
-        : `ChÆ°a cÃ³ chapter má»›i cho ${series.title}.`;
+        ? `Đã thêm ${count} chapter mới cho ${series.title}.`
+        : `Chưa có chapter mới cho ${series.title}.`;
       invalidateContentCache();
       await renderAdmin();
     } catch (error) {
@@ -1330,7 +1330,7 @@ export function createAdminRoute({
         status.textContent = error.message;
       }
       button.disabled = false;
-      button.textContent = 'Cáº­p nháº­t chapter má»›i';
+      button.textContent = 'Cập nhật chapter mới';
     }
   }
 
@@ -1364,11 +1364,11 @@ export function createAdminRoute({
     const status = app.querySelector(`[data-production-publish-status="${CSS.escape(seriesId)}"]`);
     const originalText = button.textContent;
     button.disabled = true;
-    button.textContent = steps.length ? 'Dang chay buoc...' : 'Dang chay pipeline...';
+    button.textContent = steps.length ? 'Đang chạy bước...' : 'Đang chạy pipeline...';
     try {
       if (status) {
         status.className = 'status-line admin-wide production-publish-status';
-        status.textContent = steps.length ? 'Dang tao job cho buoc da chon...' : 'Dang tao workflow production...';
+        status.textContent = steps.length ? 'Đang tạo job cho bước đã chọn...' : 'Đang tạo workflow production...';
       }
       const result = await fetchJson(`/api/admin/series/${encodeURIComponent(seriesId)}/publish-production`, {
         method: 'POST',
@@ -1376,15 +1376,15 @@ export function createAdminRoute({
         body: JSON.stringify({ steps })
       });
       if (result.reused && status) {
-        status.textContent = 'Dang dung lai job production dang chay cho buoc nay...';
+        status.textContent = 'Đang dùng lại job production đang chạy cho bước này...';
       }
       const job = await pollProductionJob(result.job.id, status);
       if (status) renderProductionProgress(status, job);
-      if (job.status === 'completed') button.textContent = steps.length ? 'Chay lai buoc nay' : 'Sync lai production';
+      if (job.status === 'completed') button.textContent = steps.length ? 'Chạy lại bước này' : 'Sync lại production';
     } catch (error) {
       if (status) {
         status.className = 'status-line admin-wide production-publish-status error';
-        status.innerHTML = renderAdminApiError(error, 'Khong chay duoc production pipeline.');
+        status.innerHTML = renderAdminApiError(error, 'Không chạy được production pipeline.');
       }
       button.textContent = originalText;
     } finally {
@@ -1399,12 +1399,12 @@ export function createAdminRoute({
     const status = app.querySelector(`[data-production-publish-status="${CSS.escape(seriesId)}"]`);
     const originalText = button.textContent;
     button.disabled = true;
-    button.textContent = 'Dang check...';
+    button.textContent = 'Đang check...';
     try {
-      if (!url) throw new Error('Truyen chua co production URL de kiem tra.');
+      if (!url) throw new Error('Truyện chưa có production URL để kiểm tra.');
       if (status) {
         status.className = 'status-line admin-wide production-publish-status';
-        status.textContent = 'Dang kiem tra production URL...';
+        status.textContent = 'Đang kiểm tra production URL...';
       }
       const result = await fetchJson('/api/admin/production-check', {
         method: 'POST',
@@ -1438,7 +1438,7 @@ export function createAdminRoute({
       ${checks.length ? `<div class="production-step-list">
         ${checks.map((check) => `
           <article class="production-step is-${check.ok ? 'completed' : 'failed'}">
-            <b>${check.ok ? 'âœ“' : '!'} ${escapeHtml(check.label || check.key || 'Check')}</b>
+            <b>${check.ok ? '✓' : '!'} ${escapeHtml(check.label || check.key || 'Check')}</b>
             <span>${escapeHtml(check.url || '')}</span>
             <small>${check.ok ? `HTTP ${Number(check.status || 200)}` : escapeHtml(check.error || `HTTP ${Number(check.status || 0)}`)}</small>
           </article>
@@ -1494,7 +1494,7 @@ export function createAdminRoute({
       });
       renderProductionProgress(status, job);
       if (job.status === 'completed') return job;
-      if (job.status === 'failed') throw new Error(job.error || 'Production workflow tháº¥t báº¡i.');
+      if (job.status === 'failed') throw new Error(job.error || 'Production workflow thất bại.');
       await new Promise((resolve) => setTimeout(resolve, 1200));
     }
   }
@@ -1511,18 +1511,18 @@ export function createAdminRoute({
       <div class="progress-copy">
         <strong>${escapeHtml(productionJobMessage(job, activeStep))}</strong>
         ${job.error ? `<small>${escapeHtml(job.error)}</small>` : ''}
-        <span>${done}/${steps.length || '?'} bÆ°á»›c - ${escapeHtml(job.status || 'running')}</span>
+        <span>${done}/${steps.length || '?'} bước - ${escapeHtml(job.status || 'running')}</span>
       </div>
-      <div class="crawl-meter" aria-label="Tiáº¿n Ä‘á»™ production workflow">
+      <div class="crawl-meter" aria-label="Tiến độ production workflow">
         <div style="width:${Math.max(4, Math.min(100, percent))}%"></div>
       </div>
       <div class="production-step-list">
         ${steps.map((step, index) => `
           <article class="production-step is-${escapeAttr(step.status || 'pending')}">
-            <b>${productionStepIcon(step.status)} ${index + 1}. ${escapeHtml(step.label || step.key || 'BÆ°á»›c')}</b>
+            <b>${productionStepIcon(step.status)} ${index + 1}. ${escapeHtml(step.label || step.key || 'Bước')}</b>
             <span>${escapeHtml(step.description || '')}</span>
             ${renderProductionStepProgress(step)}
-            ${step.error ? `<small>${escapeHtml(step.error)}</small>` : step.output && step.status === 'completed' ? `<small>${escapeHtml(step.output.split('\n').slice(-2).join(' Â· '))}</small>` : ''}
+            ${step.error ? `<small>${escapeHtml(step.error)}</small>` : step.output && step.status === 'completed' ? `<small>${escapeHtml(step.output.split('\n').slice(-2).join(' · '))}</small>` : ''}
           </article>
         `).join('')}
       </div>
@@ -1538,47 +1538,47 @@ export function createAdminRoute({
     const percent = Math.round((checked / total) * 100);
     return `
       <div class="production-step-progress">
-        <div class="crawl-meter" aria-label="Tiáº¿n Ä‘á»™ ${escapeAttr(step.label || step.key || 'sync')}">
+        <div class="crawl-meter" aria-label="Tiến độ ${escapeAttr(step.label || step.key || 'sync')}">
           <div style="width:${Math.max(4, Math.min(100, percent))}%"></div>
         </div>
         <div class="production-step-metrics">
-          <span>ÄÃ£ kiá»ƒm tra: ${checked}/${total}</span>
+          <span>Đã kiểm tra: ${checked}/${total}</span>
           <span>Upload: ${Number(progress.uploaded || 0)}</span>
           <span>Skip: ${Number(progress.skipped || 0)}</span>
           <span>Skip cache local: ${Number(progress.cached || progress.cachedSkipped || 0)}</span>
-          <span>Lá»—i: ${Number(progress.failed || 0)}</span>
-          <span>Tá»‘c Ä‘á»™: ${Number(progress.ratePerMinute || 0).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} file/phÃºt</span>
-          <span>ETA: ${escapeHtml(progress.eta || 'Ä‘ang tÃ­nh')}</span>
-          <span>Luá»“ng: ${Number(progress.concurrency || 0) || '?'}</span>
+          <span>Lỗi: ${Number(progress.failed || 0)}</span>
+          <span>Tốc độ: ${Number(progress.ratePerMinute || 0).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} file/phút</span>
+          <span>ETA: ${escapeHtml(progress.eta || 'đang tính')}</span>
+          <span>Luồng: ${Number(progress.concurrency || 0) || '?'}</span>
         </div>
       </div>
     `;
   }
 
   function productionJobMessage(job, activeStep = {}) {
-    if (job.status === 'completed') return job.result?.message || 'ÄÃ£ sync production xong.';
-    if (job.status === 'failed') return job.error || activeStep.error || 'Workflow production bá»‹ lá»—i.';
-    if (activeStep.label) return `Äang cháº¡y: ${activeStep.label}`;
-    return 'Äang chuáº©n bá»‹ workflow production...';
+    if (job.status === 'completed') return job.result?.message || 'Đã sync production xong.';
+    if (job.status === 'failed') return job.error || activeStep.error || 'Workflow production bị lỗi.';
+    if (activeStep.label) return `Đang chạy: ${activeStep.label}`;
+    return 'Đang chuẩn bị workflow production...';
   }
 
   function productionStepIcon(status) {
-    if (status === 'completed') return 'âœ“';
-    if (status === 'running') return 'â€¦';
+    if (status === 'completed') return '✓';
+    if (status === 'running') return '…';
     if (status === 'failed') return '!';
-    return 'â—‹';
+    return '○';
   }
 
   function formatCrawlDuration(seconds) {
     const value = Number(seconds);
-    if (!Number.isFinite(value) || value < 0) return 'Ä‘ang tÃ­nh';
-    if (value < 60) return `${Math.max(1, Math.round(value))} giÃ¢y`;
+    if (!Number.isFinite(value) || value < 0) return 'đang tính';
+    if (value < 60) return `${Math.max(1, Math.round(value))} giây`;
     const minutes = Math.floor(value / 60);
     const remainingSeconds = Math.round(value % 60);
-    if (minutes < 60) return remainingSeconds ? `${minutes} phÃºt ${remainingSeconds} giÃ¢y` : `${minutes} phÃºt`;
+    if (minutes < 60) return remainingSeconds ? `${minutes} phút ${remainingSeconds} giây` : `${minutes} phút`;
     const hours = Math.floor(minutes / 60);
     const remainingMinutes = minutes % 60;
-    return remainingMinutes ? `${hours} giá» ${remainingMinutes} phÃºt` : `${hours} giá»`;
+    return remainingMinutes ? `${hours} giờ ${remainingMinutes} phút` : `${hours} giờ`;
   }
 
   function formatCrawlRate(value, suffix) {
@@ -1613,27 +1613,27 @@ export function createAdminRoute({
     status.className = `status-line import-progress${job.status === 'failed' ? ' error' : ''}${isAdminUpdateStatus ? ' admin-wide admin-update-status' : ''}`;
     status.innerHTML = `
       <div class="progress-copy">
-        <strong>${escapeHtml(progress.message || 'Äang import...')}</strong>
+        <strong>${escapeHtml(progress.message || 'Đang import...')}</strong>
         <span>${escapeHtml(progress.currentChapterLabel || progress.currentSeriesUrl || progress.phase || '')}</span>
       </div>
-      <div class="crawl-meter" aria-label="Tiáº¿n Ä‘á»™ crawl">
+      <div class="crawl-meter" aria-label="Tiến độ crawl">
         <div style="width:${Math.max(4, Math.min(100, percent))}%"></div>
       </div>
       <div class="progress-grid">
-        <span>Truyá»‡n: ${seriesDone}/${seriesTotal}</span>
+        <span>Truyện: ${seriesDone}/${seriesTotal}</span>
         <span>Phase: ${escapeHtml(progress.phase || job.status)}</span>
         <span>Chapter: ${chapterDone}/${chapterTotal || '?'}</span>
-        <span>áº¢nh xá»­ lÃ½: ${imageDone}/${imageTotal || '?'}</span>
-        <span>áº¢nh dÃ¹ng Ä‘Æ°á»£c: ${usableImages}</span>
-        <span>Táº£i má»›i: ${downloadedImages}</span>
-        <span>Skip cÃ³ sáºµn: ${skippedExistingImages}</span>
-        <span>áº¢nh lá»—i skip: ${failedImages}</span>
-        <span>Tá»‘c Ä‘á»™ áº£nh: ${formatCrawlRate(progress.imagesPerMinute, 'áº£nh/phÃºt')}</span>
-        <span>Tá»‘c Ä‘á»™ chapter: ${formatCrawlRate(progress.chaptersPerMinute, 'chapter/phÃºt')}</span>
+        <span>Ảnh xử lý: ${imageDone}/${imageTotal || '?'}</span>
+        <span>Ảnh dùng được: ${usableImages}</span>
+        <span>Tải mới: ${downloadedImages}</span>
+        <span>Skip có sẵn: ${skippedExistingImages}</span>
+        <span>Ảnh lỗi skip: ${failedImages}</span>
+        <span>Tốc độ ảnh: ${formatCrawlRate(progress.imagesPerMinute, 'ảnh/phút')}</span>
+        <span>Tốc độ chapter: ${formatCrawlRate(progress.chaptersPerMinute, 'chapter/phút')}</span>
         <span>ETA: ${formatCrawlDuration(progress.etaSeconds)}</span>
         <span>Concurrency: ${Number(progress.imageConcurrency || 1)}</span>
-        <span>Tráº¡ng thÃ¡i: ${escapeHtml(job.status)}</span>
-        <span>Lá»—i: ${Number(progress.errorCount || errors.length || 0)}</span>
+        <span>Trạng thái: ${escapeHtml(job.status)}</span>
+        <span>Lỗi: ${Number(progress.errorCount || errors.length || 0)}</span>
       </div>
       ${errors.length ? `<div class="progress-errors">${errors.slice(-3).map((error) => `<span>${escapeHtml(error)}</span>`).join('')}</div>` : ''}
     `;
@@ -1641,11 +1641,11 @@ export function createAdminRoute({
 
   function formatAdminBulletinTime(value = '') {
     const time = Date.parse(value);
-    if (!time) return 'vá»«a xong';
+    if (!time) return 'vừa xong';
     const diff = Date.now() - time;
-    if (diff < 60_000) return 'vá»«a xong';
-    if (diff < 3_600_000) return `${Math.max(1, Math.floor(diff / 60_000))} phÃºt trÆ°á»›c`;
-    if (diff < 86_400_000) return `${Math.max(1, Math.floor(diff / 3_600_000))} giá» trÆ°á»›c`;
+    if (diff < 60_000) return 'vừa xong';
+    if (diff < 3_600_000) return `${Math.max(1, Math.floor(diff / 60_000))} phút trước`;
+    if (diff < 86_400_000) return `${Math.max(1, Math.floor(diff / 3_600_000))} giờ trước`;
     return new Date(time).toLocaleDateString('vi-VN');
   }
 

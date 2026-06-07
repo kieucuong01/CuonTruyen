@@ -17,8 +17,11 @@ Vietnix S3 Object Storage
 - /imports/* optimized images
 
 Vercel
-- Frontend from public/
-- Lightweight `/api/*` Node functions for public reads and admin content edits
+- Next.js App Router for public SEO pages and public read APIs
+- Next.js App Router for `/admin` and `/admin/series/:id` shell pages
+- App Router route handlers for user auth, Google auth, bulletin, events, and admin session
+- App Router route handlers for admin catalog/editor, moderation, schedule metadata, and analytics
+- App Router 503 stubs for crawler/import/S3/publish endpoints that must stay local
 - No crawler
 - No image storage
 - Production deploys from GitHub when `main` is pushed
@@ -26,6 +29,11 @@ Vercel
 Supabase Postgres
 - Catalog, chapters, users/admin-backed sessions, bulletin messages, analytics events
 ```
+
+Public SEO pages, public read APIs, `robots.txt`, and `sitemap.xml` stay
+build-safe/dynamic but use a 300-second CDN cache TTL on Vercel. After syncing
+images and promoting catalog rows, allow up to five minutes for cached public
+responses to refresh unless an explicit purge/revalidation hook is added later.
 
 ## Current Live Defaults
 
@@ -114,8 +122,13 @@ git push origin main
 ```
 
 Avoid local `vercel deploy` as the normal path. This repo can contain many
-generated static files, and local CLI upload can hit Vercel's free upload request
-limit. If a manual CLI fallback is unavoidable, use archive upload:
+generated legacy static files. `.vercelignore` excludes old static SEO exports
+such as `public/truyen/`, `public/the-loai/`, policy-page directories,
+`public/sitemap.xml`, and `public/robots.txt`. It also excludes the legacy SPA
+bundle and static API fallbacks (`public/index.html`, `public/app.js`,
+`public/routes/`, `public/static-api/`, `public/fallback-api/`) so App Router
+owns the production surface. If a manual CLI fallback is unavoidable, use
+archive upload:
 
 ```powershell
 npx vercel@latest deploy --prod --yes --archive=tgz
@@ -253,13 +266,14 @@ npm run build:vercel
 The output directory is:
 
 ```text
-public
+Next.js default
 ```
 
 ## Operational Notes
 
 - Admin content management is available on production `/admin`.
-- Crawl, optimize, and S3 sync still happen locally at `http://localhost:54533/admin`.
+- Crawl, optimize, and S3 sync still happen locally in the legacy pipeline admin,
+  usually `http://localhost:54534/#/admin`.
 - The production admin hides crawl, optimize, S3 sync, and production pipeline controls unless `ENABLE_LOCAL_CRAWLER_UI=true` is explicitly set.
 - With `CATALOG_STORAGE=postgres`, local crawls write to the configured DB. The default local setup is separate from production Supabase; production only changes after an intentional DB promotion/backfill.
 - If admin fails on Vercel, check the serverless `/api/admin/session` route, `DATABASE_URL`, admin env vars, and `API_BASE_URL`.
