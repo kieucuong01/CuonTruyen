@@ -23,9 +23,16 @@ test('vercel serverless API catch-all exists for admin production', () => {
 });
 
 test('vercel exposes nested public series API routes', () => {
-  assert.equal(fs.existsSync('api/series/[...path].js'), true);
-  const source = fs.readFileSync('api/series/[...path].js', 'utf8');
-  assert.match(source, /handleNodeRequest/);
+  for (const file of [
+    'api/series/[id].js',
+    'api/series/[...path].js',
+    'api/series/[series]/chapters/[chapter].js',
+    'api/series/[series]/chapters/[chapter]/next.js'
+  ]) {
+    assert.equal(fs.existsSync(file), true, `${file} should exist`);
+    const source = fs.readFileSync(file, 'utf8');
+    assert.match(source, /handleNodeRequest/, `${file} should delegate to the Node API`);
+  }
 });
 
 test('vercel production blocks local-only publish pipeline API', () => {
