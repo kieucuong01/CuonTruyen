@@ -37,6 +37,19 @@ export const STATIC_INFO_PAGES = {
   }
 };
 
+export function buildDesktopFeatureSlides({
+  lastSeries = null,
+  updated = [],
+  popular = [],
+  limit = 8
+} = {}) {
+  const seen = new Set();
+  return [lastSeries, ...updated, ...popular].filter((series) => {
+    if (!series?.id || seen.has(series.id)) return false;
+    seen.add(series.id);
+    return true;
+  }).slice(0, limit);
+}
 
 export function createHomeRoute({
   app,
@@ -225,7 +238,7 @@ export function createHomeRoute({
   }
 
   function renderDesktopComicPortal({ popular = [], updated = [], readingSeries = [], lastSeries = null, bulletinMessages = [] } = {}) {
-    const featureSlides = uniqueSeriesById([lastSeries, ...popular, ...updated].filter(Boolean)).slice(0, 8);
+    const featureSlides = buildDesktopFeatureSlides({ lastSeries, updated, popular });
     const rankItems = uniqueSeriesById([...popular, ...updated]).slice(0, 6);
     const latest = updated.slice(0, 4);
     const stats = [
