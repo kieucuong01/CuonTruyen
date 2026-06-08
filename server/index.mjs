@@ -86,6 +86,13 @@ const PORT = Number(process.env.PORT || 4173);
 const S3_SYNC_STATUS_FILE = path.resolve(process.env.S3_SYNC_STATUS_FILE || process.env.VIETNIX_S3_SYNC_STATUS_FILE || path.join(ROOT, '.runtime', 's3-sync-status.json'));
 const S3_SYNC_STATE_FILE = path.resolve(process.env.S3_SYNC_STATE_FILE || process.env.VIETNIX_S3_SYNC_STATE_FILE || path.join(ROOT, '.runtime', 's3-sync-state.json'));
 const API_CACHE_TTL_MS = 15_000;
+const PUBLIC_API_CACHE_TTL_MS = Number(process.env.PUBLIC_API_LOCAL_CACHE_TTL_MS || 60_000);
+const PRIVATE_API_CACHE_CONTROL = 'no-store';
+const PUBLIC_API_CACHE_CONTROL = process.env.PUBLIC_API_CACHE_CONTROL || 'public, max-age=0, s-maxage=60, stale-while-revalidate=300';
+const PUBLIC_API_CACHE_OPTIONS = {
+  ttlMs: PUBLIC_API_CACHE_TTL_MS,
+  cacheControl: PUBLIC_API_CACHE_CONTROL
+};
 const apiResponseCache = createBoundedCache({ maxEntries: Number(process.env.API_CACHE_MAX_ENTRIES || 250) });
 const SPA_ROUTE_PATHS = new Set(['/admin']);
 const EMBEDDED_CRAWL_WORKER_ENABLED = !process.env.VERCEL && process.env.CRAWL_EMBEDDED_WORKER !== 'false';
@@ -152,14 +159,18 @@ function redirectResponse(res, location, status = 301) {
   res.end();
 }
 
-async function cachedJsonResponse(req, res, key, producer, ttlMs = API_CACHE_TTL_MS) {
+async function cachedJsonResponse(req, res, key, producer, options = {}) {
+  const {
+    ttlMs = API_CACHE_TTL_MS,
+    cacheControl = PRIVATE_API_CACHE_CONTROL
+  } = typeof options === 'number' ? { ttlMs: options } : options;
   const now = Date.now();
   const cached = apiResponseCache.get(key);
   if (cached && cached.expiresAt > now) {
     res.writeHead(cached.status, {
       ...corsHeaders(),
       'content-type': 'application/json; charset=utf-8',
-      'cache-control': 'no-store',
+      'cache-control': cacheControl,
       'x-local-cache': 'hit'
     });
     res.end(cached.payload);
@@ -175,7 +186,7 @@ async function cachedJsonResponse(req, res, key, producer, ttlMs = API_CACHE_TTL
   res.writeHead(status, {
     ...corsHeaders(),
     'content-type': 'application/json; charset=utf-8',
-    'cache-control': 'no-store',
+    'cache-control': cacheControl,
     'x-local-cache': 'miss'
   });
   res.end(payload);
@@ -686,13 +697,15 @@ async function handleApi(req, res, url) {
     const id = String(url.searchParams.get('series') || url.searchParams.get('id') || '').trim();
     if (id) {
       await cachedJsonResponse(req, res, url.pathname + url.search, async () => {
-        const catalog = await readCatalog({ includePages: false });
-        const series = findSeriesBySlug(catalog, id) || await getSeries(id, { includePages: false });
+        const series = await getSeries(id, { includePages: false, includeDraft: false });
         return { status: series ? 200 : 404, body: series ? publicSeriesDetail(series) : { error: 'Series not found' } };
-      });
+      }, PUBLIC_API_CACHE_OPTIONS);
       return true;
     }
-    await cachedJsonResponse(req, res, url.pathname, async () => ({ body: await readPublicCatalog() }));
+    const full = url.searchParams.get('full') === '1';
+    const chapterLimit = full ? null : 3;
+    const cacheKey = full ? `${url.pathname}?full=1` : url.pathname;
+    await cachedJsonResponse(req, res, cacheKey, async () => ({ body: await readPublicCatalog({ chapterLimit }) }), PUBLIC_API_CACHE_OPTIONS);
     return true;
   }
 
@@ -803,12 +816,12 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === 'GET' && (url.pathname === '/api/home' || url.pathname === '/api/public/home')) {
-    await cachedJsonResponse(req, res, url.pathname, async () => ({ body: buildHomeCollections(await readCatalog({ includePages: false })) }));
+    await cachedJsonResponse(req, res, url.pathname, async () => ({ body: buildHomeCollections(await readCatalog({ includePages: false })) }), PUBLIC_API_CACHE_OPTIONS);
     return true;
   }
 
   if (req.method === 'GET' && url.pathname === '/api/search') {
-    await cachedJsonResponse(req, res, url.pathname + url.search, async () => ({ body: { series: searchCatalog(await readCatalog({ includePages: false }), url.searchParams.get('q') || '') } }));
+    await cachedJsonResponse(req, res, url.pathname + url.search, async () => ({ body: { series: searchCatalog(await readCatalog({ includePages: false }), url.searchParams.get('q') || '') } }), PUBLIC_API_CACHE_OPTIONS);
     return true;
   }
 
@@ -817,7 +830,7 @@ async function handleApi(req, res, url) {
     await cachedJsonResponse(req, res, url.pathname, async () => {
       const page = buildTagPage(await readCatalog({ includePages: false }), tagSlug);
       return { status: page ? 200 : 404, body: page || { error: 'Tag not found' } };
-    });
+    }, PUBLIC_API_CACHE_OPTIONS);
     return true;
   }
 
@@ -828,7 +841,7 @@ async function handleApi(req, res, url) {
         window: Number(url.searchParams.get('window') || 0)
       });
       return { status: payload ? 200 : 404, body: payload || { error: 'Chapter not found' } };
-    });
+    }, PUBLIC_API_CACHE_OPTIONS);
     return true;
   }
 
@@ -844,7 +857,7 @@ async function handleApi(req, res, url) {
           })
         : null;
       return { status: payload ? 200 : 404, body: payload || { error: 'Chapter not found' } };
-    });
+    }, PUBLIC_API_CACHE_OPTIONS);
     return true;
   }
 
@@ -856,17 +869,16 @@ async function handleApi(req, res, url) {
         start: 'next'
       });
       return { status: payload ? 200 : 404, body: payload || { error: 'Next chapter not found' } };
-    });
+    }, PUBLIC_API_CACHE_OPTIONS);
     return true;
   }
 
   if (req.method === 'GET' && url.pathname.startsWith('/api/series/')) {
     const id = decodeURIComponent(url.pathname.replace('/api/series/', ''));
     await cachedJsonResponse(req, res, url.pathname, async () => {
-      const catalog = await readCatalog({ includePages: false });
-      const series = findSeriesBySlug(catalog, id) || await getSeries(id, { includePages: false });
+      const series = await getSeries(id, { includePages: false, includeDraft: false });
       return { status: series ? 200 : 404, body: series ? publicSeriesDetail(series) : { error: 'Series not found' } };
-    });
+    }, PUBLIC_API_CACHE_OPTIONS);
     return true;
   }
 

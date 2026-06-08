@@ -126,6 +126,7 @@ const BRAND_TAGLINE = 'Đọc liền mạch, lưu đúng chương';
 const BRAND_LOGO = '/favicon.svg?v=3';
 const state = {
   catalog: { series: [] },
+  catalogFull: { series: [] },
   home: { hot: [], updated: [], tags: [] },
   series: null,
   readerChapters: [],
@@ -381,7 +382,11 @@ function userHeaders(extra = {}) {
   return apiClient.userHeaders(extra);
 }
 
-async function loadCatalog() {
+async function loadCatalog({ full = false } = {}) {
+  if (full) {
+    state.catalogFull = await fetchJson('/api/series?full=1');
+    return state.catalogFull;
+  }
   state.catalog = await fetchJson('/api/series');
   return state.catalog;
 }
@@ -710,6 +715,7 @@ function renderRail(title, seriesList, variant = '') {
 
 function renderSeriesCard(series) {
   const imported = series.importedChapterCount || series.chapters.filter(hasReadableChapter).length;
+  const chapterCount = Number(series.chapterCount || series.chapters.length || 0);
   const pages = series.pageCount || series.chapters.reduce((sum, chapter) => sum + Number(chapter.pageCount || chapter.pages?.length || 0), 0);
   return `
     <article class="series-card">
@@ -718,7 +724,7 @@ function renderSeriesCard(series) {
       </a>
       <div class="series-card-copy">
         <h3><a data-link href="/truyen/${series.slug}">${escapeHtml(series.title)}</a></h3>
-        <p>${imported}/${series.chapters.length} chapter, ${pages} ảnh cache.</p>
+        <p>${imported}/${chapterCount} chapter, ${pages} ảnh cache.</p>
         <div class="tag-row">${(series.tags || []).slice(0, 3).map((tag) => `<a data-link href="/the-loai/${tag.slug}">${escapeHtml(tag.name)}</a>`).join('')}</div>
       </div>
       <div class="card-actions">
@@ -937,7 +943,7 @@ async function renderFollowingPage() {
 
 async function renderHistoryPage() {
   stopReaderRuntime();
-  const catalog = await loadCatalog();
+  const catalog = await loadCatalog({ full: true });
   const ids = loadReadingHistory();
   const lookup = new Map((catalog.series || []).map((series) => [series.id, series]));
   const rows = ids
@@ -962,7 +968,10 @@ async function renderHistoryPage() {
 
 async function renderExplorePage({ mode = 'search', tagSlug = '' } = {}) {
   stopReaderRuntime();
-  const catalog = await loadCatalog();
+  const tagPage = mode === 'genres' && tagSlug
+    ? await fetchJson(`/api/tags/${encodeURIComponent(tagSlug)}`).catch(() => null)
+    : null;
+  const catalog = tagPage ? { series: tagPage.series || [] } : await loadCatalog();
   if (mode === 'search' && state.searchQuery && !state.filters.query) state.filters.query = state.searchQuery;
   if (tagSlug) state.filters.tag = tagSlug;
   const seriesList = catalog.series || [];

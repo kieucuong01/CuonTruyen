@@ -326,10 +326,10 @@ export function publicReaderSeriesSummary(series) {
   return summary;
 }
 
-export function publicCatalog(catalog) {
+export function publicCatalog(catalog, { chapterLimit = null } = {}) {
   return {
     series: (catalog.series || [])
-      .map(publicSeriesSummary)
+      .map((series) => publicSeriesSummary(series, { chapterLimit }))
       .filter((series) => isPublicStatus(series.status))
   };
 }
@@ -572,8 +572,8 @@ export function recordEventOnCatalog(catalog, event = {}) {
   return { catalog: nextCatalog, series: publicSeries(next) };
 }
 
-export async function readPublicCatalog() {
-  return publicCatalog(await readCatalog({ includePages: false }));
+export async function readPublicCatalog(options = {}) {
+  return publicCatalog(await readCatalog({ includePages: false }), options);
 }
 
 export async function readAdminCatalog() {

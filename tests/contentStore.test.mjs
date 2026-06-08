@@ -178,6 +178,31 @@ test('public series detail returns chapter summaries without page arrays', () =>
   assert.equal(series.chapters[0].pageCount, 2);
 });
 
+test('public catalog can return lightweight series cards while preserving counts', () => {
+  const manyChapterCatalog = {
+    series: [
+      {
+        ...catalog.series[0],
+        chapters: Array.from({ length: 8 }, (_, index) => ({
+          id: `chapter-${index + 1}`,
+          label: `Chapter ${index + 1}`,
+          status: 'public',
+          imported: true,
+          pageCount: index + 1,
+          pages: [{ src: `/imports/manh/chapter-${index + 1}/001.jpg` }]
+        }))
+      }
+    ]
+  };
+
+  const publicList = publicCatalog(manyChapterCatalog, { chapterLimit: 3 });
+
+  assert.equal(publicList.series[0].chapterCount, 8);
+  assert.equal(publicList.series[0].importedChapterCount, 8);
+  assert.equal(publicList.series[0].chapters.length, 3);
+  assert.deepEqual(publicList.series[0].chapters.map((chapter) => chapter.id), ['chapter-1', 'chapter-2', 'chapter-3']);
+});
+
 test('reader chapter payload includes only the requested chapter window pages', () => {
   const payload = buildReaderChapterPayload(catalog, 'manh-nhat-lich-su', 'chapter-1', { window: 1 });
 
