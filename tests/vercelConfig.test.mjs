@@ -55,6 +55,8 @@ test('vercel build and public config honor DB-first catalog mode', () => {
   const configSource = fs.readFileSync('scripts/write-public-config.mjs', 'utf8');
 
   assert.match(buildSource, /requirePostgresCatalogUrl/);
-  assert.doesNotMatch(buildSource, /exportStaticApi|VERCEL_EXPORT_STATIC_API|STATIC_API_OUTPUT_DIR/);
-  assert.doesNotMatch(configSource, /staticApiMode|staticApiBaseUrl|FORCE_STATIC_API_MODE|STATIC_API_BASE_URL/);
+  assert.match(configSource, /writePublicSnapshotApi/);
+  assert.match(configSource, /postgres-build-snapshot/);
+  assert.doesNotMatch(buildSource, /VERCEL_EXPORT_STATIC_API|STATIC_API_OUTPUT_DIR/);
+  assert.doesNotMatch(configSource, /staticApiMode|FORCE_STATIC_API_MODE/);
 });

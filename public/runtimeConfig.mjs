@@ -1,6 +1,8 @@
 const DEFAULT_CONFIG = {
   apiBaseUrl: '',
   importsBaseUrl: '',
+  publicSnapshotBaseUrl: '',
+  preferPublicSnapshots: false,
   publicSiteUrl: '',
   productionBaseUrl: '',
   enableLocalCrawlerUi: false

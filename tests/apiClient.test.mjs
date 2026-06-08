@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createApiClient, isCacheableRequest } from '../public/apiClient.mjs';
+import { createApiClient, isCacheableRequest, publicSnapshotUrl } from '../public/apiClient.mjs';
 
 test('fetchJson turns plain text API 404 responses into clear errors', async () => {
   const client = createApiClient({
@@ -40,6 +40,60 @@ test('userHeaders sends the current reader session token', () => {
 test('tag query endpoints are cacheable public reads', () => {
   assert.equal(isCacheableRequest('/api/tags?tag=manhua'), true);
   assert.equal(isCacheableRequest('/api/tags/manhua'), true);
+});
+
+test('publicSnapshotUrl maps public reads to generated static snapshots', () => {
+  const config = { publicSnapshotBaseUrl: '/static-api' };
+
+  assert.equal(publicSnapshotUrl('/api/home', config), '/static-api/home.json');
+  assert.equal(publicSnapshotUrl('/api/series', config), '/static-api/series.json');
+  assert.equal(publicSnapshotUrl('/api/series?series=demo-series', config), '/static-api/series/demo-series.json');
+  assert.equal(publicSnapshotUrl('/api/tags?tag=manhua', config), '/static-api/tags/manhua.json');
+  assert.equal(publicSnapshotUrl('/api/series?full=1', config), '');
+});
+
+test('public snapshot reads are preferred and fall back to live API when missing', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalConfig = globalThis.COMIC_READER_CONFIG;
+  const requested = [];
+  globalThis.COMIC_READER_CONFIG = {
+    preferPublicSnapshots: true,
+    publicSnapshotBaseUrl: '/static-api'
+  };
+  globalThis.fetch = async (url) => {
+    requested.push(String(url));
+    if (String(url) === '/static-api/home.json') {
+      return new Response(JSON.stringify({ hot: [{ id: 'from-static' }] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      });
+    }
+    if (String(url) === '/static-api/series/missing.json') {
+      return new Response('Not found', { status: 404 });
+    }
+    return new Response(JSON.stringify({ id: 'from-live' }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' }
+    });
+  };
+
+  try {
+    const client = createApiClient();
+    const home = await client.fetchJson('/api/home');
+    const series = await client.fetchJson('/api/series?series=missing');
+
+    assert.equal(home.hot[0].id, 'from-static');
+    assert.equal(series.id, 'from-live');
+    assert.deepEqual(requested, [
+      '/static-api/home.json',
+      '/static-api/series/missing.json',
+      '/api/series?series=missing'
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalConfig === undefined) delete globalThis.COMIC_READER_CONFIG;
+    else globalThis.COMIC_READER_CONFIG = originalConfig;
+  }
 });
 
 test('reader payloads use the live API', async () => {

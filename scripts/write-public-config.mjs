@@ -28,6 +28,14 @@ const config = {
     || process.env.PUBLIC_API_BASE_URL
     || (process.env.VERCEL === '1' ? publicSiteUrl : '')
   ),
+  publicSnapshotBaseUrl: trimTrailingSlash(
+    process.env.PUBLIC_SNAPSHOT_BASE_URL
+    || process.env.STATIC_API_BASE_URL
+    || '/static-api'
+  ),
+  preferPublicSnapshots: process.env.PUBLIC_SNAPSHOT_API === 'false'
+    ? false
+    : process.env.VERCEL === '1',
   importsBaseUrl: trimTrailingSlash(
     process.env.PUBLIC_IMPORTS_BASE_URL
     || process.env.S3_PUBLIC_BASE_URL
@@ -168,7 +176,67 @@ async function writeStaticInfoPages() {
   console.log(`[vercel-static-pages] wrote ${STATIC_PAGES.length} static info pages, ${seriesPageCount} series pages, ${chapterPageCount} chapter pages, ${tagPageCount} tag pages with baseUrl=${baseUrl}`);
 }
 
+async function writeJson(filePath, payload) {
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, JSON.stringify(payload), 'utf8');
+}
+
+async function writePublicSnapshotApi() {
+  const {
+    buildHomeCollections,
+    buildTagIndex,
+    buildTagPage,
+    publicCatalog,
+    publicSeriesDetail
+  } = await import('../server/contentStore.mjs');
+  const { readCatalog } = await import('../server/dataStore.mjs');
+  const staticApiDir = path.join(PUBLIC_DIR, 'static-api');
+  const catalog = await readCatalog({ includePages: false });
+  const publicData = publicCatalog(catalog, { chapterLimit: 3 });
+  const tags = buildTagIndex(catalog);
+  let detailCount = 0;
+  let tagCount = 0;
+
+  await fs.rm(staticApiDir, { recursive: true, force: true });
+  await writeJson(path.join(staticApiDir, 'home.json'), buildHomeCollections(catalog));
+  await writeJson(path.join(staticApiDir, 'series.json'), publicData);
+  await writeJson(path.join(staticApiDir, 'search-index.json'), publicData);
+
+  for (const series of catalog.series || []) {
+    const detail = publicSeriesDetail(series);
+    if (detail.status !== 'public') continue;
+    const seriesSlug = safeRoutePart(detail.slug);
+    const seriesId = safeRoutePart(detail.id);
+    if (seriesSlug) {
+      await writeJson(path.join(staticApiDir, 'series', `${seriesSlug}.json`), detail);
+      detailCount += 1;
+    }
+    if (seriesId && seriesId !== seriesSlug) {
+      await writeJson(path.join(staticApiDir, 'series', `${seriesId}.json`), detail);
+    }
+  }
+
+  for (const tag of tags) {
+    const tagSlug = safeRoutePart(tag.slug);
+    if (!tagSlug) continue;
+    const page = buildTagPage(catalog, tagSlug);
+    if (!page) continue;
+    await writeJson(path.join(staticApiDir, 'tags', `${tagSlug}.json`), page);
+    tagCount += 1;
+  }
+
+  await writeJson(path.join(staticApiDir, 'manifest.json'), {
+    generatedAt: new Date().toISOString(),
+    source: 'postgres-build-snapshot',
+    seriesCount: publicData.series.length,
+    detailCount,
+    tagCount
+  });
+  console.log(`[vercel-static-api] wrote public snapshots for ${publicData.series.length} series, ${detailCount} detail pages, ${tagCount} tags`);
+}
+
 await fs.mkdir(PUBLIC_DIR, { recursive: true });
 await fs.writeFile(CONFIG_PATH, serializeConfig(config), 'utf8');
 console.log(`[vercel-config] wrote public/config.js with apiBaseUrl=${config.apiBaseUrl || '(same-origin)'}`);
 await writeStaticInfoPages();
+await writePublicSnapshotApi();

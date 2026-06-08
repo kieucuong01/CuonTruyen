@@ -1,5 +1,5 @@
 import { createBoundedCache } from './cacheStore.mjs';
-import { apiUrl } from './runtimeConfig.mjs';
+import { apiUrl, getRuntimeConfig } from './runtimeConfig.mjs';
 
 export { apiUrl };
 
@@ -7,6 +7,50 @@ export function isCacheableRequest(url, options = {}) {
   const method = String(options?.method || 'GET').toUpperCase();
   if (method !== 'GET') return false;
   return /^\/api\/(series($|[/?])|home|public\/home|tags($|[/?])|search)/.test(url);
+}
+
+function trimTrailingSlash(value = '') {
+  return String(value || '').trim().replace(/\/$/, '');
+}
+
+function safeSnapshotPart(value = '') {
+  const part = String(value || '').trim().replace(/^\/+|\/+$/g, '');
+  if (!part || part === '.' || part === '..' || part.includes('/') || part.includes('\\')) return '';
+  return encodeURIComponent(part);
+}
+
+export function publicSnapshotUrl(url, config = getRuntimeConfig()) {
+  const value = String(url || '');
+  if (!value.startsWith('/api/')) return '';
+  const baseUrl = trimTrailingSlash(config.publicSnapshotBaseUrl || '/static-api');
+  if (!baseUrl) return '';
+  const parsed = new URL(value, 'https://cuontruyen.local');
+
+  if (parsed.pathname === '/api/home' || parsed.pathname === '/api/public/home') {
+    return `${baseUrl}/home.json`;
+  }
+
+  if (parsed.pathname === '/api/series') {
+    const seriesId = parsed.searchParams.get('series') || parsed.searchParams.get('id');
+    if (seriesId) {
+      const part = safeSnapshotPart(seriesId);
+      return part ? `${baseUrl}/series/${part}.json` : '';
+    }
+    if (parsed.searchParams.get('full') === '1') return '';
+    return `${baseUrl}/series.json`;
+  }
+
+  if (parsed.pathname === '/api/tags') {
+    const tag = safeSnapshotPart(parsed.searchParams.get('tag') || parsed.searchParams.get('slug'));
+    return tag ? `${baseUrl}/tags/${tag}.json` : '';
+  }
+
+  if (parsed.pathname.startsWith('/api/tags/')) {
+    const tag = safeSnapshotPart(decodeURIComponent(parsed.pathname.replace('/api/tags/', '')));
+    return tag ? `${baseUrl}/tags/${tag}.json` : '';
+  }
+
+  return '';
 }
 
 export function createApiClient({
@@ -19,7 +63,33 @@ export function createApiClient({
     const cacheable = isCacheableRequest(url, options);
     if (cacheable && cache.has(url)) return cache.get(url);
 
-    const request = fetch(resolveUrl(url), options).then(async (response) => {
+    const request = fetchJsonWithSnapshot(url, options);
+
+    if (cacheable) {
+      cache.set(url, request);
+      request.catch(() => cache.delete(url));
+    }
+
+    return request;
+  }
+
+  async function fetchJsonWithSnapshot(url, options) {
+    const config = getRuntimeConfig();
+    const snapshotUrl = config.preferPublicSnapshots && isCacheableRequest(url, options)
+      ? publicSnapshotUrl(url, config)
+      : '';
+    if (snapshotUrl) {
+      try {
+        return await fetchJsonUrl(snapshotUrl, options);
+      } catch (error) {
+        if (![404, 405].includes(Number(error.status || 0))) throw error;
+      }
+    }
+    return fetchJsonUrl(resolveUrl(url), options);
+  }
+
+  async function fetchJsonUrl(url, options) {
+    return fetch(url, options).then(async (response) => {
       const data = await readJsonResponse(response);
       if (!response.ok) {
         const detail = data.detail && data.detail !== data.error ? `: ${data.detail}` : '';
@@ -30,13 +100,6 @@ export function createApiClient({
       }
       return data;
     });
-
-    if (cacheable) {
-      cache.set(url, request);
-      request.catch(() => cache.delete(url));
-    }
-
-    return request;
   }
 
   function invalidateContentCache() {
