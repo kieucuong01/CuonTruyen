@@ -21,17 +21,16 @@ test('vercel serverless API catch-all exists for admin production', () => {
   const source = fs.readFileSync('api/[...path].mjs', 'utf8');
   assert.match(source, /handleNodeRequest/);
 
-  assert.equal(fs.existsSync('api/reader.js'), true);
-  const readerSource = fs.readFileSync('api/reader.js', 'utf8');
-  assert.match(readerSource, /handleNodeRequest/);
+  const apiFiles = fs.readdirSync('api', { recursive: true })
+    .filter((file) => /\.(mjs|js)$/.test(String(file)));
+  assert.deepEqual(apiFiles, ['[...path].mjs']);
 });
 
-test('vercel exposes flat public series and reader API routes', () => {
-  assert.equal(fs.existsSync('api/series.js'), true);
-  const source = fs.readFileSync('api/series.js', 'utf8');
-  assert.match(source, /handleNodeRequest/);
-
+test('vercel avoids duplicate public API functions on Hobby deployments', () => {
   for (const conflictingFile of [
+    'api/reader.js',
+    'api/series.js',
+    'api/admin/[...path].js',
     'api/series/[...path].js',
     'api/series/[id].js',
     'api/series/[series]/chapters/[chapter].js',
