@@ -32,6 +32,7 @@ import {
   findNewReaderChapters,
   mergeReaderChapters,
   releaseReaderImageElement,
+  resolveChapterMenuScrollTop,
   resolveReaderToolbarVisibility,
   restoreReaderImageElement,
   resolveReaderCurrentChapterId
@@ -1458,6 +1459,25 @@ function renderDrawer() {
       route();
     });
   });
+  scrollDrawerToCurrentChapter(root);
+}
+
+function scrollDrawerToCurrentChapter(root) {
+  const list = root.querySelector('.chapter-list');
+  const active = root.querySelector('.chapter-item.active');
+  if (!list || !active) return;
+
+  const applyScroll = () => {
+    list.scrollTop = resolveChapterMenuScrollTop({
+      itemOffsetTop: active.offsetTop,
+      itemHeight: active.offsetHeight,
+      listHeight: list.clientHeight,
+      maxScrollTop: Math.max(0, list.scrollHeight - list.clientHeight)
+    });
+  };
+
+  applyScroll();
+  requestAnimationFrame(applyScroll);
 }
 
 function attachReaderObservers() {

@@ -6,6 +6,7 @@ import {
   findNewReaderChapters,
   mergeReaderChapters,
   releaseReaderImageElement,
+  resolveChapterMenuScrollTop,
   resolveReaderToolbarVisibility,
   resolveReaderCurrentChapterId
 } from '../public/readerWindow.mjs';
@@ -61,6 +62,29 @@ test('resolveReaderCurrentChapterId preserves current chapter while preloading n
     payloadChapterId: 'chapter-2',
     firstLoadedId: 'chapter-1'
   }), 'chapter-1');
+});
+
+test('resolveChapterMenuScrollTop centers the active chapter inside the menu', () => {
+  assert.equal(resolveChapterMenuScrollTop({
+    itemOffsetTop: 1200,
+    itemHeight: 48,
+    listHeight: 480,
+    maxScrollTop: 1400
+  }), 984);
+
+  assert.equal(resolveChapterMenuScrollTop({
+    itemOffsetTop: 40,
+    itemHeight: 48,
+    listHeight: 480,
+    maxScrollTop: 1400
+  }), 0);
+
+  assert.equal(resolveChapterMenuScrollTop({
+    itemOffsetTop: 1800,
+    itemHeight: 48,
+    listHeight: 480,
+    maxScrollTop: 1400
+  }), 1400);
 });
 
 test('releaseReaderImageElement keeps the measured image height before blanking src', () => {

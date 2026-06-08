@@ -36,6 +36,17 @@ export function resolveReaderCurrentChapterId({
   return requestedId || currentId || payloadChapterId || firstLoadedId || '';
 }
 
+export function resolveChapterMenuScrollTop({
+  itemOffsetTop = 0,
+  itemHeight = 0,
+  listHeight = 0,
+  maxScrollTop = 0
+} = {}) {
+  const target = Number(itemOffsetTop || 0) - (Number(listHeight || 0) / 2) + (Number(itemHeight || 0) / 2);
+  const bounded = Math.max(0, Math.min(Number(maxScrollTop || 0), target));
+  return Math.round(bounded);
+}
+
 function measureReaderImageHeight(image) {
   const rect = image?.getBoundingClientRect?.();
   const measuredHeight = Number(rect?.height || 0);
