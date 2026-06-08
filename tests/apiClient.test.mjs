@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createApiClient } from '../public/apiClient.mjs';
+import { createApiClient, isCacheableRequest } from '../public/apiClient.mjs';
 
 test('fetchJson turns plain text API 404 responses into clear errors', async () => {
   const client = createApiClient({
@@ -35,6 +35,11 @@ test('userHeaders sends the current reader session token', () => {
     'content-type': 'application/json',
     'x-user-token': 'reader-token'
   });
+});
+
+test('tag query endpoints are cacheable public reads', () => {
+  assert.equal(isCacheableRequest('/api/tags?tag=manhua'), true);
+  assert.equal(isCacheableRequest('/api/tags/manhua'), true);
 });
 
 test('reader payloads use the live API', async () => {

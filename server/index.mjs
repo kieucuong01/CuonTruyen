@@ -825,6 +825,15 @@ async function handleApi(req, res, url) {
     return true;
   }
 
+  if (req.method === 'GET' && url.pathname === '/api/tags') {
+    const tagSlug = String(url.searchParams.get('tag') || url.searchParams.get('slug') || '').trim();
+    await cachedJsonResponse(req, res, url.pathname + url.search, async () => {
+      const page = tagSlug ? buildTagPage(await readCatalog({ includePages: false }), tagSlug) : null;
+      return { status: page ? 200 : 404, body: page || { error: 'Tag not found' } };
+    }, PUBLIC_API_CACHE_OPTIONS);
+    return true;
+  }
+
   if (req.method === 'GET' && url.pathname.startsWith('/api/tags/')) {
     const tagSlug = decodeURIComponent(url.pathname.replace('/api/tags/', ''));
     await cachedJsonResponse(req, res, url.pathname, async () => {

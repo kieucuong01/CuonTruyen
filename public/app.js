@@ -969,7 +969,7 @@ async function renderHistoryPage() {
 async function renderExplorePage({ mode = 'search', tagSlug = '' } = {}) {
   stopReaderRuntime();
   const tagPage = mode === 'genres' && tagSlug
-    ? await fetchJson(`/api/tags/${encodeURIComponent(tagSlug)}`).catch(() => null)
+    ? await fetchJson(`/api/tags?tag=${encodeURIComponent(tagSlug)}`).catch(() => null)
     : null;
   const catalog = tagPage ? { series: tagPage.series || [] } : await loadCatalog();
   if (mode === 'search' && state.searchQuery && !state.filters.query) state.filters.query = state.searchQuery;
