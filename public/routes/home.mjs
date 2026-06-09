@@ -51,6 +51,39 @@ export function buildDesktopFeatureSlides({
   }).slice(0, limit);
 }
 
+export async function loadHomeReadingSeries({
+  homeSeries = [],
+  historyIds = [],
+  lastSeriesId = '',
+  loadProgress,
+  fetchJson
+} = {}) {
+  const homeLookup = new Map(homeSeries.filter((series) => series?.id).map((series) => [series.id, series]));
+  const requestedIds = [...new Set([...historyIds, lastSeriesId].filter(Boolean))];
+  const detailPairs = await Promise.all(requestedIds.map(async (seriesId) => {
+    try {
+      const params = new URLSearchParams({ series: String(seriesId || '') });
+      const series = await fetchJson(`/api/series?${params.toString()}`);
+      return [seriesId, series || homeLookup.get(seriesId) || null];
+    } catch {
+      return [seriesId, homeLookup.get(seriesId) || null];
+    }
+  }));
+  const seriesLookup = new Map(detailPairs.filter(([, series]) => series).map(([seriesId, series]) => [seriesId, series]));
+  for (const [seriesId, series] of homeLookup.entries()) {
+    if (!seriesLookup.has(seriesId)) seriesLookup.set(seriesId, series);
+  }
+  const readingSeries = historyIds
+    .map((seriesId) => seriesLookup.get(seriesId))
+    .filter(Boolean)
+    .map((series) => ({ series, progress: loadProgress(series.id) }));
+
+  return {
+    readingSeries,
+    lastSeries: seriesLookup.get(lastSeriesId) || null
+  };
+}
+
 export function createHomeRoute({
   app,
   state,
@@ -91,19 +124,14 @@ export function createHomeRoute({
     ]);
     const homeSeries = uniqueSeriesById([...(home.hot || []), ...(home.updated || [])]);
     const historyIds = loadReadingHistory();
-    const missingHistoryIds = historyIds.filter((seriesId) => !homeSeries.some((series) => series.id === seriesId));
-    const historySeries = await Promise.all(
-      missingHistoryIds.map((seriesId) => fetchJson(`/api/series?${new URLSearchParams({ series: String(seriesId || '') }).toString()}`).catch(() => null))
-    );
-    const seriesLookup = new Map(
-      [...homeSeries, ...historySeries.filter(Boolean)].map((series) => [series.id, series])
-    );
     const lastSeriesId = loadLastSeriesId();
-    const lastSeries = seriesLookup.get(lastSeriesId);
-    const readingSeries = historyIds
-      .map((seriesId) => seriesLookup.get(seriesId))
-      .filter(Boolean)
-      .map((series) => ({ series, progress: loadProgress(series.id) }));
+    const { readingSeries, lastSeries } = await loadHomeReadingSeries({
+      homeSeries,
+      historyIds,
+      lastSeriesId,
+      loadProgress,
+      fetchJson
+    });
     const results = state.searchQuery
       ? (await fetchJson(`/api/search?q=${encodeURIComponent(state.searchQuery)}`)).series
       : [];
