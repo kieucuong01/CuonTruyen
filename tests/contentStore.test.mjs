@@ -303,6 +303,44 @@ test('reader payload rejects chapters that only have stale page counts without c
   assert.equal(buildReaderChapterPayload(staleCatalog, 'demo', 'chapter-2').chapter.id, 'chapter-2');
 });
 
+test('reader payload can select chapters from DB metadata and hydrate only the current window', () => {
+  const catalog = {
+    series: [{
+      id: 'demo',
+      title: 'Demo',
+      slug: 'demo',
+      status: 'public',
+      chapters: [
+        { id: 'chapter-1', slug: 'chapter-1', status: 'public', imported: true, pageCount: 12 },
+        {
+          id: 'chapter-2',
+          slug: 'chapter-2',
+          status: 'public',
+          imported: true,
+          pageCount: 1,
+          pages: [{ src: '/imports/demo/chapter-2/001.webp' }]
+        },
+        {
+          id: 'chapter-3',
+          slug: 'chapter-3',
+          status: 'public',
+          imported: true,
+          pageCount: 1,
+          pages: [{ src: '/imports/demo/chapter-3/001.webp' }]
+        }
+      ]
+    }]
+  };
+
+  const payload = buildReaderChapterPayload(catalog, 'demo', 'chapter-2', { window: 1 });
+
+  assert.equal(payload.chapter.id, 'chapter-2');
+  assert.equal(payload.chapter.pages.length, 1);
+  assert.deepEqual(payload.chapters.map((chapter) => chapter.id), ['chapter-2', 'chapter-3']);
+  assert.equal(payload.previousChapter.id, 'chapter-1');
+  assert.equal(payload.nextChapter.id, 'chapter-3');
+});
+
 test('public and admin catalog expose local cover thumbnails', () => {
   const thumbnailCatalog = {
     series: [

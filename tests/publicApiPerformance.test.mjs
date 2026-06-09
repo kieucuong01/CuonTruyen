@@ -22,3 +22,11 @@ test('series detail API uses direct DB lookup instead of loading the full catalo
     /const catalog = await readCatalog\(\{ includePages: false \}\);\s*const series = findSeriesBySlug\(catalog, id\) \|\| await getSeries\(id, \{ includePages: false \}\);/
   );
 });
+
+test('reader API hydrates only selected chapter pages', () => {
+  const source = serverSource();
+
+  assert.match(source, /getSeries\(decodeURIComponent\(seriesSlug\), \{\s*includePages: false,/);
+  assert.match(source, /getChapterPages\(series\.id, selection\.chapterIds\)/);
+  assert.doesNotMatch(source, /readerCatalogForSeries\(seriesSlug\)\)/);
+});

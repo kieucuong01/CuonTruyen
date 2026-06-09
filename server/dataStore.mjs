@@ -1,5 +1,6 @@
 import {
   ensurePostgresSchema,
+  getChapterPagesFromPostgres,
   getSeriesFromPostgres,
   readCatalogFromPostgres,
   upsertSeriesInPostgres,
@@ -27,4 +28,8 @@ export async function upsertSeries(series) {
 
 export async function getSeries(idOrSlug, options = {}) {
   return getSeriesFromPostgres(idOrSlug, options);
+}
+
+export async function getChapterPages(seriesId, chapterIds = []) {
+  return getChapterPagesFromPostgres(seriesId, chapterIds);
 }

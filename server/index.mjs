@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 import { IMPORT_ROOT } from './catalogStore.mjs';
 import { createBoundedCache } from './cacheStore.mjs';
-import { ensureStorageSchema, getSeries, readCatalog } from './dataStore.mjs';
+import { ensureStorageSchema, getChapterPages, getSeries, readCatalog } from './dataStore.mjs';
 import { assertCatalogStorageReady, catalogStorageSummary } from './storageConfig.mjs';
 import { appendAnalyticsEvent, buildAnalyticsSummary, listAnalyticsEvents } from './analyticsStore.mjs';
 import { adminConfigStatus, createAdminSession, isAdminAuthorized, isAdminPath } from './adminAuth.mjs';
@@ -39,6 +39,7 @@ import {
   readPublicCatalog,
   recordStoredEvent,
   searchCatalog,
+  selectReaderChapterWindow,
   setStoredCrawlSchedule,
   updateStoredChapter,
   updateStoredSeries
@@ -543,11 +544,24 @@ async function startImportJobs(payloads) {
   }));
 }
 
-async function readerCatalogForSeries(seriesSlug) {
+async function readerCatalogForSeries(seriesSlug, { chapterSlug = '', window = 0, start = 'current' } = {}) {
   const series = await getSeries(decodeURIComponent(seriesSlug), {
-    includePages: true,
+    includePages: false,
     includeDraft: false
   });
+  const selection = series && chapterSlug
+    ? selectReaderChapterWindow(series, chapterSlug, { window, start })
+    : null;
+  const pagesByChapter = selection
+    ? await getChapterPages(series.id, selection.chapterIds)
+    : new Map();
+  if (series && pagesByChapter.size) {
+    series.chapters = (series.chapters || []).map((chapter) => (
+      pagesByChapter.has(chapter.id)
+        ? { ...chapter, pages: pagesByChapter.get(chapter.id) }
+        : chapter
+    ));
+  }
   return { series: series ? [series] : [] };
 }
 
@@ -847,8 +861,14 @@ async function handleApi(req, res, url) {
   if (req.method === 'GET' && url.pathname.match(/^\/api\/series\/[^/]+\/chapters\/[^/]+$/)) {
     const [, , , seriesSlug, , chapterSlug] = url.pathname.split('/');
     await cachedJsonResponse(req, res, url.pathname + url.search, async () => {
-      const payload = buildReaderChapterPayload(await readerCatalogForSeries(seriesSlug), decodeURIComponent(seriesSlug), decodeURIComponent(chapterSlug), {
-        window: Number(url.searchParams.get('window') || 0)
+      const window = Number(url.searchParams.get('window') || 0);
+      const decodedSeriesSlug = decodeURIComponent(seriesSlug);
+      const decodedChapterSlug = decodeURIComponent(chapterSlug);
+      const payload = buildReaderChapterPayload(await readerCatalogForSeries(decodedSeriesSlug, {
+        chapterSlug: decodedChapterSlug,
+        window
+      }), decodedSeriesSlug, decodedChapterSlug, {
+        window
       });
       return { status: payload ? 200 : 404, body: payload || { error: 'Chapter not found' } };
     }, PUBLIC_API_CACHE_OPTIONS);
@@ -859,10 +879,15 @@ async function handleApi(req, res, url) {
     const seriesSlug = String(url.searchParams.get('series') || '').trim();
     const chapterSlug = String(url.searchParams.get('chapter') || '').trim();
     const start = String(url.searchParams.get('start') || 'current').trim() || 'current';
+    const window = Number(url.searchParams.get('window') || 0);
     await cachedJsonResponse(req, res, url.pathname + url.search, async () => {
       const payload = seriesSlug && chapterSlug
-        ? buildReaderChapterPayload(await readerCatalogForSeries(seriesSlug), seriesSlug, chapterSlug, {
-            window: Number(url.searchParams.get('window') || 0),
+        ? buildReaderChapterPayload(await readerCatalogForSeries(seriesSlug, {
+            chapterSlug,
+            window,
+            start
+          }), seriesSlug, chapterSlug, {
+            window,
             start
           })
         : null;
@@ -874,8 +899,15 @@ async function handleApi(req, res, url) {
   if (req.method === 'GET' && url.pathname.match(/^\/api\/series\/[^/]+\/chapters\/[^/]+\/next$/)) {
     const [, , , seriesSlug, , chapterSlug] = url.pathname.split('/');
     await cachedJsonResponse(req, res, url.pathname + url.search, async () => {
-      const payload = buildReaderChapterPayload(await readerCatalogForSeries(seriesSlug), decodeURIComponent(seriesSlug), decodeURIComponent(chapterSlug), {
-        window: Number(url.searchParams.get('window') || 0),
+      const window = Number(url.searchParams.get('window') || 0);
+      const decodedSeriesSlug = decodeURIComponent(seriesSlug);
+      const decodedChapterSlug = decodeURIComponent(chapterSlug);
+      const payload = buildReaderChapterPayload(await readerCatalogForSeries(decodedSeriesSlug, {
+        chapterSlug: decodedChapterSlug,
+        window,
+        start: 'next'
+      }), decodedSeriesSlug, decodedChapterSlug, {
+        window,
         start: 'next'
       });
       return { status: payload ? 200 : 404, body: payload || { error: 'Next chapter not found' } };

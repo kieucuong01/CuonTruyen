@@ -238,6 +238,23 @@ export async function getSeriesFromPostgres(idOrSlug, { includePages = true, inc
   }).series[0] || null;
 }
 
+export async function getChapterPagesFromPostgres(seriesId, chapterIds = []) {
+  const ids = [...new Set((chapterIds || []).map((id) => String(id || '').trim()).filter(Boolean))];
+  if (!String(seriesId || '').trim() || !ids.length) return new Map();
+  const client = await getPool();
+  const rows = (await client.query(
+    'select * from pages where series_id = $1 and chapter_id = any($2::text[]) order by chapter_id, page_order',
+    [String(seriesId), ids]
+  )).rows;
+  const pagesByChapter = new Map();
+  for (const row of rows) {
+    const pages = pagesByChapter.get(row.chapter_id) || [];
+    pages.push(pageFromRow(row));
+    pagesByChapter.set(row.chapter_id, pages);
+  }
+  return pagesByChapter;
+}
+
 export async function upsertSeriesInPostgres(series) {
   await ensurePostgresSchema();
   const existing = await getSeriesFromPostgres(series.id, { includePages: true });

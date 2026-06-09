@@ -143,7 +143,8 @@ export function isStandaloneBoundaryAdPage(page = {}, index = 0, total = 0) {
 }
 
 function hasCachedPages(chapter = {}) {
-  return rawPages(chapter).length > 0;
+  if (Array.isArray(chapter.pages)) return rawPages(chapter).length > 0;
+  return Boolean(chapter.imported || Number(chapter.pageCount || 0) > 0);
 }
 
 function chapterStatus(chapter = {}) {
@@ -370,14 +371,10 @@ export function findChapterBySlug(series, chapterSlug, { includeHidden = false }
     .find((chapter) => chapter.id === target || chapter.slug === target) || null;
 }
 
-export function buildReaderChapterPayload(catalog, seriesSlug, chapterSlug, { window = 0, start = 'current' } = {}) {
-  const series = (catalog.series || [])
-    .find((item) => seriesMatchesSlug(item, String(seriesSlug || '').trim()));
-  if (!series || seriesMeta(series).status !== PUBLIC_STATUS) return null;
-
-  const chapters = (series.chapters || [])
-    .map(normalizeChapter)
-    .filter((chapter) => isPublicStatus(chapter.status) && hasCachedPages(chapter));
+export function selectReaderChapterWindow(series, chapterSlug, { window = 0, start = 'current' } = {}) {
+  const chapters = (series?.chapters || [])
+    .filter((chapter) => isPublicStatus(chapterStatus(chapter)) && hasCachedPages(chapter))
+    .map(normalizeChapter);
   const target = String(chapterSlug || '').trim();
   const targetIndex = chapters.findIndex((chapter) => chapter.id === target || getChapterSlug(chapter) === target);
   if (targetIndex < 0) return null;
@@ -387,9 +384,27 @@ export function buildReaderChapterPayload(catalog, seriesSlug, chapterSlug, { wi
   if (!chapter) return null;
 
   const windowSize = Math.max(0, Number(window || 0));
-  const windowChapters = chapters
-    .slice(startIndex, startIndex + windowSize + 1)
-    .map(publicReaderChapter);
+  const windowChapters = chapters.slice(startIndex, startIndex + windowSize + 1);
+
+  return {
+    chapters,
+    targetIndex,
+    startIndex,
+    chapter,
+    windowChapters,
+    chapterIds: windowChapters.map((item) => item.id).filter(Boolean)
+  };
+}
+
+export function buildReaderChapterPayload(catalog, seriesSlug, chapterSlug, { window = 0, start = 'current' } = {}) {
+  const series = (catalog.series || [])
+    .find((item) => seriesMatchesSlug(item, String(seriesSlug || '').trim()));
+  if (!series || seriesMeta(series).status !== PUBLIC_STATUS) return null;
+
+  const selection = selectReaderChapterWindow(series, chapterSlug, { window, start });
+  if (!selection) return null;
+  const { chapters, startIndex, chapter } = selection;
+  const windowChapters = selection.windowChapters.map(publicReaderChapter);
 
   return {
     series: publicReaderSeriesSummary(series),
