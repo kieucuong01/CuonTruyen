@@ -1,5 +1,8 @@
 ﻿import { buildTagIndex, publicSeriesDetail } from './contentStore.mjs';
 
+import { buildHomeCollections } from './contentStore.mjs';
+import { slugify } from './utils.mjs';
+
 const SITE_NAME = 'Cuộn Truyện';
 const DEFAULT_TITLE = 'Cuộn Truyện - Đọc truyện tranh Manhwa, Manhua online miễn phí';
 function readMonetizationConfig() {
@@ -22,6 +25,51 @@ function monetizationConfigScript() {
 }
 
 const DEFAULT_DESCRIPTION = 'Đọc truyện tranh Manhwa, Manhua, Manga online tại Cuộn Truyện: cập nhật nhanh, reader cuộn dọc mượt trên điện thoại và tự lưu vị trí đọc.';
+
+const CONTROLLED_LANDING_PAGES = [
+  {
+    path: '/truyen-moi',
+    title: 'Truyện mới cập nhật - Đọc chapter mới tại Cuộn Truyện',
+    heading: 'Truyện mới cập nhật',
+    description: 'Danh sách truyện tranh mới cập nhật trên Cuộn Truyện, ưu tiên các bộ đã public chapter đọc được và tối ưu trải nghiệm đọc dọc trên điện thoại.',
+    mode: 'updated'
+  },
+  {
+    path: '/truyen-hot',
+    title: 'Truyện hot - Manhwa, Manhua đang được đọc nhiều',
+    heading: 'Truyện hot',
+    description: 'Khám phá các bộ Manhwa, Manhua và Manga nổi bật trên Cuộn Truyện, có chapter public và liên kết đọc tiếp nhanh.',
+    mode: 'hot'
+  },
+  {
+    path: '/manhwa',
+    title: 'Manhwa - Truyện tranh Hàn Quốc online tại Cuộn Truyện',
+    heading: 'Manhwa Hàn Quốc',
+    description: 'Tuyển tập Manhwa Hàn Quốc đang có trên Cuộn Truyện, gồm nhiều bộ hành động, fantasy, học đường và chuyển sinh.',
+    tagSlug: 'manhwa'
+  },
+  {
+    path: '/manhua',
+    title: 'Manhua - Truyện tranh Trung Quốc online tại Cuộn Truyện',
+    heading: 'Manhua Trung Quốc',
+    description: 'Đọc Manhua Trung Quốc online trên Cuộn Truyện với reader cuộn dọc, tự lưu vị trí và danh sách chapter dễ theo dõi.',
+    tagSlug: 'manhua'
+  },
+  {
+    path: '/truyen-tu-tien',
+    title: 'Truyện tu tiên - Manhua tu luyện, huyền huyễn online',
+    heading: 'Truyện tu tiên',
+    description: 'Danh sách truyện tu tiên, tu luyện và huyền huyễn đang cập nhật trên Cuộn Truyện, phù hợp người thích đọc liền mạch nhiều chapter.',
+    querySlugs: ['tu-tien', 'tu-luyen', 'huyen-huyen', 'vo-hiep']
+  },
+  {
+    path: '/truyen-chuyen-sinh',
+    title: 'Truyện chuyển sinh - Isekai, trọng sinh, hệ thống',
+    heading: 'Truyện chuyển sinh',
+    description: 'Tổng hợp truyện chuyển sinh, trọng sinh, isekai và hệ thống đang public trên Cuộn Truyện để đọc online trên điện thoại.',
+    querySlugs: ['chuyen-sinh', 'trong-sinh', 'isekai', 'he-thong']
+  }
+];
 
 export function tagSeoCopy(tag = {}) {
   const name = String(tag.name || tag.slug || 'truyện tranh').trim();
@@ -47,6 +95,38 @@ export function tagSeoCopy(tag = {}) {
   return catalog[slug] || {
     title: `Truyện ${name} - Đọc truyện tranh online tại Cuộn Truyện`,
     description: `Đọc truyện tranh thể loại ${name} online tại Cuộn Truyện, cập nhật chương mới, đọc dọc mượt và tự lưu vị trí đang đọc.`
+  };
+}
+
+export function controlledLandingPages() {
+  return CONTROLLED_LANDING_PAGES.map((page) => ({ ...page }));
+}
+
+export function siteJsonLd(baseUrl) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: SITE_NAME,
+    url: baseUrl,
+    inLanguage: 'vi',
+    potentialAction: {
+      '@type': 'SearchAction',
+      target: `${baseUrl}/#/search?q={search_term_string}`,
+      'query-input': 'required name=search_term_string'
+    }
+  };
+}
+
+export function breadcrumbJsonLd(items = []) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: items.map((item, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      name: item.name,
+      item: item.url
+    }))
   };
 }
 
@@ -155,11 +235,67 @@ export function tagPageJsonLd(page, baseUrl) {
   };
 }
 
+export function landingPageJsonLd(page, seriesList, baseUrl) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name: page.heading,
+    description: page.description,
+    url: `${baseUrl}${page.path}`,
+    mainEntity: {
+      '@type': 'ItemList',
+      itemListElement: (seriesList || []).slice(0, 24).map((series, index) => ({
+        '@type': 'ListItem',
+        position: index + 1,
+        name: series.title,
+        url: `${baseUrl}/truyen/${series.slug}`
+      }))
+    }
+  };
+}
+
+export function selectLandingPageSeries(page = {}, seriesList = [], limit = 24) {
+  const readableSeries = (seriesList || [])
+    .map((series) => publicSeriesDetail(series))
+    .filter((series) => series.status === 'public' && Number(series.importedChapterCount || series.chapterCount || 0) > 0);
+  const selected = readableSeries.filter((series) => {
+    if (page.mode === 'updated' || page.mode === 'hot') return true;
+    const haystack = [
+      series.slug,
+      series.title,
+      ...(series.aliases || []),
+      ...(series.tags || []).flatMap((tag) => [tag.slug, tag.name])
+    ].map(slugify).join(' ');
+    if (page.tagSlug) return haystack.includes(slugify(page.tagSlug));
+    return (page.querySlugs || []).some((querySlug) => haystack.includes(slugify(querySlug)));
+  });
+  const score = (series) => Number(series.stats?.views || 0) + Number(series.stats?.follows || 0) * 20;
+  return [...selected].sort((a, b) => {
+    if (page.mode === 'hot') return score(b) - score(a);
+    return Date.parse(b.updatedAt || 0) - Date.parse(a.updatedAt || 0);
+  }).slice(0, limit);
+}
+
+export function findRelatedSeries(series, seriesList = [], limit = 6) {
+  const tagSlugs = new Set((series?.tags || []).map((tag) => tag.slug).filter(Boolean));
+  return (seriesList || [])
+    .map((item) => publicSeriesDetail(item))
+    .filter((item) => item.status === 'public' && item.slug !== series?.slug)
+    .map((item) => ({
+      ...item,
+      relatedScore: (item.tags || []).filter((tag) => tagSlugs.has(tag.slug)).length
+    }))
+    .filter((item) => item.relatedScore > 0)
+    .sort((a, b) => b.relatedScore - a.relatedScore || Date.parse(b.updatedAt || 0) - Date.parse(a.updatedAt || 0))
+    .slice(0, limit);
+}
+
 export function buildSitemapXml(seriesList, tags, baseUrl, { staticPages = STATIC_PAGES } = {}) {
   const publicTags = (tags || []).filter((tag) => Number(tag.seriesCount || tag.count || 0) > 0);
   const urls = [
     { loc: baseUrl, lastmod: new Date().toISOString() },
     ...staticPages.map((page) => ({ loc: `${baseUrl}${page.path}` })),
+    ...CONTROLLED_LANDING_PAGES.map((page) => ({ loc: `${baseUrl}${page.path}` })),
     ...seriesList.flatMap((series) => {
       const normalized = publicSeriesDetail(series);
       return [
@@ -232,6 +368,89 @@ export function renderNotFoundShell(pathname, baseUrl) {
   });
 }
 
+export function renderHomeSeoPage({ catalog = {}, tags = [] } = {}, baseUrl) {
+  const collections = buildHomeCollections(catalog);
+  const seriesList = [...(collections.updated || []), ...(collections.hot || [])]
+    .filter((series, index, all) => all.findIndex((item) => item.slug === series.slug) === index)
+    .slice(0, 18);
+  const publicTags = (tags.length ? tags : collections.tags || [])
+    .filter((tag) => Number(tag.seriesCount || tag.count || 0) > 0)
+    .slice(0, 16);
+  return renderHtmlShell({
+    title: DEFAULT_TITLE,
+    description: DEFAULT_DESCRIPTION,
+    canonicalUrl: baseUrl,
+    jsonLd: siteJsonLd(baseUrl),
+    bodyHtml: renderHomeBody(seriesList, publicTags)
+  });
+}
+
+export function renderLandingSeoPage({ page = null, seriesList = [] } = {}, baseUrl) {
+  if (!page) return null;
+  return renderHtmlShell({
+    title: page.title,
+    description: page.description,
+    canonicalUrl: `${baseUrl}${page.path}`,
+    jsonLd: landingPageJsonLd(page, seriesList, baseUrl),
+    bodyHtml: renderCollectionBody(page.heading, page.description, seriesList)
+  });
+}
+
+export function renderTagSeoPage({ page = null } = {}, baseUrl) {
+  if (!page) return null;
+  const copy = tagSeoCopy(page.tag);
+  return renderHtmlShell({
+    title: copy.title,
+    description: copy.description,
+    canonicalUrl: `${baseUrl}/the-loai/${page.tag.slug}`,
+    jsonLd: tagPageJsonLd(page, baseUrl),
+    bodyHtml: renderCollectionBody(copy.title, copy.description, page.series || [])
+  });
+}
+
+export function renderSeriesSeoPage({ series, relatedSeries = [] } = {}, baseUrl) {
+  if (!series) return null;
+  const title = `${series.title} - Đọc truyện tranh online tại Cuộn Truyện`;
+  const description = series.description || `Đọc ${series.title} online tại Cuộn Truyện, reader cuộn dọc mượt, tự lưu vị trí và mở lại đúng chương đang đọc.`;
+  return renderHtmlShell({
+    title,
+    description,
+    canonicalUrl: `${baseUrl}/truyen/${series.slug}`,
+    imageUrl: absoluteUrl(series.coverUrl || series.thumbnailUrl, baseUrl),
+    jsonLd: [
+      seriesJsonLd(series, baseUrl),
+      breadcrumbJsonLd([
+        { name: 'Trang chủ', url: `${baseUrl}/` },
+        { name: series.title, url: `${baseUrl}/truyen/${series.slug}` }
+      ])
+    ],
+    bodyHtml: renderSeriesBody(series, description, relatedSeries)
+  });
+}
+
+export function renderChapterSeoPage({ series, chapter } = {}, baseUrl) {
+  if (!series || !chapter) return null;
+  const chapterTitle = chapter.title || chapter.label || chapter.slug || 'Chapter';
+  const title = `${series.title} - ${chapterTitle} | Cuộn Truyện`;
+  const description = `Đọc ${series.title} ${chapterTitle} online tại Cuộn Truyện với ảnh tải nhanh, đọc dọc liền mạch và tự lưu tiến độ.`;
+  const imageUrl = absoluteUrl(chapter.pages?.[0]?.imageUrl || series.coverUrl || series.thumbnailUrl, baseUrl);
+  return renderHtmlShell({
+    title,
+    description,
+    canonicalUrl: `${baseUrl}/truyen/${series.slug}/${chapter.slug}`,
+    imageUrl,
+    jsonLd: [
+      chapterJsonLd(series, chapter, baseUrl),
+      breadcrumbJsonLd([
+        { name: 'Trang chủ', url: `${baseUrl}/` },
+        { name: series.title, url: `${baseUrl}/truyen/${series.slug}` },
+        { name: chapterTitle, url: `${baseUrl}/truyen/${series.slug}/${chapter.slug}` }
+      ])
+    ],
+    bodyHtml: renderChapterBody(series, chapter, description)
+  });
+}
+
 export function renderHtmlShell({
   title = DEFAULT_TITLE,
   description = DEFAULT_DESCRIPTION,
@@ -257,7 +476,12 @@ export function renderHtmlShell({
     <meta property="og:title" content="${safeTitle}">
     <meta property="og:description" content="${safeDescription}">
     <meta property="og:type" content="website">
+    ${safeCanonical ? `<meta property="og:url" content="${safeCanonical}">` : ''}
     ${safeImage ? `<meta property="og:image" content="${safeImage}">` : ''}
+    ${safeImage ? '<meta name="twitter:card" content="summary_large_image">' : '<meta name="twitter:card" content="summary">'}
+    <meta name="twitter:title" content="${safeTitle}">
+    <meta name="twitter:description" content="${safeDescription}">
+    ${safeImage ? `<meta name="twitter:image" content="${safeImage}">` : ''}
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="manifest" href="/site.webmanifest" />
     <link rel="stylesheet" href="/styles.css" />
@@ -284,6 +508,86 @@ function renderStaticBody(page) {
       ${items ? `<section class="static-info-panel"><ul>${items}</ul></section>` : ''}
     </main>
   `;
+}
+
+function renderHomeBody(seriesList, tags) {
+  const landingLinks = CONTROLLED_LANDING_PAGES.map((page) => `<li><a href="${escapeHtml(page.path)}">${escapeHtml(page.heading)}</a></li>`).join('');
+  const tagLinks = (tags || []).map((tag) => `<li><a href="/the-loai/${escapeHtml(tag.slug)}">${escapeHtml(tag.name)}</a></li>`).join('');
+  return `
+    <main id="app" class="site-shell static-page">
+      <section class="page-heading static-page-heading">
+        <h1>Cuộn Truyện - đọc Manhwa, Manhua online</h1>
+        <p>${escapeHtml(DEFAULT_DESCRIPTION)}</p>
+      </section>
+      <section class="static-info-panel">
+        <h2>Lối vào nhanh</h2>
+        <ul>${landingLinks}</ul>
+      </section>
+      ${tagLinks ? `<section class="static-info-panel"><h2>Thể loại nổi bật</h2><ul>${tagLinks}</ul></section>` : ''}
+      ${renderSeriesListSection('Truyện đang cập nhật', seriesList)}
+    </main>
+  `;
+}
+
+function renderCollectionBody(heading, description, seriesList) {
+  return `
+    <main id="app" class="site-shell static-page">
+      <section class="page-heading static-page-heading">
+        <h1>${escapeHtml(heading)}</h1>
+        <p>${escapeHtml(description)}</p>
+      </section>
+      ${renderSeriesListSection('Danh sách truyện', seriesList)}
+    </main>
+  `;
+}
+
+function renderSeriesBody(series, description, relatedSeries) {
+  const tagLinks = (series.tags || []).map((tag) => `<li><a href="/the-loai/${escapeHtml(tag.slug)}">${escapeHtml(tag.name)}</a></li>`).join('');
+  const chapterLinks = (series.chapters || [])
+    .filter((chapter) => chapter.status === 'public' && (chapter.imported || chapter.pageCount > 0))
+    .slice(0, 24)
+    .map((chapter) => `<li><a href="/truyen/${escapeHtml(series.slug)}/${escapeHtml(chapter.slug)}">${escapeHtml(chapter.title || chapter.label || chapter.slug)}</a></li>`)
+    .join('');
+  return `
+    <main id="app" class="site-shell static-page">
+      <section class="page-heading static-page-heading">
+        <h1>${escapeHtml(series.title)}</h1>
+        <p>${escapeHtml(description)}</p>
+      </section>
+      ${tagLinks ? `<section class="static-info-panel"><h2>Thể loại</h2><ul>${tagLinks}</ul></section>` : ''}
+      ${chapterLinks ? `<section class="static-info-panel"><h2>Chapter mới</h2><ul>${chapterLinks}</ul></section>` : ''}
+      ${renderSeriesListSection('Truyện liên quan', relatedSeries)}
+    </main>
+  `;
+}
+
+function renderChapterBody(series, chapter, description) {
+  const pages = (chapter.pages || []).slice(0, 3).map((page, index) => {
+    const pageUrl = page.imageUrl || page.src || '';
+    if (!pageUrl) return '';
+    const alt = `${series.title} ${chapter.title || chapter.label || chapter.slug} trang ${index + 1}`;
+    return `<img src="${escapeHtml(pageUrl)}" alt="${escapeHtml(alt)}" loading="${index === 0 ? 'eager' : 'lazy'}">`;
+  }).join('');
+  return `
+    <main id="app" class="site-shell static-page">
+      <section class="page-heading static-page-heading">
+        <h1>${escapeHtml(series.title)} - ${escapeHtml(chapter.title || chapter.label || chapter.slug)}</h1>
+        <p>${escapeHtml(description)}</p>
+      </section>
+      ${pages ? `<section class="static-info-panel static-reader-preview">${pages}</section>` : ''}
+      <section class="static-info-panel">
+        <a href="/truyen/${escapeHtml(series.slug)}">Xem danh sách chapter ${escapeHtml(series.title)}</a>
+      </section>
+    </main>
+  `;
+}
+
+function renderSeriesListSection(heading, seriesList = []) {
+  const links = (seriesList || [])
+    .map((series) => `<li><a href="/truyen/${escapeHtml(series.slug)}">${escapeHtml(series.title)}</a>${series.chapterCount ? ` <span>${Number(series.importedChapterCount || series.chapterCount)} chapter</span>` : ''}</li>`)
+    .join('');
+  if (!links) return '';
+  return `<section class="static-info-panel"><h2>${escapeHtml(heading)}</h2><ul>${links}</ul></section>`;
 }
 
 function escapeXml(value = '') {

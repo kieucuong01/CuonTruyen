@@ -32,6 +32,30 @@
     {
       "source": "/privacy",
       "destination": "/index"
+    },
+    {
+      "source": "/truyen-moi",
+      "destination": "/index"
+    },
+    {
+      "source": "/truyen-hot",
+      "destination": "/index"
+    },
+    {
+      "source": "/manhwa",
+      "destination": "/index"
+    },
+    {
+      "source": "/manhua",
+      "destination": "/index"
+    },
+    {
+      "source": "/truyen-tu-tien",
+      "destination": "/index"
+    },
+    {
+      "source": "/truyen-chuyen-sinh",
+      "destination": "/index"
     }
   ]
 }

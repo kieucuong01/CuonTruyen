@@ -98,12 +98,15 @@ async function writeStaticInfoPages() {
     STATIC_PAGES,
     buildRobotsTxt,
     buildSitemapXml,
-    renderHtmlShell,
+    controlledLandingPages,
+    findRelatedSeries,
+    renderChapterSeoPage,
+    renderHomeSeoPage,
+    renderLandingSeoPage,
+    renderSeriesSeoPage,
     renderStaticPageShell,
-    seriesJsonLd,
-    chapterJsonLd,
-    tagPageJsonLd,
-    tagSeoCopy
+    renderTagSeoPage,
+    selectLandingPageSeries
   } = await import('../server/seo.mjs');
   const {
     buildHomeCollections,
@@ -116,43 +119,40 @@ async function writeStaticInfoPages() {
 
   const publicData = await readPublicCatalog();
   const homeData = buildHomeCollections(publicData);
+  const landingPages = controlledLandingPages();
   let seriesPageCount = 0;
   let chapterPageCount = 0;
   let tagPageCount = 0;
+  let landingPageCount = 0;
 
+  await fs.writeFile(path.join(PUBLIC_DIR, 'index.html'), renderHomeSeoPage({
+    catalog: { series: publicData.series || [] },
+    tags: homeData.tags || []
+  }, baseUrl), 'utf8');
   await fs.writeFile(path.join(PUBLIC_DIR, 'robots.txt'), buildRobotsTxt(baseUrl), 'utf8');
   await fs.writeFile(path.join(PUBLIC_DIR, 'sitemap.xml'), buildSitemapXml(publicData.series || [], homeData.tags || [], baseUrl), 'utf8');
+
+  for (const page of landingPages) {
+    const seriesList = selectLandingPageSeries(page, publicData.series || []);
+    if (await writeRouteIndex(page.path, renderLandingSeoPage({ page, seriesList }, baseUrl))) {
+      landingPageCount += 1;
+    }
+  }
 
   for (const series of publicData?.series || []) {
     const seriesSlug = safeRoutePart(series.slug);
     if (!seriesSlug) continue;
-    const seriesUrl = `${baseUrl}/truyen/${seriesSlug}`;
-    const seriesTitle = `${series.title} - ??c truy?n tranh online t?i Cu?n Truy?n`;
-    const seriesDescription = series.description || `??c ${series.title} online t?i Cu?n Truy?n, reader cu?n d?c m??t, t? l?u v? tr? v? m? l?i ??ng ch??ng ?ang ??c.`;
-    if (await writeRouteIndex(`/truyen/${seriesSlug}`, renderHtmlShell({
-      title: seriesTitle,
-      description: seriesDescription,
-      canonicalUrl: seriesUrl,
-      imageUrl: series.coverUrl || series.thumbnailUrl || '',
-      jsonLd: seriesJsonLd(series, baseUrl),
-      bodyHtml: `<main id="app" class="site-shell static-page"><section class="page-heading static-page-heading"><h1>${escapeHtml(series.title)}</h1><p>${escapeHtml(seriesDescription)}</p></section></main>`
-    }))) {
+    if (await writeRouteIndex(`/truyen/${seriesSlug}`, renderSeriesSeoPage({
+      series,
+      relatedSeries: findRelatedSeries(series, publicData.series || [])
+    }, baseUrl))) {
       seriesPageCount += 1;
     }
 
     for (const chapter of series.chapters || []) {
       const chapterSlug = safeRoutePart(chapter.slug || chapter.id);
       if (!chapterSlug || chapter.status !== 'public' || !chapter.imported) continue;
-      const chapterTitle = `${series.title} - ${chapter.label || chapter.title || chapterSlug}`;
-      const chapterDescription = `??c ${chapterTitle} online t?i Cu?n Truy?n v?i ?nh t?i nhanh, ??c d?c li?n m?ch v? t? l?u ti?n ??.`;
-      if (await writeRouteIndex(`/truyen/${seriesSlug}/${chapterSlug}`, renderHtmlShell({
-        title: chapterTitle,
-        description: chapterDescription,
-        canonicalUrl: `${seriesUrl}/${chapterSlug}`,
-        imageUrl: series.coverUrl || series.thumbnailUrl || '',
-        jsonLd: chapterJsonLd(series, chapter, baseUrl),
-        bodyHtml: `<main id="app" class="site-shell static-page"><section class="page-heading static-page-heading"><h1>${escapeHtml(chapterTitle)}</h1><p>${escapeHtml(chapterDescription)}</p></section></main>`
-      }))) {
+      if (await writeRouteIndex(`/truyen/${seriesSlug}/${chapterSlug}`, renderChapterSeoPage({ series, chapter }, baseUrl))) {
         chapterPageCount += 1;
       }
     }
@@ -161,19 +161,14 @@ async function writeStaticInfoPages() {
   for (const tag of homeData?.tags || []) {
     const tagSlug = safeRoutePart(tag.slug);
     if (!tagSlug) continue;
-    const copy = tagSeoCopy({ ...tag, slug: tagSlug });
-    if (await writeRouteIndex(`/the-loai/${tagSlug}`, renderHtmlShell({
-      title: copy.title,
-      description: copy.description,
-      canonicalUrl: `${baseUrl}/the-loai/${tagSlug}`,
-      jsonLd: tagPageJsonLd({ tag: { ...tag, slug: tagSlug }, series: [] }, baseUrl),
-      bodyHtml: `<main id="app" class="site-shell static-page"><section class="page-heading static-page-heading"><h1>${escapeHtml(copy.title)}</h1><p>${escapeHtml(copy.description)}</p></section></main>`
-    }))) {
+    if (await writeRouteIndex(`/the-loai/${tagSlug}`, renderTagSeoPage({
+      page: { tag: { ...tag, slug: tagSlug }, series: [] }
+    }, baseUrl))) {
       tagPageCount += 1;
     }
   }
 
-  console.log(`[vercel-static-pages] wrote ${STATIC_PAGES.length} static info pages, ${seriesPageCount} series pages, ${chapterPageCount} chapter pages, ${tagPageCount} tag pages with baseUrl=${baseUrl}`);
+  console.log(`[vercel-static-pages] wrote ${STATIC_PAGES.length} static info pages, ${landingPageCount} landing pages, ${seriesPageCount} series pages, ${chapterPageCount} chapter pages, ${tagPageCount} tag pages with baseUrl=${baseUrl}`);
 }
 
 async function writeJson(filePath, payload) {

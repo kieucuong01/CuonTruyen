@@ -33,7 +33,6 @@ import {
   buildReaderChapterPayload,
   buildHomeCollections,
   buildTagPage,
-  findChapterBySlug,
   findSeriesBySlug,
   publicSeriesDetail,
   readAdminCatalog,
@@ -67,16 +66,18 @@ import { createUpdateChaptersPayload, sourceUrlForSeries } from './crawlQueue.mj
 import { checkApiRateLimit } from './rateLimit.mjs';
 import { corsHeaders, jsonResponse, mimeFromPath, readJsonBody } from './utils.mjs';
 import {
-  absoluteUrl,
   buildRobotsTxt,
   buildSiteMapFromCatalog,
-  chapterJsonLd,
+  controlledLandingPages,
+  findRelatedSeries,
+  renderChapterSeoPage,
+  renderHomeSeoPage,
   renderNotFoundShell,
-  renderHtmlShell,
+  renderLandingSeoPage,
+  renderSeriesSeoPage,
   renderStaticPageShell,
-  seriesJsonLd,
-  tagPageJsonLd,
-  tagSeoCopy
+  renderTagSeoPage,
+  selectLandingPageSeries
 } from './seo.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -1108,6 +1109,12 @@ async function handleSeoRoute(req, res, url) {
     return true;
   }
 
+  if (url.pathname === '/') {
+    const catalog = await readCatalog({ includePages: false });
+    textResponse(res, 200, renderHomeSeoPage({ catalog, tags: buildTagIndex(catalog) }, baseUrl), 'text/html; charset=utf-8');
+    return true;
+  }
+
   if (url.pathname === '/robots.txt') {
     textResponse(res, 200, buildRobotsTxt(baseUrl), 'text/plain; charset=utf-8');
     return true;
@@ -1117,10 +1124,19 @@ async function handleSeoRoute(req, res, url) {
     return true;
   }
 
+  const landingPage = controlledLandingPages().find((page) => page.path === url.pathname);
+  if (landingPage) {
+    const catalog = await readCatalog({ includePages: false });
+    const seriesList = selectLandingPageSeries(landingPage, catalog.series || []);
+    textResponse(res, 200, renderLandingSeoPage({ page: landingPage, seriesList }, baseUrl), 'text/html; charset=utf-8');
+    return true;
+  }
+
   const seriesMatch = url.pathname.match(/^\/truyen\/([^/]+)$/);
   if (seriesMatch) {
     const requestedSlug = decodeURIComponent(seriesMatch[1]);
-    const series = findSeriesBySlug(await readCatalog({ includePages: false }), requestedSlug);
+    const catalog = await readCatalog({ includePages: false });
+    const series = findSeriesBySlug(catalog, requestedSlug);
     if (!series) {
       textResponse(res, 404, renderNotFoundShell(url.pathname, baseUrl), 'text/html; charset=utf-8');
       return true;
@@ -1129,13 +1145,10 @@ async function handleSeoRoute(req, res, url) {
       redirectResponse(res, `/truyen/${encodeURIComponent(series.slug)}`);
       return true;
     }
-    textResponse(res, 200, renderHtmlShell({
-      title: `${series.title} - Đọc truyện tranh tại Cuộn Truyện`,
-      description: series.description || `Đọc ${series.title} liền mạch tại Cuộn Truyện, tự lưu vị trí và mở lại đúng chương đang đọc.`,
-      canonicalUrl: `${baseUrl}/truyen/${series.slug}`,
-      imageUrl: absoluteUrl(series.coverUrl, baseUrl),
-      jsonLd: seriesJsonLd(series, baseUrl)
-    }), 'text/html; charset=utf-8');
+    textResponse(res, 200, renderSeriesSeoPage({
+      series,
+      relatedSeries: findRelatedSeries(series, catalog.series || [])
+    }, baseUrl), 'text/html; charset=utf-8');
     return true;
   }
 
@@ -1143,23 +1156,22 @@ async function handleSeoRoute(req, res, url) {
   if (chapterMatch) {
     const requestedSeriesSlug = decodeURIComponent(chapterMatch[1]);
     const requestedChapterSlug = decodeURIComponent(chapterMatch[2]);
-    const series = findSeriesBySlug(await readCatalog(), requestedSeriesSlug);
-    const chapter = findChapterBySlug(series, requestedChapterSlug);
-    if (!series || !chapter) {
+    const catalog = await readCatalog();
+    const payload = buildReaderChapterPayload(catalog, requestedSeriesSlug, requestedChapterSlug);
+    if (!payload?.series || !payload?.chapter) {
       textResponse(res, 404, renderNotFoundShell(url.pathname, baseUrl), 'text/html; charset=utf-8');
       return true;
     }
+    const { series, chapter } = payload;
     if (requestedSeriesSlug !== series.slug) {
       redirectResponse(res, `/truyen/${encodeURIComponent(series.slug)}/${encodeURIComponent(requestedChapterSlug)}`);
       return true;
     }
-    textResponse(res, 200, renderHtmlShell({
-      title: `${series.title} - ${chapter.title} | Cuộn Truyện`,
-      description: `Đọc ${series.title} ${chapter.title} online tại Cuộn Truyện với reader nối chapter liền mạch và lưu vị trí đọc.`,
-      canonicalUrl: `${baseUrl}/truyen/${series.slug}/${chapter.slug}`,
-      imageUrl: absoluteUrl(chapter.pages?.[0]?.imageUrl || series.coverUrl, baseUrl),
-      jsonLd: chapterJsonLd(series, chapter, baseUrl)
-    }), 'text/html; charset=utf-8');
+    if (requestedChapterSlug !== chapter.slug && requestedChapterSlug !== chapter.id) {
+      redirectResponse(res, `/truyen/${encodeURIComponent(series.slug)}/${encodeURIComponent(chapter.slug)}`);
+      return true;
+    }
+    textResponse(res, 200, renderChapterSeoPage({ series, chapter }, baseUrl), 'text/html; charset=utf-8');
     return true;
   }
 
@@ -1170,13 +1182,7 @@ async function handleSeoRoute(req, res, url) {
       textResponse(res, 404, renderNotFoundShell(url.pathname, baseUrl), 'text/html; charset=utf-8');
       return true;
     }
-    const copy = tagSeoCopy(page.tag);
-    textResponse(res, 200, renderHtmlShell({
-      title: copy.title,
-      description: copy.description,
-      canonicalUrl: `${baseUrl}/the-loai/${page.tag.slug}`,
-      jsonLd: tagPageJsonLd(page, baseUrl)
-    }), 'text/html; charset=utf-8');
+    textResponse(res, 200, renderTagSeoPage({ page }, baseUrl), 'text/html; charset=utf-8');
     return true;
   }
 
