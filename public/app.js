@@ -13,6 +13,7 @@ import { createApiClient } from './apiClient.mjs';
 import { apiUrl, getRuntimeConfig } from './runtimeConfig.mjs';
 import { sendAnalyticsEvent } from './analyticsClient.mjs';
 import { escapeAttr, escapeHtml, throttle } from './domUtils.mjs';
+import { scrollToTopForRoute } from './navigation.mjs';
 import { STATIC_INFO_PAGES, createHomeRoute } from './routes/home.mjs';
 import { createAdminRoute, loadAdminToken } from './routes/admin.mjs';
 import {
@@ -290,6 +291,7 @@ async function route() {
   const token = startNavigation('Đang tải trang...');
   try {
     await routeCore();
+    scrollToTopForRoute(window, location);
   } catch (error) {
     app.innerHTML = `
       <main class="site-shell">
