@@ -47,6 +47,38 @@ export function getCurrentReaderChapter({ readerChapters = [], currentChapterId 
     || getReadableChapters(series)[0];
 }
 
+export function resolveContinueChapterProgress(series, progress) {
+  const readable = getReadableChapters(series);
+  if (!readable.length) {
+    return {
+      chapter: null,
+      chapterNumber: 0,
+      completed: 0,
+      total: 0,
+      percent: 0
+    };
+  }
+
+  const targetId = String(progress?.chapterId || '').trim();
+  const chapterIndex = targetId
+    ? readable.findIndex((item) => {
+      const candidates = [item.id, item.slug, chapterHrefSegment(item)].filter(Boolean).map(String);
+      return candidates.includes(targetId);
+    })
+    : 0;
+  const safeIndex = chapterIndex >= 0 ? chapterIndex : 0;
+  const chapterNumber = safeIndex + 1;
+  const total = readable.length;
+
+  return {
+    chapter: readable[safeIndex] || readable[0],
+    chapterNumber,
+    completed: chapterNumber,
+    total,
+    percent: Math.round((chapterNumber / total) * 100)
+  };
+}
+
 export function chapterHrefSegment(chapter = {}) {
   const slug = chapter.slug && chapter.slug !== 'series' ? chapter.slug : '';
   return encodeURIComponent(slug || chapter.id || '');

@@ -22,6 +22,7 @@ import {
   getCurrentReaderChapter,
   getNextSummaryAfterLastLoaded,
   getReadableChapters,
+  resolveContinueChapterProgress,
   resolveReaderRoute
 } from './routes/reader.mjs';
 import {
@@ -554,15 +555,15 @@ function renderContinueShelf(items, lastSeries) {
 }
 
 function renderContinueItem(series, progress) {
-  const { chapter, completed, total, percent } = resolveContinueChapterProgress(series, progress);
-  const chapterLabel = chapter?.label || chapter?.title || 'Chapter đầu';
+  const { chapterNumber, completed, total, percent } = resolveContinueChapterProgress(series, progress);
+  const chapterLabel = chapterNumber ? `Chapter ${chapterNumber}` : 'Chapter đầu';
   return `
     <article class="continue-card" data-read="${series.id}">
       <div class="mini-cover">${renderCoverImage(series, 'CT')}</div>
       <div class="continue-copy">
         <strong title="${escapeAttr(series.title)}">${escapeHtml(series.title)}</strong>
         <span class="continue-chapter">Đang đọc: ${escapeHtml(chapterLabel)}</span>
-        <span class="continue-progress">${percent}% đã đọc (${completed}/${total || 0} chương)</span>
+        <span class="continue-progress">${completed}/${total || 0} chương</span>
         <div class="mini-meter"><div style="width:${Math.max(4, Math.min(100, percent || 4))}%"></div></div>
         <span class="continue-cta">Đọc tiếp</span>
       </div>
@@ -579,34 +580,6 @@ function renderCoverImage(series = {}, fallback = 'No cover', attributes = 'load
   return coverUrl
     ? `<img ${attributes} src="${escapeAttr(coverUrl)}" alt="${escapeAttr(series.title || 'Truyen')}">`
     : `<span>${escapeHtml(fallback)}</span>`;
-}
-
-function resolveContinueChapterProgress(series, progress) {
-  const readable = (series.chapters || []).filter(hasReadableChapter);
-  if (!readable.length) {
-    return {
-      chapter: null,
-      completed: 0,
-      total: 0,
-      percent: 0
-    };
-  }
-  const targetId = String(progress?.chapterId || '').trim();
-  const chapterIndex = targetId
-    ? readable.findIndex((item) => {
-      const candidates = [item.id, item.slug, chapterHrefSegment(item)].filter(Boolean).map(String);
-      return candidates.includes(targetId);
-    })
-    : 0;
-  const safeIndex = chapterIndex >= 0 ? chapterIndex : 0;
-  const completed = Math.max(0, safeIndex);
-  const total = readable.length;
-  return {
-    chapter: readable[safeIndex] || readable[0],
-    completed,
-    total,
-    percent: Math.round((completed / total) * 100)
-  };
 }
 
 function renderTrendingSection(seriesList) {
@@ -1268,13 +1241,14 @@ function nearestReadableChapter(chapters = [], chapter = null) {
 function renderSeriesContinueCard(series) {
   const progress = loadProgress(series.id);
   if (!progress?.chapterId) return '';
-  const { chapter, percent } = resolveContinueChapterProgress(series, progress);
+  const { chapter, chapterNumber, completed, total } = resolveContinueChapterProgress(series, progress);
   if (!chapter) return '';
+  const chapterLabel = chapterNumber ? `Chapter ${chapterNumber}` : (chapter.label || chapter.title || 'Chapter');
   return `
     <section class="series-continue-card">
       <div>
         <strong>Đang đọc dở</strong>
-        <span>${escapeHtml(chapter.label || chapter.title || 'Chapter')} - ${percent}% đã đọc</span>
+        <span>${escapeHtml(chapterLabel)} - ${completed}/${total || 0} chương</span>
       </div>
       <button class="primary-btn" type="button" data-read="${escapeAttr(series.id)}">Đọc tiếp</button>
     </section>
