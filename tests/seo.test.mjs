@@ -187,6 +187,14 @@ test('renderChapterSeoPage includes image alt text and chapter breadcrumbs', () 
   assert.ok(html.includes(`alt="${series.title} Chapter 1 trang 1"`));
 });
 
+test('renderChapterSeoPage falls back to cover alt text for static chapter summaries', () => {
+  const chapter = { ...series.chapters[0], pages: [] };
+  const html = renderChapterSeoPage({ series, chapter }, 'https://example.com');
+
+  assert.match(html, /src="\/imports\/cover.jpg"/);
+  assert.ok(html.includes(`alt="${series.title} Chapter 1 trang 1"`));
+});
+
 test('renderNotFoundShell emits clean 404 metadata', () => {
   const html = renderNotFoundShell('/truyen/khong-co', 'https://example.com');
 

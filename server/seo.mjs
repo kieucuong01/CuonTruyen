@@ -562,7 +562,10 @@ function renderSeriesBody(series, description, relatedSeries) {
 }
 
 function renderChapterBody(series, chapter, description) {
-  const pages = (chapter.pages || []).slice(0, 3).map((page, index) => {
+  const previewPages = (chapter.pages || []).length
+    ? (chapter.pages || []).slice(0, 3)
+    : [{ imageUrl: series.coverUrl || series.thumbnailUrl || '' }];
+  const pages = previewPages.map((page, index) => {
     const pageUrl = page.imageUrl || page.src || '';
     if (!pageUrl) return '';
     const alt = `${series.title} ${chapter.title || chapter.label || chapter.slug} trang ${index + 1}`;
