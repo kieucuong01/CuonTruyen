@@ -582,6 +582,25 @@ function renderCoverImage(series = {}, fallback = 'No cover', attributes = 'load
     : `<span>${escapeHtml(fallback)}</span>`;
 }
 
+function normalizeTagValue(value = '') {
+  return String(value)
+    .toLowerCase()
+    .replace(/đ/g, 'd')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-');
+}
+
+function seriesOriginLabel(series = {}) {
+  const tagValues = (series.tags || []).map((tag) => normalizeTagValue(
+    typeof tag === 'string' ? tag : `${tag.slug || ''} ${tag.name || ''}`
+  ));
+  if (tagValues.some((tag) => tag.includes('manhwa') || tag.includes('truyen-han'))) return 'Truyện Hàn';
+  if (tagValues.some((tag) => tag.includes('manga') || tag.includes('truyen-nhat'))) return 'Truyện Nhật';
+  if (tagValues.some((tag) => tag.includes('manhua') || tag.includes('truyen-trung'))) return 'Truyện Trung';
+  return series.sourceMappings?.[0]?.adapter || 'Truyện tranh';
+}
+
 function renderTrendingSection(seriesList) {
   return `
     <section class="panel-section trending-section">
@@ -602,7 +621,7 @@ function renderTrendingCard(series) {
     <article class="trending-card">
       <a class="trending-cover" data-link href="/truyen/${series.slug}">
         ${renderCoverImage(series, 'No cover')}
-        <small>${series.sourceMappings?.[0]?.adapter || 'Manhua'}</small>
+        <small>${escapeHtml(seriesOriginLabel(series))}</small>
       </a>
       <h3><a data-link href="/truyen/${series.slug}">${escapeHtml(series.title)}</a></h3>
       <p>${escapeHtml(firstChapter?.label || `${imported} chapter`)}</p>

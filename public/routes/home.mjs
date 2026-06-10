@@ -141,6 +141,7 @@ export function createHomeRoute({
     const featuredTags = buildFeaturedTags(home.tags, mobileGenreSource);
     const koreanSeries = pickOriginSeries(mobileGenreSource, 'manhwa').slice(0, 9);
     const chineseSeries = pickOriginSeries(mobileGenreSource, 'manhua').slice(0, 9);
+    const japaneseSeries = pickOriginSeries(mobileGenreSource, 'manga').slice(0, 9);
 
     app.innerHTML = `
       <main class="site-shell home-shell app-home-shell">
@@ -187,6 +188,12 @@ export function createHomeRoute({
               seriesList: chineseSeries,
               moreHref: '/the-loai/truyen-trung'
             })}
+            ${renderDesktopGenreShowcase({
+              title: 'TRUYỆN NHẬT',
+              eyebrow: 'Manga',
+              seriesList: japaneseSeries,
+              moreHref: '/the-loai/truyen-nhat'
+            })}
           </div>
           <div class="mobile-series-stack" aria-label="Danh sách truyện mobile">
             ${renderMobileSeriesShowcase({
@@ -205,6 +212,12 @@ export function createHomeRoute({
               eyebrow: 'Manhua',
               seriesList: chineseSeries,
               moreHref: '/the-loai/truyen-trung'
+            })}
+            ${renderMobileSeriesShowcase({
+              title: 'TRUYỆN NHẬT',
+              eyebrow: 'Manga',
+              seriesList: japaneseSeries,
+              moreHref: '/the-loai/truyen-nhat'
             })}
           </div>
           <section class="tag-cloud app-tag-cloud app-featured-tags" id="genres">
@@ -607,9 +620,12 @@ export function createHomeRoute({
   }
 
   function pickOriginSeries(seriesList = [], originType = '') {
-    const needles = originType === 'manhua'
-      ? ['manhua', 'truyen-trung']
-      : ['manhwa', 'truyen-han'];
+    const needlesByOrigin = {
+      manhua: ['manhua', 'truyen-trung'],
+      manga: ['manga', 'truyen-nhat'],
+      manhwa: ['manhwa', 'truyen-han']
+    };
+    const needles = needlesByOrigin[originType] || needlesByOrigin.manhwa;
     return seriesList.filter((series) => (series.tags || []).some((tag) => {
       const value = typeof tag === 'string' ? tag : `${tag.slug || ''} ${tag.name || ''}`;
       const normalized = normalizeTag(value);

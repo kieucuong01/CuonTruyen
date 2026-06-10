@@ -17,6 +17,11 @@ export const SEO_FEATURED_TAGS = [
     aliases: ['manhua', 'truyen-trung', 'truyen-trung-quoc', 'trung-quoc', 'trung']
   },
   {
+    slug: 'manga',
+    name: 'Truyện Manga',
+    aliases: ['manga', 'truyen-nhat', 'truyen-nhat-ban', 'nhat-ban', 'nhat']
+  },
+  {
     slug: 'truyen-han',
     name: 'Truyện Hàn',
     aliases: ['truyen-han', 'truyen-han-quoc', 'han-quoc', 'han', 'manhwa']
@@ -25,6 +30,11 @@ export const SEO_FEATURED_TAGS = [
     slug: 'truyen-trung',
     name: 'Truyện Trung',
     aliases: ['truyen-trung', 'truyen-trung-quoc', 'trung-quoc', 'trung', 'manhua']
+  },
+  {
+    slug: 'truyen-nhat',
+    name: 'Truyện Nhật',
+    aliases: ['truyen-nhat', 'truyen-nhat-ban', 'nhat-ban', 'nhat', 'manga']
   }
 ].map((tag) => ({
   ...tag,
@@ -457,8 +467,14 @@ export function buildHomeCollections(catalog) {
     .filter((item) => seriesMeta(item).status === PUBLIC_STATUS)
     .map((item) => publicSeriesSummary(item, { chapterLimit: 3 }));
   const score = (item) => {
-    const updated = item.updatedAt ? Date.parse(item.updatedAt) / 1000 / 60 / 60 / 24 : 0;
-    return Number(item.stats.views || 0) + Number(item.stats.follows || 0) * 20 + updated / 30;
+    const updatedAt = Date.parse(item.updatedAt || 0);
+    const freshness = Number.isFinite(updatedAt) ? updatedAt / 1000 / 60 / 60 / 24 / 7 : 0;
+    const views = Number(item.stats.views || 0);
+    const follows = Number(item.stats.follows || 0);
+    const readDepth = Number(item.stats.readDepth || 0);
+    const libraryDepth = Math.log10(1 + Number(item.pageCount || 0)) * 8
+      + Math.log10(1 + Number(item.importedChapterCount || item.chapterCount || 0)) * 12;
+    return views + follows * 20 + readDepth * 0.2 + libraryDepth + freshness;
   };
   return {
     hot: [...series].sort((a, b) => score(b) - score(a)).slice(0, 12),

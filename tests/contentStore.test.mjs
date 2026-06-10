@@ -169,6 +169,28 @@ test('buildTagPage resolves Manhua/Manhwa origin aliases for SEO landing pages',
   assert.equal(manhwaPage, null);
 });
 
+test('buildTagPage resolves Manga origin aliases for Japanese SEO landing pages', () => {
+  const mangaCatalog = {
+    series: [
+      {
+        id: 'manga-1',
+        title: 'Manga Demo',
+        slug: 'manga-demo',
+        status: 'public',
+        tags: ['Manga'],
+        chapters: [{ id: 'chapter-1', label: 'Chapter 1', imported: true, pageCount: 1 }]
+      }
+    ]
+  };
+
+  const tagIndex = buildTagIndex(mangaCatalog);
+  const mangaPage = buildTagPage(mangaCatalog, 'truyen-nhat');
+
+  assert.deepEqual(tagIndex.map((tag) => tag.slug), ['manga', 'truyen-nhat']);
+  assert.equal(mangaPage.tag.name, 'Truyện Nhật');
+  assert.deepEqual(mangaPage.series.map((series) => series.slug), ['manga-demo']);
+});
+
 test('public series detail returns chapter summaries without page arrays', () => {
   const series = publicSeriesDetail(catalog.series[0]);
 
