@@ -26,6 +26,7 @@
     "optimize:images:catalog:apply:cleanup": "node scripts/optimize-import-images.mjs --catalog-only --apply --cleanup-originals",
     "covers:dry-run": "node scripts/backfill-cover-thumbnails.mjs",
     "covers:apply": "node scripts/backfill-cover-thumbnails.mjs --apply",
+    "backfill:seo": "node scripts/backfill-seo-metadata.mjs",
     "check:encoding": "node scripts/check-encoding.mjs"
   },
   "dependencies": {

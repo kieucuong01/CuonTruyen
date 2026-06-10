@@ -1,3 +1,5 @@
+import '../server/env.mjs';
+
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -28,12 +30,19 @@ async function main() {
     skippedNoSource: 0,
     skippedFailed: 0,
     skippedUnsafe: 0,
+    promotedCovers: 0,
+    changedSeries: [],
     sourceBytes: 0,
     thumbnailBytes: 0
   };
 
   for (const series of seriesList) {
-    if (!args.overwrite && await hasExistingLocalThumbnail(root, series.thumbnailUrl || series.coverThumbnailUrl)) {
+    const existingThumbnail = series.thumbnailUrl || series.coverThumbnailUrl || '';
+    if (!args.overwrite && await hasExistingLocalThumbnail(root, existingThumbnail)) {
+      if (args.promoteCover && promoteCoverToThumbnail(series, existingThumbnail)) {
+        summary.promotedCovers += 1;
+        summary.changedSeries.push(seriesSummary(series, 'promoted-cover'));
+      }
       summary.existingThumbnails += 1;
       continue;
     }
@@ -95,10 +104,14 @@ async function main() {
         storedBytes: thumbnail.storedBytes || null,
         format: thumbnail.format || ''
       };
+      if (args.promoteCover && promoteCoverToThumbnail(series, series.thumbnailUrl)) {
+        summary.promotedCovers += 1;
+      }
+      summary.changedSeries.push(seriesSummary(series, 'created-thumbnail'));
     }
   }
 
-  if (mode === 'apply' && summary.createdThumbnails) await writeCatalog(catalog);
+  if (mode === 'apply' && (summary.createdThumbnails || summary.promotedCovers)) await writeCatalog(catalog);
   printSummary(summary, { json: args.json });
 }
 
@@ -167,6 +180,7 @@ function parseArgs(args) {
     apply: false,
     json: false,
     overwrite: false,
+    promoteCover: false,
     limit: 0,
     seriesId: '',
     root: ''
@@ -176,6 +190,7 @@ function parseArgs(args) {
     if (arg === '--apply') parsed.apply = true;
     else if (arg === '--json') parsed.json = true;
     else if (arg === '--overwrite') parsed.overwrite = true;
+    else if (arg === '--promote-cover') parsed.promoteCover = true;
     else if (arg === '--limit') parsed.limit = Number(args[index += 1] || 0);
     else if (arg === '--series-id') parsed.seriesId = args[index += 1] || '';
     else if (arg === '--root') parsed.root = args[index += 1] || '';
@@ -204,8 +219,28 @@ function printSummary(summary, { json = false } = {}) {
   console.log(`Series: ${summary.processedSeries}/${summary.totalSeries}`);
   console.log(`Created thumbnails: ${summary.createdThumbnails}`);
   console.log(`Existing thumbnails: ${summary.existingThumbnails}`);
+  console.log(`Promoted covers: ${summary.promotedCovers}`);
   console.log(`Skipped: no-source=${summary.skippedNoSource}; failed=${summary.skippedFailed}; unsafe=${summary.skippedUnsafe}`);
   console.log(`Source: ${view.sourceMB} MiB; thumbnails: ${view.thumbnailMB} MiB`);
+}
+
+function promoteCoverToThumbnail(series, thumbnailUrl = '') {
+  if (!thumbnailUrl || !thumbnailUrl.startsWith('/imports/')) return false;
+  if (!/^https?:\/\//i.test(String(series.coverUrl || ''))) return false;
+  if (series.coverUrl === thumbnailUrl) return false;
+  series.coverUrl = thumbnailUrl;
+  return true;
+}
+
+function seriesSummary(series, action) {
+  return {
+    id: series.id || '',
+    slug: series.slug || '',
+    title: series.title || '',
+    action,
+    thumbnailUrl: series.thumbnailUrl || series.coverThumbnailUrl || '',
+    coverUrl: series.coverUrl || ''
+  };
 }
 
 function roundMb(bytes) {
