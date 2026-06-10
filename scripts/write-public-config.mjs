@@ -29,9 +29,7 @@ const config = {
     || (process.env.VERCEL === '1' ? publicSiteUrl : '')
   ),
   publicSnapshotBaseUrl: trimTrailingSlash(
-    process.env.PUBLIC_SNAPSHOT_BASE_URL
-    || process.env.STATIC_API_BASE_URL
-    || '/static-api'
+    snapshotBaseUrl()
   ),
   preferPublicSnapshots: process.env.PUBLIC_SNAPSHOT_API === 'false'
     ? false
@@ -67,6 +65,13 @@ function siteBaseUrl() {
     || process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`
     || 'https://cuontruyen.vercel.app'
   );
+}
+
+function snapshotBaseUrl() {
+  if (process.env.VERCEL === '1') return '/static-api';
+  return process.env.PUBLIC_SNAPSHOT_BASE_URL
+    || process.env.STATIC_API_BASE_URL
+    || '/static-api';
 }
 
 function safeRoutePart(value = '') {

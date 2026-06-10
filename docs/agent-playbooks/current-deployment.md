@@ -62,6 +62,18 @@ crawling. Set `PUBLIC_IMPORTS_BASE_URL_ENABLED=true` locally only when you want
 to force S3 URLs, or `PUBLIC_IMPORTS_BASE_URL_ENABLED=false` to force raw local
 paths.
 
+Public JSON snapshots should stay same-origin on Vercel:
+
+```text
+publicSnapshotBaseUrl=/static-api
+preferPublicSnapshots=true
+```
+
+Do not point `PUBLIC_SNAPSHOT_BASE_URL` at Vietnix S3 unless the full
+`static-api/` tree, including `static-api/series/<slug>.json`, is synced there.
+Missing detail snapshots force the browser to fall back to slower live API
+reads.
+
 When catalog storage resolves to PostgreSQL on Vercel, the build writes
 `CATALOG_STORAGE=postgres` is set without `CATALOG_DATABASE_URL`,
 `DATABASE_URL`, or `POSTGRES_URL`, the build fails loudly instead of silently
