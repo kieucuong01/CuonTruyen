@@ -18,12 +18,14 @@ test('vercel config lets live API routes reach serverless functions', () => {
 
 test('vercel serverless API catch-all exists for admin production', () => {
   assert.equal(fs.existsSync('api/[...path].mjs'), true);
+  assert.equal(fs.existsSync('api/admin/[...path].mjs'), true);
   const source = fs.readFileSync('api/[...path].mjs', 'utf8');
+  const adminSource = fs.readFileSync('api/admin/[...path].mjs', 'utf8');
   assert.match(source, /handleNodeRequest/);
+  assert.match(adminSource, /handleNodeRequest/);
 
-  const apiFiles = fs.readdirSync('api', { recursive: true })
-    .filter((file) => /\.(mjs|js)$/.test(String(file)));
-  assert.deepEqual(apiFiles, ['[...path].mjs']);
+  const apiFiles = listApiFunctionFiles('api');
+  assert.deepEqual(apiFiles.sort(), ['[...path].mjs', 'admin/[...path].mjs'].sort());
 });
 
 test('vercel avoids duplicate public API functions on Hobby deployments', () => {
@@ -60,3 +62,12 @@ test('vercel build and public config honor DB-first catalog mode', () => {
   assert.doesNotMatch(buildSource, /VERCEL_EXPORT_STATIC_API|STATIC_API_OUTPUT_DIR/);
   assert.doesNotMatch(configSource, /staticApiMode|FORCE_STATIC_API_MODE/);
 });
+
+function listApiFunctionFiles(root, prefix = '') {
+  return fs.readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
+    const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
+    const fullPath = `${root}/${entry.name}`;
+    if (entry.isDirectory()) return listApiFunctionFiles(fullPath, relativePath);
+    return /\.(mjs|js)$/.test(entry.name) ? [relativePath] : [];
+  });
+}
