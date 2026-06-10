@@ -735,9 +735,9 @@ export function isRetryableS3Failure({ status = 0, text = '' } = {}) {
 }
 
 export function s3SyncScopeMessage({ retryFailed = false, failedCount = 0, seriesId = '' } = {}) {
-  if (retryFailed) return `Retry ${Number(failedCount || 0)} file thiáº¿u/lá»—i trÃªn S3...`;
-  if (seriesId) return `Äang Ä‘á»“ng bá»™ S3 cho truyá»‡n ${seriesId}...`;
-  return 'Äang Ä‘á»“ng bá»™ S3...';
+  if (retryFailed) return `Retry ${Number(failedCount || 0)} file thiếu/lỗi trên S3...`;
+  if (seriesId) return `Đang đồng bộ S3 cho truyện ${seriesId}...`;
+  return 'Đang đồng bộ S3...';
 }
 
 async function loadFailedKeysFromStatus(filePath) {

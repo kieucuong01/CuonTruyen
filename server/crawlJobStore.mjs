@@ -186,9 +186,9 @@ export async function completeImportJob(id, series, { now = new Date().toISOStri
   const mode = importSummary.mode || current?.payload?.mode || 'full';
   const message = mode === 'new-chapters'
     ? (newChapterCount > 0
-      ? `ÄÃ£ cáº­p nháº­t ${newChapterCount} chapter má»›i cho ${series.title}.`
-      : `ChÆ°a cÃ³ chapter má»›i cho ${series.title}.`)
-    : `ÄÃ£ crawl xong ${series.title}.`;
+      ? `Đã cập nhật ${newChapterCount} chapter mới cho ${series.title}.`
+      : `Chưa có chapter mới cho ${series.title}.`)
+    : `Đã crawl xong ${series.title}.`;
   const progressPatch = {
     phase: mode === 'new-chapters' && newChapterCount === 0 ? 'completed-no-new-chapters' : 'completed',
     message,
@@ -229,7 +229,7 @@ export async function failImportJob(id, error, { now = new Date().toISOString(),
   const progressPatch = {
     phase: status,
     message: shouldRetry
-      ? `Lá»—i: ${message}. Sáº½ retry job láº§n ${attempts + 1}/${maxAttempts}.`
+      ? `Lỗi: ${message}. Sẽ retry job lần ${attempts + 1}/${maxAttempts}.`
       : message,
     errors: [...(current.progress?.errors || []), message].slice(-20),
     errorCount: Number(current.progress?.errorCount || 0) + 1,
@@ -279,7 +279,7 @@ async function claimNextPostgresJob(workerId, now) {
        returning *`,
       [row.id, workerId, now, JSON.stringify({
         phase: 'running',
-        message: 'Worker Ä‘Ã£ nháº­n job, báº¯t Ä‘áº§u crawl.',
+        message: 'Worker đã nhận job, bắt đầu crawl.',
         updatedAt: now
       })]
     );

@@ -264,6 +264,6 @@ from Git automatically.
 
 - Full image sync can take a long time because the library has tens of thousands of image files.
 - S3 image sync is fail-safe by default: normal image publish must pass `--series-id <series-id>`, retry failed files uses `--retry-failed`, and full image sync requires explicit `--all`.
-- If Vietnix S3 returns `RequestTimeTooSkewed`, sync the Windows clock (`w32tm /resync`) and use the admin "Retry file thiáº¿u" button or `npm run sync:s3:retry-failed`.
+- If Vietnix S3 returns `RequestTimeTooSkewed`, sync the Windows clock (`w32tm /resync`) and use the admin "Retry file thiếu" button or `npm run sync:s3:retry-failed`.
 - `S3_ACL=public-read` is needed for objects to be readable through the current S3 public URL.
 - `.vercelignore` must keep `data/`, `logs/`, `.runtime/`, and local env files out of deploy uploads.

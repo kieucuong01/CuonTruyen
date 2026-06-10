@@ -21,9 +21,9 @@ test.beforeEach(async () => {
     [
       ['user_1', 'admin@example.com'],
       [
-        'CÃ³ ai Ä‘á»c bá»™ nÃ y chÆ°a?',
-        'Lá»‹ch crawl tá»‘i nay cÃ³ thÃªm chÆ°Æ¡ng má»›i.',
-        'Tin user khÃ´ng Ä‘Æ°á»£c ghim.'
+        'Có ai đọc bộ này chưa?',
+        'Lịch crawl tối nay có thêm chương mới.',
+        'Tin user không được ghim.'
       ]
     ]
   );
