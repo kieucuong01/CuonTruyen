@@ -183,18 +183,20 @@ async function writeJson(filePath, payload) {
 
 async function writePublicSnapshotApi() {
   const {
+    buildReaderChapterPayload,
     buildHomeCollections,
     buildTagIndex,
     buildTagPage,
     publicCatalog,
     publicSeriesDetail
   } = await import('../server/contentStore.mjs');
-  const { readCatalog } = await import('../server/dataStore.mjs');
+  const { getSeries, readCatalog } = await import('../server/dataStore.mjs');
   const staticApiDir = path.join(PUBLIC_DIR, 'static-api');
   const catalog = await readCatalog({ includePages: false });
   const publicData = publicCatalog(catalog, { chapterLimit: 3 });
   const tags = buildTagIndex(catalog);
   let detailCount = 0;
+  let readerCount = 0;
   let tagCount = 0;
 
   await fs.rm(staticApiDir, { recursive: true, force: true });
@@ -214,6 +216,13 @@ async function writePublicSnapshotApi() {
     if (seriesId && seriesId !== seriesSlug) {
       await writeJson(path.join(staticApiDir, 'series', `${seriesId}.json`), detail);
     }
+
+    readerCount += await writeReaderSnapshots({
+      staticApiDir,
+      series: detail,
+      loadFullSeries: () => getSeries(detail.id, { includePages: true, includeDraft: false }),
+      buildReaderChapterPayload
+    });
   }
 
   for (const tag of tags) {
@@ -230,9 +239,90 @@ async function writePublicSnapshotApi() {
     source: 'postgres-build-snapshot',
     seriesCount: publicData.series.length,
     detailCount,
+    readerCount,
     tagCount
   });
-  console.log(`[vercel-static-api] wrote public snapshots for ${publicData.series.length} series, ${detailCount} detail pages, ${tagCount} tags`);
+  console.log(`[vercel-static-api] wrote public snapshots for ${publicData.series.length} series, ${detailCount} detail pages, ${readerCount} reader pages, ${tagCount} tags`);
+}
+
+async function writeReaderSnapshots({
+  staticApiDir,
+  series,
+  loadFullSeries,
+  buildReaderChapterPayload
+}) {
+  const seriesKeys = uniqueRouteParts([series.slug, series.id]);
+  const chapters = (series.chapters || [])
+    .filter((chapter) => chapter.status === 'public' && chapter.imported);
+  if (!seriesKeys.length || !chapters.length) return 0;
+
+  const fullSeries = await loadFullSeries();
+  if (!fullSeries) return 0;
+
+  let count = 0;
+  for (const chapter of chapters) {
+    const chapterKeys = uniqueRouteParts([chapter.slug, chapter.id]);
+    if (!chapterKeys.length) continue;
+
+    for (const seriesKey of seriesKeys) {
+      for (const chapterKey of chapterKeys) {
+        count += await writeReaderSnapshotVariants({
+          staticApiDir,
+          seriesKey,
+          chapterKey,
+          catalog: { series: [fullSeries] },
+          buildReaderChapterPayload
+        });
+      }
+    }
+  }
+  return count;
+}
+
+async function writeReaderSnapshotVariants({
+  staticApiDir,
+  seriesKey,
+  chapterKey,
+  catalog,
+  buildReaderChapterPayload
+}) {
+  let count = 0;
+  for (const windowSize of [0, 1]) {
+    const payload = buildReaderChapterPayload(catalog, seriesKey, chapterKey, {
+      window: windowSize
+    });
+    if (!payload) continue;
+    await writeJson(readerSnapshotPath(staticApiDir, seriesKey, chapterKey, { window: windowSize }), payload);
+    count += 1;
+  }
+
+  for (const windowSize of [0, 1]) {
+    const payload = buildReaderChapterPayload(catalog, seriesKey, chapterKey, {
+      window: windowSize,
+      start: 'next'
+    });
+    if (!payload) continue;
+    await writeJson(readerSnapshotPath(staticApiDir, seriesKey, chapterKey, { window: windowSize, start: 'next' }), payload);
+    count += 1;
+  }
+  return count;
+}
+
+function readerSnapshotPath(staticApiDir, seriesKey, chapterKey, { window = 0, start = '' } = {}) {
+  const windowSize = Math.max(0, Number(window || 0));
+  const isNext = start === 'next';
+  if (isNext) {
+    const filename = windowSize > 0 ? `next-window-${windowSize}.json` : 'next.json';
+    return path.join(staticApiDir, 'reader', seriesKey, chapterKey, filename);
+  }
+  if (windowSize > 0) {
+    return path.join(staticApiDir, 'reader', seriesKey, chapterKey, `window-${windowSize}.json`);
+  }
+  return path.join(staticApiDir, 'reader', seriesKey, `${chapterKey}.json`);
+}
+
+function uniqueRouteParts(values = []) {
+  return [...new Set(values.map(safeRoutePart).filter(Boolean))];
 }
 
 await fs.mkdir(PUBLIC_DIR, { recursive: true });

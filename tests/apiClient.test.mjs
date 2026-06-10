@@ -48,7 +48,24 @@ test('publicSnapshotUrl maps public reads to generated static snapshots', () => 
   assert.equal(publicSnapshotUrl('/api/home', config), '/static-api/home.json');
   assert.equal(publicSnapshotUrl('/api/series', config), '/static-api/series.json');
   assert.equal(publicSnapshotUrl('/api/series?series=demo-series', config), '/static-api/series/demo-series.json');
+  assert.equal(publicSnapshotUrl('/api/series/demo-series', config), '/static-api/series/demo-series.json');
   assert.equal(publicSnapshotUrl('/api/tags?tag=manhua', config), '/static-api/tags/manhua.json');
+  assert.equal(
+    publicSnapshotUrl('/api/reader?series=demo-series&chapter=chuong-1', config),
+    '/static-api/reader/demo-series/chuong-1.json'
+  );
+  assert.equal(
+    publicSnapshotUrl('/api/reader?series=demo-series&chapter=chuong-1&window=1', config),
+    '/static-api/reader/demo-series/chuong-1/window-1.json'
+  );
+  assert.equal(
+    publicSnapshotUrl('/api/series/demo-series/chapters/chuong-1?window=1', config),
+    '/static-api/reader/demo-series/chuong-1/window-1.json'
+  );
+  assert.equal(
+    publicSnapshotUrl('/api/series/demo-series/chapters/chuong-1/next?window=1', config),
+    '/static-api/reader/demo-series/chuong-1/next-window-1.json'
+  );
   assert.equal(publicSnapshotUrl('/api/series?full=1', config), '');
 });
 
@@ -114,6 +131,50 @@ test('reader payloads use the live API', async () => {
     const payload = await client.fetchJson('/api/reader?series=demo-series&chapter=chuong-1&window=1');
     assert.equal(payload.chapter.id, 'chuong-1');
     assert.deepEqual(requested, ['/api/reader?series=demo-series&chapter=chuong-1&window=1']);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalConfig === undefined) delete globalThis.COMIC_READER_CONFIG;
+    else globalThis.COMIC_READER_CONFIG = originalConfig;
+  }
+});
+
+test('reader payloads prefer static snapshots and fall back to live API when missing', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalConfig = globalThis.COMIC_READER_CONFIG;
+  const requested = [];
+  globalThis.COMIC_READER_CONFIG = {
+    preferPublicSnapshots: true,
+    publicSnapshotBaseUrl: '/static-api'
+  };
+  globalThis.fetch = async (url) => {
+    requested.push(String(url));
+    if (String(url) === '/static-api/reader/demo-series/chuong-1/window-1.json') {
+      return new Response(JSON.stringify({ chapter: { id: 'from-static' } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      });
+    }
+    if (String(url) === '/static-api/reader/demo-series/missing.json') {
+      return new Response('Not found', { status: 404 });
+    }
+    return new Response(JSON.stringify({ chapter: { id: 'from-live' } }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' }
+    });
+  };
+
+  try {
+    const client = createApiClient();
+    const staticPayload = await client.fetchJson('/api/reader?series=demo-series&chapter=chuong-1&window=1');
+    const livePayload = await client.fetchJson('/api/reader?series=demo-series&chapter=missing');
+
+    assert.equal(staticPayload.chapter.id, 'from-static');
+    assert.equal(livePayload.chapter.id, 'from-live');
+    assert.deepEqual(requested, [
+      '/static-api/reader/demo-series/chuong-1/window-1.json',
+      '/static-api/reader/demo-series/missing.json',
+      '/api/reader?series=demo-series&chapter=missing'
+    ]);
   } finally {
     globalThis.fetch = originalFetch;
     if (originalConfig === undefined) delete globalThis.COMIC_READER_CONFIG;

@@ -58,6 +58,9 @@ test('vercel build and public config honor DB-first catalog mode', () => {
 
   assert.match(buildSource, /requirePostgresCatalogUrl/);
   assert.match(configSource, /writePublicSnapshotApi/);
+  assert.match(configSource, /writeReaderSnapshots/);
+  assert.match(configSource, /readerCount/);
+  assert.match(configSource, /readerSnapshotPath/);
   assert.match(configSource, /postgres-build-snapshot/);
   assert.match(configSource, /function snapshotBaseUrl\(\)/);
   assert.match(configSource, /process\.env\.VERCEL === '1'\) return '\/static-api'/);

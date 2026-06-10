@@ -6,7 +6,7 @@ export { apiUrl };
 export function isCacheableRequest(url, options = {}) {
   const method = String(options?.method || 'GET').toUpperCase();
   if (method !== 'GET') return false;
-  return /^\/api\/(series($|[/?])|home|public\/home|tags($|[/?])|search)/.test(url);
+  return /^\/api\/(series($|[/?])|home|public\/home|tags($|[/?])|search|reader($|[/?]))/.test(url);
 }
 
 function trimTrailingSlash(value = '') {
@@ -40,6 +40,31 @@ export function publicSnapshotUrl(url, config = getRuntimeConfig()) {
     return `${baseUrl}/series.json`;
   }
 
+  if (parsed.pathname === '/api/reader') {
+    return readerSnapshotUrl(baseUrl, {
+      series: parsed.searchParams.get('series'),
+      chapter: parsed.searchParams.get('chapter'),
+      window: parsed.searchParams.get('window'),
+      start: parsed.searchParams.get('start')
+    });
+  }
+
+  const readerPathMatch = parsed.pathname.match(/^\/api\/series\/([^/]+)\/chapters\/([^/]+)(\/next)?$/);
+  if (readerPathMatch) {
+    return readerSnapshotUrl(baseUrl, {
+      series: decodeURIComponent(readerPathMatch[1]),
+      chapter: decodeURIComponent(readerPathMatch[2]),
+      window: parsed.searchParams.get('window'),
+      start: readerPathMatch[3] ? 'next' : parsed.searchParams.get('start')
+    });
+  }
+
+  const seriesPathMatch = parsed.pathname.match(/^\/api\/series\/([^/]+)$/);
+  if (seriesPathMatch) {
+    const part = safeSnapshotPart(decodeURIComponent(seriesPathMatch[1]));
+    return part ? `${baseUrl}/series/${part}.json` : '';
+  }
+
   if (parsed.pathname === '/api/tags') {
     const tag = safeSnapshotPart(parsed.searchParams.get('tag') || parsed.searchParams.get('slug'));
     return tag ? `${baseUrl}/tags/${tag}.json` : '';
@@ -51,6 +76,21 @@ export function publicSnapshotUrl(url, config = getRuntimeConfig()) {
   }
 
   return '';
+}
+
+function readerSnapshotUrl(baseUrl, { series = '', chapter = '', window = 0, start = '' } = {}) {
+  const seriesPart = safeSnapshotPart(series);
+  const chapterPart = safeSnapshotPart(chapter);
+  if (!seriesPart || !chapterPart) return '';
+
+  const windowSize = Math.max(0, Number(window || 0));
+  const isNext = String(start || '').trim() === 'next';
+  if (isNext) {
+    const filename = windowSize > 0 ? `next-window-${windowSize}.json` : 'next.json';
+    return `${baseUrl}/reader/${seriesPart}/${chapterPart}/${filename}`;
+  }
+  if (windowSize > 0) return `${baseUrl}/reader/${seriesPart}/${chapterPart}/window-${windowSize}.json`;
+  return `${baseUrl}/reader/${seriesPart}/${chapterPart}.json`;
 }
 
 export function createApiClient({
