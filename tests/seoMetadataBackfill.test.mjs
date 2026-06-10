@@ -92,3 +92,14 @@ test('auditSeriesSeo reports external truyenqq covers and missing thumbnails', (
   assert.equal(audit.truyenqqCover, true);
   assert.equal(audit.missingThumbnail, true);
 });
+
+test('auditSeriesSeo treats blank thumbnail strings as missing', () => {
+  const audit = auditSeriesSeo({
+    ...publicSeries,
+    thumbnailUrl: '   ',
+    coverThumbnailUrl: ''
+  });
+
+  assert.equal(audit.missingThumbnail, true);
+  assert.equal(audit.thumbnailUrl, '');
+});

@@ -54,7 +54,7 @@ export function parseSeoBackfillArgs(argv = process.argv.slice(2)) {
 
 export function auditSeriesSeo(series = {}) {
   const coverUrl = String(series.coverUrl || '');
-  const thumbnailUrl = String(series.thumbnailUrl || series.coverThumbnailUrl || '');
+  const thumbnailUrl = String(series.thumbnailUrl || series.coverThumbnailUrl || '').trim();
   const hasCoverThumbnail = Boolean(thumbnailUrl || series.coverThumbnail);
   return {
     id: series.id || '',
