@@ -153,6 +153,7 @@ test('builds SEO discovery collections and tag index from public content only', 
   const home = buildHomeCollections(catalog);
   const tags = buildTagIndex(catalog);
 
+  assert.deepEqual(home.all.map((series) => series.slug), ['manh-nhat-lich-su']);
   assert.deepEqual(home.hot.map((series) => series.slug), ['manh-nhat-lich-su']);
   assert.equal(home.hot[0].chapters[0].pages, undefined);
   assert.equal(home.hot[0].pageCount, 3);

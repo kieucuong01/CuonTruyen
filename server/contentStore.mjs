@@ -477,6 +477,7 @@ export function buildHomeCollections(catalog) {
     return views + follows * 20 + readDepth * 0.2 + libraryDepth + freshness;
   };
   return {
+    all: [...series].sort((a, b) => Date.parse(b.updatedAt || 0) - Date.parse(a.updatedAt || 0)),
     hot: [...series].sort((a, b) => score(b) - score(a)).slice(0, 12),
     updated: [...series].sort((a, b) => Date.parse(b.updatedAt || 0) - Date.parse(a.updatedAt || 0)).slice(0, 12),
     tags: buildTagIndex(catalog)

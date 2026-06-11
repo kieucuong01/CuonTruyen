@@ -122,7 +122,10 @@ export function createHomeRoute({
       loadHome(),
       loadBulletinMessages()
     ]);
-    const homeSeries = uniqueSeriesById([...(home.hot || []), ...(home.updated || [])]);
+    const allSeries = Array.isArray(home.all) && home.all.length
+      ? home.all
+      : uniqueSeriesById([...(home.hot || []), ...(home.updated || [])]);
+    const homeSeries = uniqueSeriesById(allSeries);
     const historyIds = loadReadingHistory();
     const lastSeriesId = loadLastSeriesId();
     const { readingSeries, lastSeries } = await loadHomeReadingSeries({
@@ -137,7 +140,7 @@ export function createHomeRoute({
       : [];
     const popular = home.hot.length ? home.hot : homeSeries;
     const updated = home.updated.length ? home.updated : homeSeries;
-    const mobileGenreSource = uniqueSeriesById([...updated, ...popular, ...homeSeries]);
+    const mobileGenreSource = uniqueSeriesById([...homeSeries, ...updated, ...popular]);
     const featuredTags = buildFeaturedTags(home.tags, mobileGenreSource);
     const koreanSeries = pickOriginSeries(mobileGenreSource, 'manhwa').slice(0, 9);
     const chineseSeries = pickOriginSeries(mobileGenreSource, 'manhua').slice(0, 9);
@@ -175,6 +178,7 @@ export function createHomeRoute({
           <div class="desktop-updated-feed">
             ${renderUpdatedSection(updated)}
           </div>
+          ${renderRail('Tất cả truyện', homeSeries, 'compact app-all-series')}
           <div class="desktop-genre-stack" aria-label="Truyện theo quốc gia">
             ${renderDesktopGenreShowcase({
               title: 'TRUYỆN HÀN',
