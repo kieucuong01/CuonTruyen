@@ -10,4 +10,6 @@ test('postgres schema stores import mode and asset status fields', () => {
   assert.match(source, /image_error_count integer not null default 0/);
   assert.match(source, /last_asset_check_at timestamptz/);
   assert.match(source, /asset_status = excluded\.asset_status/);
+  assert.match(source, /POSTGRES_SCHEMA_BACKFILL_SQL/);
+  assert.match(source, /POSTGRES_RUN_SCHEMA_BACKFILL === 'true'/);
 });

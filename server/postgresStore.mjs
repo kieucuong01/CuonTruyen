@@ -169,6 +169,23 @@ alter table if exists chapters add column if not exists image_error_count intege
 alter table if exists chapters add column if not exists last_asset_check_at timestamptz;
 alter table if exists pages add column if not exists asset_status text not null default 'external';
 
+create index if not exists idx_series_slug on series(slug);
+create index if not exists idx_series_status_updated on series(status, updated_at desc);
+create index if not exists idx_chapters_series_slug on chapters(series_id, slug);
+create index if not exists idx_chapters_series_order on chapters(series_id, source_order);
+create index if not exists idx_pages_chapter_order on pages(series_id, chapter_id, page_order);
+create index if not exists idx_series_tags_tag on series_tags(tag_slug, series_id);
+create index if not exists idx_crawl_jobs_source_status on crawl_jobs(source_url, status);
+create index if not exists idx_crawl_jobs_queue on crawl_jobs(status, run_after, priority desc, created_at);
+create index if not exists idx_app_sessions_user_id on app_sessions(user_id);
+create index if not exists idx_app_sessions_expires_at on app_sessions(expires_at);
+create index if not exists idx_bulletin_messages_pinned on bulletin_messages(pinned, pinned_at);
+create index if not exists idx_bulletin_messages_created_at on bulletin_messages(created_at);
+create index if not exists idx_analytics_events_created_at on analytics_events(created_at desc);
+create index if not exists idx_analytics_events_type on analytics_events(type, created_at desc);
+`;
+
+export const POSTGRES_SCHEMA_BACKFILL_SQL = `
 update pages
 set asset_status = 'local'
 where asset_status = 'external'
@@ -194,21 +211,6 @@ where exists (
   where c.series_id = s.id
     and c.asset_status = 'local'
 );
-
-create index if not exists idx_series_slug on series(slug);
-create index if not exists idx_series_status_updated on series(status, updated_at desc);
-create index if not exists idx_chapters_series_slug on chapters(series_id, slug);
-create index if not exists idx_chapters_series_order on chapters(series_id, source_order);
-create index if not exists idx_pages_chapter_order on pages(series_id, chapter_id, page_order);
-create index if not exists idx_series_tags_tag on series_tags(tag_slug, series_id);
-create index if not exists idx_crawl_jobs_source_status on crawl_jobs(source_url, status);
-create index if not exists idx_crawl_jobs_queue on crawl_jobs(status, run_after, priority desc, created_at);
-create index if not exists idx_app_sessions_user_id on app_sessions(user_id);
-create index if not exists idx_app_sessions_expires_at on app_sessions(expires_at);
-create index if not exists idx_bulletin_messages_pinned on bulletin_messages(pinned, pinned_at);
-create index if not exists idx_bulletin_messages_created_at on bulletin_messages(created_at);
-create index if not exists idx_analytics_events_created_at on analytics_events(created_at desc);
-create index if not exists idx_analytics_events_type on analytics_events(type, created_at desc);
 `;
 
 export function usesPostgresStorage() {
@@ -219,7 +221,13 @@ export async function ensurePostgresSchema() {
   if (!usesPostgresStorage()) return false;
   if (process.env.POSTGRES_SKIP_SCHEMA_INIT === 'true') return true;
   if (!schemaPromise) {
-    schemaPromise = queryPostgres(POSTGRES_SCHEMA_SQL).then(() => true);
+    schemaPromise = queryPostgres(POSTGRES_SCHEMA_SQL)
+      .then(async () => {
+        if (process.env.POSTGRES_RUN_SCHEMA_BACKFILL === 'true') {
+          await queryPostgres(POSTGRES_SCHEMA_BACKFILL_SQL);
+        }
+        return true;
+      });
   }
   return schemaPromise;
 }
