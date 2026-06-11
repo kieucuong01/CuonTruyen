@@ -24,6 +24,8 @@
 - `tests/adminProductionStatus.test.mjs`: Direct tests for Production Health status calculations.
 - `public/routes/adminSeriesView.mjs`: Pure admin series card/detail stats and badge helpers.
 - `tests/adminSeriesView.test.mjs`: Direct tests for admin series stats, status badges, asset badges, and source URL selection.
+- `public/routes/adminTags.mjs`: Pure admin tag/origin picker, origin detection, and tag merge helpers.
+- `tests/adminTags.test.mjs`: Direct tests for admin tag normalization, origin detection, merge behavior, and picker rendering.
 
 ## Task 1: Extract Import Chapter Selection Helpers
 
@@ -204,4 +206,51 @@ Run:
 node --check public\routes\adminSeriesView.mjs
 node --check public\routes\admin.mjs
 node --require ./tests/setup-env.cjs --test tests\adminSeriesView.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 5: Extract Admin Tag And Origin Helpers
+
+**Files:**
+- Create: `public/routes/adminTags.mjs`
+- Create: `tests/adminTags.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+
+- [x] **Step 1: Write failing tests for pure tag/origin helpers**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminTags.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminTags.mjs`.
+
+- [x] **Step 2: Extract pure tag/origin helpers**
+
+Move these helpers from `public/routes/admin.mjs` to `public/routes/adminTags.mjs`:
+
+```text
+renderOriginTagPicker
+getOriginTagOptions
+getSeriesTagNames
+getManualTagNames
+mergeTagsWithOrigin
+uniqueTagNames
+detectOriginType
+isOriginTagName
+normalizeAdminTagName
+```
+
+Keep form submission and API persistence in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminTags.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminTags.test.mjs tests\adminRouteSmoke.test.mjs
 ```
