@@ -30,6 +30,8 @@
 - `tests/adminFeedbackView.test.mjs`: Direct tests for admin feedback escaping, production check details, storage labels, and API hint rendering.
 - `public/routes/adminPayloads.mjs`: Pure admin import job, series metadata, and chapter moderation payload builders.
 - `tests/adminPayloads.test.mjs`: Direct tests for admin payload URL normalization, crawl settings, tag/origin merging, local schedule fields, and chapter moderation patches.
+- `public/routes/adminJobHelpers.mjs`: Pure admin job response normalization, flash-message helpers, import result unwrapping, and production step parsing.
+- `tests/adminJobHelpers.test.mjs`: Direct tests for admin job response normalization, flash messages, result unwrapping, and production step parsing.
 - `public/routes/adminTags.mjs`: Pure admin tag/origin picker, origin detection, and tag merge helpers.
 - `tests/adminTags.test.mjs`: Direct tests for admin tag normalization, origin detection, merge behavior, and picker rendering.
 - `public/routes/adminS3SyncView.mjs`: Pure admin S3 sync status rendering, failed-item list, stale-job warning, and retry-button visibility.
@@ -649,4 +651,47 @@ Run:
 node --check public\routes\adminPayloads.mjs
 node --check public\routes\admin.mjs
 node --require ./tests/setup-env.cjs --test tests\adminPayloads.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 15: Extract Admin Job Helpers
+
+**Files:**
+- Create: `public/routes/adminJobHelpers.mjs`
+- Create: `tests/adminJobHelpers.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for admin job helpers**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminJobHelpers.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminJobHelpers.mjs`.
+
+- [x] **Step 2: Move pure job helpers**
+
+Move these pure job helper paths from `public/routes/admin.mjs` into `public/routes/adminJobHelpers.mjs`:
+
+```text
+importJobsFromResult
+importJobsFlashMessage
+resolveImportJobSeries
+parseProductionSteps
+```
+
+Keep DOM reads, API calls, status updates, route navigation, and polling loops in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminJobHelpers.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminJobHelpers.test.mjs tests\adminRouteSmoke.test.mjs
 ```

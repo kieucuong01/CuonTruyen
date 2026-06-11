@@ -29,6 +29,12 @@ import {
   buildAdminImportPayload,
   buildAdminSeriesPatch
 } from './adminPayloads.mjs';
+import {
+  importJobsFlashMessage,
+  importJobsFromResult,
+  parseProductionSteps,
+  resolveImportJobSeries
+} from './adminJobHelpers.mjs';
 
 const ADMIN_TOKEN_KEY = 'comic-admin-token';
 const ADMIN_EMAIL_KEY = 'comic-admin-email';
@@ -511,11 +517,11 @@ export function createAdminRoute({
         headers: adminHeaders(),
         body: JSON.stringify(payload)
       });
-      const jobs = Array.isArray(result.jobs) ? result.jobs : result.job ? [{ job: result.job, reused: result.reused }] : [];
+      const jobs = importJobsFromResult(result);
       if (!jobs.length) throw new Error('Khong tao duoc job crawl.');
       if (jobs.length === 1) {
         const series = await pollImportJob(jobs[0].job.id, status, { navigateOnComplete: false });
-        adminFlashMessage = `Da crawl xong ${series.title || 'truyen'}.`;
+        adminFlashMessage = importJobsFlashMessage(jobs, series);
       } else {
         if (status) status.textContent = `Đã tạo ${jobs.length} job crawl. Theo dõi trong bảng Trạng thái crawl.`;
         adminFlashMessage = `Đã tạo ${jobs.length} job crawl.`;
@@ -684,10 +690,7 @@ export function createAdminRoute({
 
   async function handleProductionStep(event) {
     const button = event.currentTarget;
-    const steps = String(button.dataset.steps || '')
-      .split(',')
-      .map((step) => step.trim())
-      .filter(Boolean);
+    const steps = parseProductionSteps(button.dataset.steps);
     await runProductionPipelineJob(button, {
       seriesId: button.dataset.productionStep,
       steps
@@ -769,7 +772,7 @@ export function createAdminRoute({
       });
       renderImportProgress(status, job);
       if (job.status === 'completed') {
-        const series = job.result?.series || job.series || job.result || {};
+        const series = resolveImportJobSeries(job);
         if (navigateOnComplete && series?.id) {
           window.location.href = `/admin/series/${encodeURIComponent(series.id)}`;
         }
