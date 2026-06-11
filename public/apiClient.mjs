@@ -49,13 +49,13 @@ export function publicSnapshotUrl(url, config = getRuntimeConfig()) {
     });
   }
 
-  const readerPathMatch = parsed.pathname.match(/^\/api\/series\/([^/]+)\/chapters\/([^/]+)(\/next)?$/);
+  const readerPathMatch = parsed.pathname.match(/^\/api\/series\/([^/]+)\/chapters\/([^/]+)$/);
   if (readerPathMatch) {
     return readerSnapshotUrl(baseUrl, {
       series: decodeURIComponent(readerPathMatch[1]),
       chapter: decodeURIComponent(readerPathMatch[2]),
       window: parsed.searchParams.get('window'),
-      start: readerPathMatch[3] ? 'next' : parsed.searchParams.get('start')
+      start: parsed.searchParams.get('start')
     });
   }
 
@@ -85,10 +85,7 @@ function readerSnapshotUrl(baseUrl, { series = '', chapter = '', window = 0, sta
 
   const windowSize = Math.max(0, Number(window || 0));
   const isNext = String(start || '').trim() === 'next';
-  if (isNext) {
-    const filename = windowSize > 0 ? `next-window-${windowSize}.json` : 'next.json';
-    return `${baseUrl}/reader/${seriesPart}/${chapterPart}/${filename}`;
-  }
+  if (isNext) return '';
   if (windowSize > 0) return `${baseUrl}/reader/${seriesPart}/${chapterPart}/window-${windowSize}.json`;
   return `${baseUrl}/reader/${seriesPart}/${chapterPart}.json`;
 }

@@ -381,7 +381,22 @@ export async function withPostgresTransaction(work) {
 function postgresSslConfig(databaseUrl = requirePostgresCatalogUrl()) {
   if (process.env.POSTGRES_SSL === 'false') return false;
   if (/localhost|127\.0\.0\.1|::1/i.test(databaseUrl)) return false;
-  return { rejectUnauthorized: process.env.POSTGRES_SSL_REJECT_UNAUTHORIZED !== 'false' };
+  const ssl = { rejectUnauthorized: process.env.POSTGRES_SSL_REJECT_UNAUTHORIZED !== 'false' };
+  const ca = postgresSslCa();
+  if (ca) ssl.ca = ca;
+  try {
+    ssl.servername = new URL(databaseUrl).hostname;
+  } catch {
+    // Keep pg defaults when the connection string is not URL-shaped.
+  }
+  return ssl;
+}
+
+function postgresSslCa() {
+  const encoded = String(process.env.POSTGRES_SSL_CA_BASE64 || '').trim();
+  if (encoded) return Buffer.from(encoded, 'base64').toString('utf8');
+  const raw = String(process.env.POSTGRES_SSL_CA || '').trim();
+  return raw ? raw.replace(/\\n/g, '\n') : '';
 }
 
 async function upsertSeriesRows(client, rawSeries) {

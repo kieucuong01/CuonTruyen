@@ -62,10 +62,8 @@ test('publicSnapshotUrl maps public reads to generated static snapshots', () => 
     publicSnapshotUrl('/api/series/demo-series/chapters/chuong-1?window=1', config),
     '/static-api/reader/demo-series/chuong-1/window-1.json'
   );
-  assert.equal(
-    publicSnapshotUrl('/api/series/demo-series/chapters/chuong-1/next?window=1', config),
-    '/static-api/reader/demo-series/chuong-1/next-window-1.json'
-  );
+  assert.equal(publicSnapshotUrl('/api/series/demo-series/chapters/chuong-1/next?window=1', config), '');
+  assert.equal(publicSnapshotUrl('/api/reader?series=demo-series&chapter=chuong-1&start=next', config), '');
   assert.equal(publicSnapshotUrl('/api/series?full=1', config), '');
 });
 
