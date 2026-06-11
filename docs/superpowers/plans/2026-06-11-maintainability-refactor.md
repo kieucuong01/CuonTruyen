@@ -22,6 +22,8 @@
 - `tests/adminProductionView.test.mjs`: Direct tests for admin production helper rendering and escaping.
 - `server/adminProductionStatus.mjs`: Pure backend Production Health status builder for admin.
 - `tests/adminProductionStatus.test.mjs`: Direct tests for Production Health status calculations.
+- `public/routes/adminSeriesView.mjs`: Pure admin series card/detail stats and badge helpers.
+- `tests/adminSeriesView.test.mjs`: Direct tests for admin series stats, status badges, asset badges, and source URL selection.
 
 ## Task 1: Extract Import Chapter Selection Helpers
 
@@ -155,4 +157,51 @@ Run:
 node --check server\adminProductionStatus.mjs
 node --check server\index.mjs
 node --require ./tests/setup-env.cjs --test tests\adminProductionStatus.test.mjs tests\adminRouteSmoke.test.mjs tests\productionCheck.test.mjs tests\productionPipeline.test.mjs tests\storageConfig.test.mjs
+```
+
+## Task 4: Extract Admin Series View Helpers
+
+**Files:**
+- Create: `public/routes/adminSeriesView.mjs`
+- Create: `tests/adminSeriesView.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+
+- [x] **Step 1: Write failing tests for pure admin series helpers**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminSeriesView.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminSeriesView.mjs`.
+
+- [x] **Step 2: Extract pure series display helpers**
+
+Move these helpers from `public/routes/admin.mjs` to `public/routes/adminSeriesView.mjs`:
+
+```text
+adminSeriesStats
+renderAdminSeriesBadges
+renderAssetModeBadge
+seriesUsesExternalImageUrls
+assetStatusLabel
+assetStatusClass
+statusLabel
+normalizeStatusClass
+sourceUrlForAdminSeries
+```
+
+Keep route event binding, form submission, and chapter row rendering in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminSeriesView.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminSeriesView.test.mjs tests\adminRouteSmoke.test.mjs
 ```
