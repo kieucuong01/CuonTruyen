@@ -46,6 +46,8 @@
 - `tests/adminSeriesJobActions.test.mjs`: Direct tests for scoped update/refresh endpoints, button/status states, flash messages, and post-job navigation.
 - `public/routes/adminProductionActions.mjs`: Admin production publish, selected-step publish, production check, and production action button binding.
 - `tests/adminProductionActions.test.mjs`: Direct tests for production publish/check endpoints, button/status states, polling, and public URL opening.
+- `public/routes/adminBulletinActions.mjs`: Admin bulletin submit, pin/unpin actions, status updates, and rerender hooks.
+- `tests/adminBulletinActions.test.mjs`: Direct tests for bulletin endpoints, payloads, form reset, flash messages, and error states.
 - `public/routes/adminTags.mjs`: Pure admin tag/origin picker, origin detection, and tag merge helpers.
 - `tests/adminTags.test.mjs`: Direct tests for admin tag normalization, origin detection, merge behavior, and picker rendering.
 - `public/routes/adminS3SyncView.mjs`: Pure admin S3 sync status rendering, failed-item list, stale-job warning, and retry-button visibility.
@@ -1009,4 +1011,46 @@ Run:
 node --check public\routes\adminProductionActions.mjs
 node --check public\routes\admin.mjs
 node --require ./tests/setup-env.cjs --test tests\adminProductionActions.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 23: Extract Admin Bulletin Actions
+
+**Files:**
+- Create: `public/routes/adminBulletinActions.mjs`
+- Create: `tests/adminBulletinActions.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for bulletin submit/pin actions**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminBulletinActions.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminBulletinActions.mjs`.
+
+- [x] **Step 2: Move bulletin submit and pin handlers**
+
+Move these handlers from `public/routes/admin.mjs` into `public/routes/adminBulletinActions.mjs`:
+
+```text
+bindAdminBulletinActions
+handleAdminBulletinSubmit
+handleAdminBulletinPin
+```
+
+Keep admin page composition, bulletin panel rendering, and dashboard data loading in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminBulletinActions.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminBulletinActions.test.mjs tests\adminRouteSmoke.test.mjs
 ```
