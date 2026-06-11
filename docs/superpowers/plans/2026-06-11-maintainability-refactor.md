@@ -28,6 +28,8 @@
 - `tests/adminTags.test.mjs`: Direct tests for admin tag normalization, origin detection, merge behavior, and picker rendering.
 - `public/routes/adminS3SyncView.mjs`: Pure admin S3 sync status rendering, failed-item list, stale-job warning, and retry-button visibility.
 - `tests/adminS3SyncView.test.mjs`: Direct tests for S3 sync progress, failed item escaping, retry controls, and clock skew guidance.
+- `public/routes/adminCrawlQueueView.mjs`: Pure admin crawl queue status rendering, running-job progress, waiting/failed job lists, and crawl ETA/rate formatting.
+- `tests/adminCrawlQueueView.test.mjs`: Direct tests for crawl queue summaries, escaping, list limits, running-job metrics, and format helpers.
 
 ## Task 1: Extract Import Chapter Selection Helpers
 
@@ -295,4 +297,47 @@ Run:
 node --check public\routes\adminS3SyncView.mjs
 node --check public\routes\admin.mjs
 node --require ./tests/setup-env.cjs --test tests\adminS3SyncView.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 7: Extract Admin Crawl Queue View Helpers
+
+**Files:**
+- Create: `public/routes/adminCrawlQueueView.mjs`
+- Create: `tests/adminCrawlQueueView.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+
+- [x] **Step 1: Write failing tests for pure crawl queue rendering helpers**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminCrawlQueueView.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminCrawlQueueView.mjs`.
+
+- [x] **Step 2: Extract crawl queue view helpers**
+
+Move these helpers from `public/routes/admin.mjs` to `public/routes/adminCrawlQueueView.mjs`:
+
+```text
+renderCrawlQueueRunningJob
+renderCrawlQueueWaitingList
+crawl queue status class/markup calculation
+formatCrawlDuration
+formatCrawlRate
+```
+
+Keep polling, wake API calls, and DOM event binding in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminCrawlQueueView.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminCrawlQueueView.test.mjs tests\adminRouteSmoke.test.mjs
 ```

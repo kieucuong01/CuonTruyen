@@ -38,7 +38,7 @@ These can be large or temporary. Use targeted file paths only.
 | --- | --- |
 | Mobile home UI | `public/routes/home.mjs`, `public/styles.css` |
 | Reader scroll/images | `public/app.js`, `public/readerWindow.mjs`, `public/readerRestore.mjs`, `public/readingProgress.mjs` |
-| Admin/crawl UI | `public/routes/admin.mjs`, `public/routes/adminS3SyncView.mjs`, `public/routes/adminTags.mjs`, `public/routes/adminSeriesView.mjs`, `public/routes/adminProductionView.mjs`, `server/index.mjs`, `server/crawlJobStore.mjs` |
+| Admin/crawl UI | `public/routes/admin.mjs`, `public/routes/adminCrawlQueueView.mjs`, `public/routes/adminS3SyncView.mjs`, `public/routes/adminTags.mjs`, `public/routes/adminSeriesView.mjs`, `public/routes/adminProductionView.mjs`, `server/index.mjs`, `server/crawlJobStore.mjs` |
 | Production Health API | `server/adminProductionStatus.mjs`, `server/index.mjs`, `server/storageConfig.mjs` |
 | New chapter updates | `server/importChapterSelection.mjs`, `server/importer.mjs`, `server/crawlQueue.mjs`, `server/crawlWorker.mjs`, `public/routes/admin.mjs` |
 | Public catalog/filtering | `server/contentStore.mjs`, `server/dataStore.mjs`, `server/postgresStore.mjs` |
