@@ -3,32 +3,37 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Privacy - Cuộn Truyện</title>
-    <meta name="description" content="Cuộn Truyện lưu lịch sử đọc và theo dõi chủ yếu trên trình duyệt của người dùng; sự kiện đọc được dùng để cải thiện trải nghiệm.">
+    <title>Chính sách riêng tư - Cách Cuộn Truyện lưu dữ liệu đọc</title>
+    <meta name="description" content="Cuộn Truyện ưu tiên lưu lịch sử đọc trên trình duyệt, dùng dữ liệu đăng nhập và analytics cơ bản để vận hành, bảo mật và cải thiện trải nghiệm.">
     <meta name="theme-color" content="#ff8b2b">
     <link rel="canonical" href="https://cuontruyen.vercel.app/privacy">
     <meta property="og:site_name" content="Cuộn Truyện">
-    <meta property="og:title" content="Privacy - Cuộn Truyện">
-    <meta property="og:description" content="Cuộn Truyện lưu lịch sử đọc và theo dõi chủ yếu trên trình duyệt của người dùng; sự kiện đọc được dùng để cải thiện trải nghiệm.">
+    <meta property="og:title" content="Chính sách riêng tư - Cách Cuộn Truyện lưu dữ liệu đọc">
+    <meta property="og:description" content="Cuộn Truyện ưu tiên lưu lịch sử đọc trên trình duyệt, dùng dữ liệu đăng nhập và analytics cơ bản để vận hành, bảo mật và cải thiện trải nghiệm.">
     <meta property="og:type" content="website">
+    <meta property="og:url" content="https://cuontruyen.vercel.app/privacy">
+    
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Chính sách riêng tư - Cách Cuộn Truyện lưu dữ liệu đọc">
+    <meta name="twitter:description" content="Cuộn Truyện ưu tiên lưu lịch sử đọc trên trình duyệt, dùng dữ liệu đăng nhập và analytics cơ bản để vận hành, bảo mật và cải thiện trải nghiệm.">
     
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="manifest" href="/site.webmanifest" />
     <link rel="stylesheet" href="/styles.css" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"Privacy","description":"Cuộn Truyện lưu lịch sử đọc và theo dõi chủ yếu trên trình duyệt của người dùng; sự kiện đọc được dùng để cải thiện trải nghiệm.","url":"https://cuontruyen.vercel.app/privacy"}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"Chính sách riêng tư","description":"Cuộn Truyện ưu tiên lưu lịch sử đọc trên trình duyệt, dùng dữ liệu đăng nhập và analytics cơ bản để vận hành, bảo mật và cải thiện trải nghiệm.","url":"https://cuontruyen.vercel.app/privacy"}</script>
   </head>
   <body>
     
     <main id="app" class="site-shell static-page">
       <section class="page-heading static-page-heading">
-        <h1>Privacy</h1>
-        <p>Lịch sử đọc, danh sách theo dõi và vị trí đọc được lưu trên trình duyệt. Website có thể ghi nhận sự kiện như lượt xem, độ sâu đọc và tương tác để cải thiện sản phẩm.</p>
+        <h1>Chính sách riêng tư</h1>
+        <p>Cuộn Truyện ưu tiên lưu tiến độ đọc ở phía trình duyệt để bạn có thể tiếp tục truyện nhanh mà không cần thao tác phức tạp. Khi dùng tài khoản hoặc tương tác với website, hệ thống có thể ghi nhận dữ liệu cần thiết để xác thực, chống lạm dụng, đo hiệu quả nội dung và cải thiện trải nghiệm.</p>
       </section>
-      <section class="static-info-panel"><ul><li>Tiến độ đọc và danh sách theo dõi dùng localStorage theo từng trình duyệt.</li><li>Khi đăng nhập, phiên đọc có token server-issued để đồng bộ các thao tác tài khoản.</li><li>Sự kiện như lượt xem, click donate hoặc độ sâu đọc chỉ dùng để cải thiện sản phẩm.</li></ul></section>
+      <section class="static-info-panel"><ul><li>Tiến độ đọc và danh sách theo dõi dùng localStorage theo từng trình duyệt.</li><li>Khi đăng nhập, phiên truy cập dùng token server-issued để xác thực thao tác tài khoản.</li><li>Sự kiện như lượt xem, click donate hoặc tương tác quảng cáo chỉ dùng cho vận hành và thống kê nội bộ.</li></ul></section>
     </main>
   
     <script src="/config.js"></script>
-    <script>window.COMIC_READER_CONFIG={...(window.COMIC_READER_CONFIG||{}),monetization:{"adsEnabled":true,"donateUrl":""}};</script>
+    <script>window.COMIC_READER_CONFIG={...(window.COMIC_READER_CONFIG||{}),monetization:{"adsEnabled":true,"donateUrl":"","adsProvider":"","adsenseClient":"","adsenseSlots":{"home":"","series":"","chapterEnd":""},"adsenseTestMode":false}};</script>
   <script type="module" src="/app.js"></script>
   </body>
 </html>

@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /api/
+Disallow: /fallback-api/
+Allow: /imports/
+Sitemap: https://cuontruyen.vercel.app/sitemap.xml
