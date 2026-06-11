@@ -57,6 +57,7 @@ test('vercel build and public config honor DB-first catalog mode', () => {
   const configSource = fs.readFileSync('scripts/write-public-config.mjs', 'utf8');
 
   assert.match(buildSource, /requirePostgresCatalogUrl/);
+  assert.match(buildSource, /closePostgresPool/);
   assert.match(configSource, /writePublicSnapshotApi/);
   assert.match(configSource, /writeReaderSnapshots/);
   assert.match(configSource, /readerCount/);
