@@ -12,9 +12,7 @@ import {
 } from './adminShellView.mjs';
 import { renderRevenueDashboard } from './adminRevenueView.mjs';
 import {
-  renderAdminApiError as renderAdminApiErrorView,
-  renderAdminLoginView,
-  renderProductionCheckResult as renderProductionCheckResultView
+  renderAdminLoginView
 } from './adminFeedbackView.mjs';
 import {
   buildAdminChapterPatch,
@@ -23,8 +21,7 @@ import {
 } from './adminPayloads.mjs';
 import {
   importJobsFlashMessage,
-  importJobsFromResult,
-  parseProductionSteps
+  importJobsFromResult
 } from './adminJobHelpers.mjs';
 import {
   clearAdminSession,
@@ -44,6 +41,7 @@ import {
 } from './adminDomHelpers.mjs';
 import { createAdminPanelPollers } from './adminPanelPolling.mjs';
 import { createAdminSeriesJobActions } from './adminSeriesJobActions.mjs';
+import { createAdminProductionActions } from './adminProductionActions.mjs';
 
 export { loadAdminToken };
 
@@ -102,6 +100,18 @@ export function createAdminRoute({
   });
   const handleRefreshImageUrls = adminSeriesJobActions.handleRefreshImageUrls;
   const handleUpdateChapters = adminSeriesJobActions.handleUpdateChapters;
+  const adminProductionActions = createAdminProductionActions({
+    adminHeaders,
+    app,
+    cssEscape: (value) => CSS.escape(value),
+    fetchJson,
+    pollProductionJob,
+    renderProductionProgressStatus
+  });
+  const bindProductionPipelineActions = () => adminProductionActions.bindProductionPipelineActions({
+    handleRefreshImageUrls,
+    handleUpdateChapters
+  });
 
   function canRunLocalOperations() {
     return localOperationsEnabled();
@@ -454,98 +464,6 @@ export function createAdminRoute({
       }
     } finally {
       clearControlPending();
-    }
-  }
-
-  function bindProductionPipelineActions() {
-    app.querySelectorAll('[data-update-chapters]').forEach((button) => button.addEventListener('click', handleUpdateChapters));
-    app.querySelectorAll('[data-refresh-image-urls]').forEach((button) => button.addEventListener('click', handleRefreshImageUrls));
-    app.querySelectorAll('[data-publish-production]').forEach((button) => button.addEventListener('click', handleProductionPublish));
-    app.querySelectorAll('[data-production-step]').forEach((button) => button.addEventListener('click', handleProductionStep));
-    app.querySelectorAll('[data-production-check]').forEach((button) => button.addEventListener('click', handleProductionCheck));
-  }
-
-  async function handleProductionPublish(event) {
-    await runProductionPipelineJob(event.currentTarget, {
-      seriesId: event.currentTarget.dataset.publishProduction,
-      steps: []
-    });
-  }
-
-  async function handleProductionStep(event) {
-    const button = event.currentTarget;
-    const steps = parseProductionSteps(button.dataset.steps);
-    await runProductionPipelineJob(button, {
-      seriesId: button.dataset.productionStep,
-      steps
-    });
-  }
-
-  async function runProductionPipelineJob(button, { seriesId, steps = [] } = {}) {
-    const status = app.querySelector(`[data-production-publish-status="${CSS.escape(seriesId)}"]`);
-    const originalText = button.textContent;
-    button.disabled = true;
-    button.textContent = steps.length ? 'Dang chay buoc...' : 'Dang chay pipeline...';
-    try {
-      if (status) {
-        status.className = 'status-line admin-wide production-publish-status';
-        status.textContent = steps.length ? 'Dang tao job cho buoc da chon...' : 'Dang tao workflow production...';
-      }
-      const result = await fetchJson(`/api/admin/series/${encodeURIComponent(seriesId)}/publish-production`, {
-        method: 'POST',
-        headers: adminHeaders(),
-        body: JSON.stringify({ steps })
-      });
-      if (result.reused && status) {
-        status.textContent = 'Dang dung lai job production dang chay cho buoc nay...';
-      }
-      const job = await pollProductionJob(result.job.id, status);
-      if (status) renderProductionProgressStatus(status, job);
-      if (job.status === 'completed') button.textContent = steps.length ? 'Chay lai buoc nay' : 'Sync lai production';
-    } catch (error) {
-      if (status) {
-        status.className = 'status-line admin-wide production-publish-status error';
-        status.innerHTML = renderAdminApiErrorView(error, 'Khong chay duoc production pipeline.');
-      }
-      button.textContent = originalText;
-    } finally {
-      button.disabled = false;
-    }
-  }
-
-  async function handleProductionCheck(event) {
-    const button = event.currentTarget;
-    const seriesId = button.dataset.productionCheck;
-    const url = button.dataset.productionUrl || '';
-    const status = app.querySelector(`[data-production-publish-status="${CSS.escape(seriesId)}"]`);
-    const originalText = button.textContent;
-    button.disabled = true;
-    button.textContent = 'Dang check...';
-    try {
-      if (!url) throw new Error('Truyen chua co production URL de kiem tra.');
-      if (status) {
-        status.className = 'status-line admin-wide production-publish-status';
-        status.textContent = 'Dang kiem tra production URL...';
-      }
-      const result = await fetchJson('/api/admin/production-check', {
-        method: 'POST',
-        headers: adminHeaders(),
-        body: JSON.stringify({ url, seriesId })
-      });
-      if (!result.ok) throw new Error(result.error || `Production tra ve HTTP ${result.status || '?'}.`);
-      if (status) {
-        status.className = 'status-line admin-wide production-publish-status success';
-        status.innerHTML = renderProductionCheckResultView(result, url);
-      }
-      window.open(url, '_blank', 'noopener,noreferrer');
-    } catch (error) {
-      if (status) {
-        status.className = 'status-line admin-wide production-publish-status error';
-        status.innerHTML = renderAdminApiErrorView(error, 'Check production loi.');
-      }
-    } finally {
-      button.disabled = false;
-      button.textContent = originalText;
     }
   }
 
