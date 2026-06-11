@@ -20,6 +20,7 @@ Stable helper modules now include:
 - `public/monetization.mjs`: ad/donate visibility config.
 - `public/routes/home.mjs`: mobile-first home renderer and search/continue shelf UI.
 - `public/routes/admin.mjs`: admin CMS, series detail management, import/update chapter jobs.
+- `public/routes/adminShellView.mjs`: pure admin session bar, bulletin panel/message, production/local notices, storage notice, and local ops panel shell helpers.
 - `public/routes/adminImportProgressView.mjs`: pure admin import/update progress status, batch/chapter/image metrics, errors, and crawl speed rendering.
 - `public/routes/adminCrawlQueueView.mjs`: pure admin crawl queue status, running-job progress, waiting/failed job lists, and crawl ETA/rate format helpers.
 - `public/routes/adminS3SyncView.mjs`: pure admin S3 sync status, failed-item list, stale-job warning, and retry-button rendering.
@@ -33,7 +34,7 @@ Stable helper modules now include:
 - Series detail: `renderSeriesDetail()`, `renderSeriesContinueCard()`.
 - Reader shell: `drawReader()`, `renderChapter()`, `attachReaderObservers()`.
 - Reader progress: prefer editing `public/readerRestore.mjs`, `public/readerWindow.mjs`, or `public/readingProgress.mjs` before adding more logic to `public/app.js`.
-- Admin CMS/crawl: start in `public/routes/admin.mjs`; for import/update progress rendering start in `public/routes/adminImportProgressView.mjs`; for crawl queue status rendering start in `public/routes/adminCrawlQueueView.mjs`; for S3 sync status rendering start in `public/routes/adminS3SyncView.mjs`; for tag/origin behavior start in `public/routes/adminTags.mjs`; for series card/detail badges start in `public/routes/adminSeriesView.mjs`; for production badge/pipeline/progress rendering start in `public/routes/adminProductionView.mjs`.
+- Admin CMS/crawl: start in `public/routes/admin.mjs`; for session/bulletin/storage/local-op panel shell rendering start in `public/routes/adminShellView.mjs`; for import/update progress rendering start in `public/routes/adminImportProgressView.mjs`; for crawl queue status rendering start in `public/routes/adminCrawlQueueView.mjs`; for S3 sync status rendering start in `public/routes/adminS3SyncView.mjs`; for tag/origin behavior start in `public/routes/adminTags.mjs`; for series card/detail badges start in `public/routes/adminSeriesView.mjs`; for production badge/pipeline/progress rendering start in `public/routes/adminProductionView.mjs`.
 - Ads/donate: `renderMonetizationPanel()`, `renderReaderAdBreak()`, and `public/analyticsClient.mjs`.
 
 ## Mobile reader safety checklist
@@ -49,6 +50,6 @@ Split only one route surface at a time:
 
 1. Keep polishing `public/routes/home.mjs` for mobile home.
 2. Move reader render/runtime into `public/routes/reader.mjs` after reader restore helpers are stable.
-3. Keep admin form/crawl changes isolated in `public/routes/admin.mjs`, import progress helpers in `public/routes/adminImportProgressView.mjs`, crawl queue helpers in `public/routes/adminCrawlQueueView.mjs`, S3 sync view helpers in `public/routes/adminS3SyncView.mjs`, tag/origin helpers in `public/routes/adminTags.mjs`, series display helpers in `public/routes/adminSeriesView.mjs`, and production badge/pipeline/progress helpers in `public/routes/adminProductionView.mjs`.
+3. Keep admin form/crawl changes isolated in `public/routes/admin.mjs`, shell helpers in `public/routes/adminShellView.mjs`, import progress helpers in `public/routes/adminImportProgressView.mjs`, crawl queue helpers in `public/routes/adminCrawlQueueView.mjs`, S3 sync view helpers in `public/routes/adminS3SyncView.mjs`, tag/origin helpers in `public/routes/adminTags.mjs`, series display helpers in `public/routes/adminSeriesView.mjs`, and production badge/pipeline/progress helpers in `public/routes/adminProductionView.mjs`.
 
 Keep each split behavior-preserving and covered by existing tests or small module tests.

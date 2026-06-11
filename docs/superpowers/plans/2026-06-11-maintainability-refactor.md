@@ -32,6 +32,8 @@
 - `tests/adminCrawlQueueView.test.mjs`: Direct tests for crawl queue summaries, escaping, list limits, running-job metrics, and format helpers.
 - `public/routes/adminImportProgressView.mjs`: Pure admin import/update progress status rendering, batch/chapter/image metrics, errors, and crawl speed formatting.
 - `tests/adminImportProgressView.test.mjs`: Direct tests for import progress metrics, admin update status class, escaped errors, and usable-image fallbacks.
+- `public/routes/adminShellView.mjs`: Pure admin shell panels for session bar, bulletin messages, production/local notices, catalog storage notice, and local operation panel shells.
+- `tests/adminShellView.test.mjs`: Direct tests for admin shell panel escaping, bulletin time labels, storage notice summary, and local/production panel controls.
 
 ## Task 1: Extract Import Chapter Selection Helpers
 
@@ -419,4 +421,51 @@ Run:
 node --check public\routes\adminProductionView.mjs
 node --check public\routes\admin.mjs
 node --require ./tests/setup-env.cjs --test tests\adminProductionView.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 10: Extract Admin Shell Panel Helpers
+
+**Files:**
+- Create: `public/routes/adminShellView.mjs`
+- Create: `tests/adminShellView.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for admin shell panels**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminShellView.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminShellView.mjs`.
+
+- [x] **Step 2: Move pure shell panel helpers**
+
+Move these helpers from `public/routes/admin.mjs` to `public/routes/adminShellView.mjs`:
+
+```text
+renderAdminSessionBar
+renderAdminBulletinPanel
+renderAdminBulletinMessage
+renderProductionAdminNotice
+renderS3SyncPanel
+renderCatalogStorageNotice
+renderCrawlQueuePanel
+formatAdminBulletinTime
+```
+
+Keep bulletin submit/pin handlers, logout binding, poll timers, and API calls in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminShellView.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminShellView.test.mjs tests\adminRouteSmoke.test.mjs
 ```
