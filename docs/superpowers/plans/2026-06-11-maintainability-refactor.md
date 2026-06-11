@@ -18,6 +18,8 @@
 - `tests/importerIdentity.test.mjs`: Existing mirror/source mapping tests, migrated to the focused helper module.
 - `tests/importerIncremental.test.mjs`: Existing incremental/refresh behavior tests, migrated to the focused helper module where appropriate.
 - `docs/agent-playbooks/agent-token-map.md`: Agent entrypoint map updated when responsibility moves.
+- `public/routes/adminProductionView.mjs`: Pure admin production badge and pipeline-step view helpers.
+- `tests/adminProductionView.test.mjs`: Direct tests for admin production helper rendering and escaping.
 
 ## Task 1: Extract Import Chapter Selection Helpers
 
@@ -87,7 +89,7 @@ Expected: all checks pass.
 - Create: `tests/adminProductionView.test.mjs`
 - Modify: `public/routes/admin.mjs`
 
-- [ ] **Step 1: Write failing tests for pure production status rendering helpers**
+- [x] **Step 1: Write failing tests for pure production status rendering helpers**
 
 Start with helpers currently embedded in `public/routes/admin.mjs`:
 
@@ -99,11 +101,11 @@ renderAdminProductionBadge
 renderProductionPipelineStep
 ```
 
-- [ ] **Step 2: Extract only pure rendering/status helpers**
+- [x] **Step 2: Extract only pure rendering/status helpers**
 
 Do not move event binding or network calls in the first slice.
 
-- [ ] **Step 3: Verify admin route behavior**
+- [x] **Step 3: Verify admin route behavior**
 
 Run:
 

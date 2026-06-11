@@ -20,6 +20,7 @@ Stable helper modules now include:
 - `public/monetization.mjs`: ad/donate visibility config.
 - `public/routes/home.mjs`: mobile-first home renderer and search/continue shelf UI.
 - `public/routes/admin.mjs`: admin CMS, series detail management, import/update chapter jobs.
+- `public/routes/adminProductionView.mjs`: pure admin production badge and pipeline-step view helpers.
 
 ## Where to edit
 
@@ -27,7 +28,7 @@ Stable helper modules now include:
 - Series detail: `renderSeriesDetail()`, `renderSeriesContinueCard()`.
 - Reader shell: `drawReader()`, `renderChapter()`, `attachReaderObservers()`.
 - Reader progress: prefer editing `public/readerRestore.mjs`, `public/readerWindow.mjs`, or `public/readingProgress.mjs` before adding more logic to `public/app.js`.
-- Admin CMS/crawl: start in `public/routes/admin.mjs`.
+- Admin CMS/crawl: start in `public/routes/admin.mjs`; for production badge/pipeline rendering start in `public/routes/adminProductionView.mjs`.
 - Ads/donate: `renderMonetizationPanel()`, `renderReaderAdBreak()`, and `public/analyticsClient.mjs`.
 
 ## Mobile reader safety checklist
@@ -43,6 +44,6 @@ Split only one route surface at a time:
 
 1. Keep polishing `public/routes/home.mjs` for mobile home.
 2. Move reader render/runtime into `public/routes/reader.mjs` after reader restore helpers are stable.
-3. Keep admin form/crawl changes isolated in `public/routes/admin.mjs`.
+3. Keep admin form/crawl changes isolated in `public/routes/admin.mjs`, and keep production badge/pipeline helpers in `public/routes/adminProductionView.mjs`.
 
 Keep each split behavior-preserving and covered by existing tests or small module tests.
