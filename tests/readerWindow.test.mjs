@@ -6,6 +6,7 @@ import {
   findNewReaderChapters,
   mergeReaderChapters,
   releaseReaderImageElement,
+  resolveReaderImageRetry,
   resolveChapterMenuScrollTop,
   resolveReaderToolbarVisibility,
   resolveReaderCurrentChapterId
@@ -115,6 +116,30 @@ test('releaseReaderImageElement keeps the measured image height before blanking 
   assert.equal(image.style.height, '612px');
   assert.equal(image.src, 'data:image/gif;base64,blank');
   assert.equal(image.loading, 'lazy');
+});
+
+test('resolveReaderImageRetry retries failed reader images with a cache buster', () => {
+  const retry = resolveReaderImageRetry({
+    source: 'https://cdn.example.com/page-1.webp?size=large#panel',
+    currentAttempt: 1,
+    now: 123456
+  });
+
+  assert.equal(retry.canRetry, true);
+  assert.equal(retry.attempt, 2);
+  assert.equal(retry.delayMs, 1200);
+  assert.equal(retry.src, 'https://cdn.example.com/page-1.webp?size=large&readerRetry=2-123456#panel');
+});
+
+test('resolveReaderImageRetry stops after the reader image retry budget', () => {
+  const retry = resolveReaderImageRetry({
+    source: '/imports/demo/chapter-1/001.webp',
+    currentAttempt: 3
+  });
+
+  assert.equal(retry.canRetry, false);
+  assert.equal(retry.attempt, 3);
+  assert.equal(retry.src, '/imports/demo/chapter-1/001.webp');
 });
 
 test('resolveReaderToolbarVisibility hides on reading scroll and reveals on touch or scroll up', () => {

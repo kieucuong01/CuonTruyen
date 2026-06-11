@@ -30,7 +30,7 @@ Run from the repo root:
 
 ```powershell
 npm test
-npm run db:local:setup
+npm run db:setup:schema
 $env:PORT='54533'; npm run dev
 ```
 
@@ -58,7 +58,6 @@ npm run smoke:import
 npm run sync:s3:dry-run
 npm run sync:s3
 npm run db:setup:schema
-npm run db:local:setup
 npm test
 ```
 
@@ -191,22 +190,27 @@ S3 credentials belong in `.env.local`, not in Git. See `.env.example` and `docs/
 
 ## PostgreSQL Catalog Mode
 
-Use PostgreSQL for normal catalog/admin management. Local development uses a
-separate database on the machine by default:
+Use PostgreSQL for normal catalog/admin management. Local development uses the
+PostgreSQL server installed on this Windows machine and visible in pgAdmin4:
 
-```powershell
-npm run db:local:setup
-npm run dev
+```text
+Host: 127.0.0.1
+Port: 5432
+Database: comic_reader_local
+App user: comic_user
 ```
 
-The setup command starts `docker-compose.local.yml`, writes these catalog values
-to `.env.local`, and ensures the Postgres schema exists:
+`.env.local` should contain:
 
 ```env
 CATALOG_STORAGE=postgres
-CATALOG_DATABASE_URL=postgres://comic_user:comic_local_password@127.0.0.1:55432/comic_reader_local
+CATALOG_DATABASE_URL=postgres://comic_user:comic_local_password@127.0.0.1:5432/comic_reader_local
 POSTGRES_SSL=false
 ```
+
+Run `npm run db:setup:schema` after creating/restoring the database or pulling
+schema changes. The old Docker Postgres port `55432` is no longer the intended
+local database. See `docs/agent-playbooks/local-postgres-pgadmin.md`.
 
 `DATABASE_URL` or `POSTGRES_URL` also enable the same mode. When PostgreSQL mode
 is active, metadata, tags, chapters, pages, crawl schedules, crawl jobs,
@@ -277,6 +281,9 @@ Start with:
 
 - `AGENTS.md`
 - `docs/agent-playbooks/agent-token-map.md`
+- `docs/agent-playbooks/new-developer-onboarding.md`
+- `docs/agent-playbooks/ai-agent-handoff.md`
+- `docs/agent-playbooks/local-postgres-pgadmin.md`
 - `docs/agent-playbooks/current-deployment.md`
 - `docs/agent-playbooks/comic-reader.md`
 - `docs/agent-playbooks/frontend-map.md`

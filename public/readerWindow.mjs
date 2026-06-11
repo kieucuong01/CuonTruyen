@@ -27,6 +27,55 @@ export function countReaderPages(chapters = []) {
   return chapters.reduce((sum, chapter) => sum + Number(chapter?.pages?.length || 0), 0);
 }
 
+const READER_IMAGE_RETRY_DELAYS = [500, 1200, 2200];
+
+function appendReaderRetryParam(source = '', value = '') {
+  const raw = String(source || '');
+  if (!raw || !value) return raw;
+  try {
+    const absolute = /^[a-z][a-z\d+.-]*:/i.test(raw);
+    const protocolRelative = raw.startsWith('//');
+    const rootRelative = raw.startsWith('/');
+    const url = new URL(raw, 'https://reader.local');
+    url.searchParams.set('readerRetry', value);
+    if (absolute) return url.toString();
+    if (protocolRelative) return `//${url.host}${url.pathname}${url.search}${url.hash}`;
+    if (rootRelative) return `${url.pathname}${url.search}${url.hash}`;
+    return `${url.pathname.replace(/^\//, '')}${url.search}${url.hash}`;
+  } catch {
+    const [withoutHash, hash = ''] = raw.split('#');
+    const separator = withoutHash.includes('?') ? '&' : '?';
+    return `${withoutHash}${separator}readerRetry=${encodeURIComponent(value)}${hash ? `#${hash}` : ''}`;
+  }
+}
+
+export function resolveReaderImageRetry({
+  source = '',
+  currentAttempt = 0,
+  maxAttempts = 3,
+  now = Date.now()
+} = {}) {
+  const src = String(source || '');
+  const attempt = Math.max(0, Number(currentAttempt || 0));
+  const limit = Math.max(0, Number(maxAttempts || 0));
+  if (!src || attempt >= limit) {
+    return {
+      canRetry: false,
+      attempt,
+      delayMs: 0,
+      src
+    };
+  }
+
+  const nextAttempt = attempt + 1;
+  return {
+    canRetry: true,
+    attempt: nextAttempt,
+    delayMs: READER_IMAGE_RETRY_DELAYS[Math.min(nextAttempt - 1, READER_IMAGE_RETRY_DELAYS.length - 1)],
+    src: appendReaderRetryParam(src, `${nextAttempt}-${now}`)
+  };
+}
+
 export function resolveReaderCurrentChapterId({
   requestedId = '',
   currentId = '',

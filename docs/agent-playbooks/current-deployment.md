@@ -137,25 +137,44 @@ http://localhost:54533
 http://localhost:54533/#/admin
 ```
 
-Local catalog storage defaults to a separate PostgreSQL database on the machine,
-not the production Supabase database. Initialize it with:
+Local catalog storage uses a separate PostgreSQL database on the Windows
+machine, not the production Supabase database. It is managed through pgAdmin4:
 
-```powershell
-npm run db:local:setup
+```text
+Host: 127.0.0.1
+Port: 5432
+Database: comic_reader_local
+App user: comic_user
 ```
 
-That starts `docker-compose.local.yml`, writes the local catalog DB URL to
+`.env.local` should point to:
 
-sync all read the catalog through the same `server/dataStore.mjs` facade. That
-means switching local from JSON to Postgres changes the source of truth for the
-whole production pipeline. Start the local server and the crawl worker with the
-same catalog env, otherwise admin may show one catalog while the worker writes
-jobs/content to another storage backend.
+```env
+CATALOG_STORAGE=postgres
+CATALOG_DATABASE_URL=postgres://comic_user:comic_local_password@127.0.0.1:5432/comic_reader_local
+POSTGRES_SSL=false
+```
+
+Run schema setup after DB creation, restore, or schema changes:
+
+```powershell
+npm run db:setup:schema
+```
+
+The old Docker Postgres port `55432` is no longer the intended local database.
+If Docker Desktop starts `cuontruyen-local-postgres` again, stop it unless you
+are intentionally recovering old data.
+
+Local server, worker, admin, and production sync all read the catalog through
+the same `server/dataStore.mjs` facade. Start the local server and the crawl
+worker with the same catalog env, otherwise admin may show one catalog while
+the worker writes jobs/content to another database.
 
 If local crawl suddenly fails with a Postgres error such as `role "comic_user"
-does not exist`, fix the local DB with `npm run db:local:setup` or intentionally
-`npm run worker:crawl`. The admin local S3 panel shows the active catalog
-storage to make this mismatch easier to spot.
+does not exist`, check `docs/agent-playbooks/local-postgres-pgadmin.md`,
+confirm PostgreSQL service `postgresql-x64-18` is running, and rerun
+`npm run db:setup:schema`. The admin local S3 panel shows the active catalog
+storage to make mismatches easier to spot.
 
 Local crawler:
 

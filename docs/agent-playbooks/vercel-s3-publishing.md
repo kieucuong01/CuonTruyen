@@ -53,15 +53,18 @@ https://img.cuontruyen.com
 
 ## Required Secrets
 
-Put real values in `.env.local`. For local catalog DB setup, prefer:
+Put real values in `.env.local`. Local catalog DB should point to the installed
+Windows PostgreSQL service that is visible in pgAdmin4:
 
-```powershell
-npm run db:local:setup
+```env
+CATALOG_STORAGE=postgres
+CATALOG_DATABASE_URL=postgres://comic_user:comic_local_password@127.0.0.1:5432/comic_reader_local
+POSTGRES_SSL=false
 ```
 
-That writes `CATALOG_STORAGE=postgres`,
-`CATALOG_DATABASE_URL=postgres://comic_user:comic_local_password@127.0.0.1:55432/comic_reader_local`,
-and `POSTGRES_SSL=false` for the local database.
+Run `npm run db:setup:schema` after creating/restoring the DB or pulling schema
+changes. The old Docker Postgres port `55432` is not the intended local DB
+anymore.
 
 S3 values also belong in `.env.local`:
 

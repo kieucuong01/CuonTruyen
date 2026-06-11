@@ -8,7 +8,9 @@ Read these before broad searches:
 
 ```text
 AGENTS.md
+docs/agent-playbooks/new-developer-onboarding.md
 docs/agent-playbooks/current-deployment.md
+docs/agent-playbooks/local-postgres-pgadmin.md
 docs/agent-playbooks/frontend-map.md
 docs/agent-playbooks/vercel-s3-publishing.md
 package.json
@@ -39,6 +41,7 @@ These can be large or temporary. Use targeted file paths only.
 | Admin/crawl UI | `public/routes/admin.mjs`, `server/index.mjs`, `server/crawlJobStore.mjs` |
 | New chapter updates | `server/importer.mjs`, `server/crawlQueue.mjs`, `server/crawlWorker.mjs`, `public/routes/admin.mjs` |
 | Public catalog/filtering | `server/contentStore.mjs`, `server/dataStore.mjs`, `server/postgresStore.mjs` |
+| Local DB/pgAdmin | `docs/agent-playbooks/local-postgres-pgadmin.md`, `.env.local`, `server/storageConfig.mjs`, `server/postgresStore.mjs` |
 | Vercel frontend/admin API | `vercel.json`, `api/[...path].mjs`, `scripts/write-public-config.mjs`, `public/apiClient.mjs`, `server/index.mjs` |
 | SEO shell/sitemap/copy | `server/seo.mjs`, `server/index.mjs`, `scripts/write-public-config.mjs`, `docs/agent-playbooks/seo-launch.md` |
 | Encoding mojibake | `scripts/check-encoding.mjs`, then the reported files |
@@ -65,6 +68,7 @@ node --check public\app.js
 node --check public\routes\home.mjs
 node --check public\routes\admin.mjs
 npm run check:encoding
+npm run db:setup:schema
 npm run sync:s3:dry-run
 npm test
 ```
@@ -115,5 +119,6 @@ npx vercel@latest deploy --prod --yes
 - Never commit `.env.local` or S3 credentials.
 - Never delete `data/imports/` unless the user explicitly asks.
 - Never upload `data/imports/` to Vercel.
+- Local PostgreSQL is the installed Windows service on `127.0.0.1:5432`; do not revive Docker port `55432` unless explicitly doing recovery.
 - Keep crawler local or VPS-based; do not move long crawl jobs into Vercel Functions.
 - Public APIs and static export must exclude `draft` and `removed` content.

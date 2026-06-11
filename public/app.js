@@ -35,6 +35,7 @@ import {
   mergeReaderChapters,
   releaseReaderImageElement,
   resolveChapterMenuScrollTop,
+  resolveReaderImageRetry,
   resolveReaderToolbarVisibility,
   restoreReaderImageElement,
   resolveReaderCurrentChapterId
@@ -149,6 +150,7 @@ const state = {
   readerToolbarRevealUntil: 0,
   readerInteractionHandler: null,
   readerObservers: [],
+  readerImageRetryTimers: new Set(),
   searchQuery: '',
   filters: {
     query: '',
@@ -1392,7 +1394,14 @@ function renderChapter(chapter, index) {
         const width = Number(page.width || 900);
         const height = Number(page.height || 1300);
         return `
-        <img class="page-image" loading="${eager ? 'eager' : 'lazy'}" fetchpriority="${imageIndex < 4 ? 'high' : 'auto'}" decoding="async" data-reader-image data-reader-src="${escapeAttr(page.imageUrl)}" data-reader-image-index="${imageIndex}" data-page-index="${page.order}" src="${escapeAttr(page.imageUrl)}" width="${width}" height="${height}" alt="${escapeHtml(chapter.label)} trang ${Number(page.order) + 1}" />
+        <div class="reader-page" data-reader-page data-page-index="${page.order}" data-reader-state="loading">
+          <img class="page-image" loading="${eager ? 'eager' : 'lazy'}" fetchpriority="${imageIndex < 4 ? 'high' : 'auto'}" decoding="async" data-reader-image data-reader-src="${escapeAttr(page.imageUrl)}" data-reader-image-index="${imageIndex}" data-page-index="${page.order}" src="${escapeAttr(page.imageUrl)}" width="${width}" height="${height}" alt="${escapeHtml(chapter.label)} trang ${Number(page.order) + 1}" />
+          <div class="reader-image-fallback" aria-live="polite">
+            <strong>Ảnh chưa tải được</strong>
+            <span data-reader-image-status>Đây là lỗi tải ảnh từ S3/CDN, không phải lỗi truyện.</span>
+            <button class="ghost-btn reader-image-retry" type="button" data-reader-image-retry>Thử lại ảnh</button>
+          </div>
+        </div>
       `;
       }).join('') : '<div class=\"page-missing\">Chapter này chưa có ảnh trong cache. Crawl thêm để đọc tiếp.</div>'}
       ${renderReaderChapterFooter(chapter)}
@@ -1507,8 +1516,9 @@ function attachReaderObservers() {
   }, { rootMargin: READER_PRELOAD_ROOT_MARGIN, threshold: 0 });
   document.querySelectorAll('[data-reader-image]').forEach((image) => imageObserver.observe(image));
   document.querySelectorAll('[data-reader-image]').forEach((image) => {
-    image.addEventListener('load', stabilizeReaderAfterImageLoad, { once: true });
+    setupReaderImageRecovery(image);
   });
+  document.querySelector('.chapter-stream')?.addEventListener('click', handleReaderImageRetryClick);
   state.readerObservers.push(imageObserver);
 
   state.readerScrollHandler = throttle(() => {
@@ -1629,6 +1639,93 @@ function warmReaderImage(image, { highPriority = false } = {}) {
   decodeReaderImageSoon(image);
 }
 
+function readerPageForImage(image) {
+  return image?.closest?.('[data-reader-page]') || null;
+}
+
+function setReaderPageStatus(image, status, message = '') {
+  const page = readerPageForImage(image);
+  if (!page) return;
+  page.dataset.readerState = status;
+  const statusNode = page.querySelector('[data-reader-image-status]');
+  if (statusNode && message) statusNode.textContent = message;
+}
+
+function clearReaderImageRetryTimer(image) {
+  const timerId = Number(image?.dataset?.readerRetryTimer || 0);
+  if (!timerId) return;
+  window.clearTimeout(timerId);
+  state.readerImageRetryTimers.delete(timerId);
+  delete image.dataset.readerRetryTimer;
+}
+
+function setupReaderImageRecovery(image) {
+  if (!image || image.dataset.readerRecoveryAttached === 'true') return;
+  image.dataset.readerRecoveryAttached = 'true';
+  image.addEventListener('load', () => {
+    clearReaderImageRetryTimer(image);
+    image.dataset.readerRetryAttempt = '0';
+    setReaderPageStatus(image, 'loaded');
+    stabilizeReaderAfterImageLoad();
+  });
+  image.addEventListener('error', () => {
+    handleReaderImageError(image);
+  });
+  if (image.complete && Number(image.naturalWidth || 0) > 0) {
+    setReaderPageStatus(image, 'loaded');
+  }
+}
+
+function handleReaderImageError(image) {
+  if (!image) return;
+  clearReaderImageRetryTimer(image);
+  const source = image.dataset.readerSrc || image.getAttribute('src') || image.src || '';
+  const retry = resolveReaderImageRetry({
+    source,
+    currentAttempt: image.dataset.readerRetryAttempt || 0
+  });
+  image.dataset.readerRetryAttempt = String(retry.attempt);
+  if (!retry.canRetry) {
+    setReaderPageStatus(image, 'error', 'Ảnh lỗi sau nhiều lần thử. Đây là lỗi ảnh/CDN, không phải lỗi truyện.');
+    showReaderToolbar({ holdMs: 2600 });
+    return;
+  }
+  setReaderPageStatus(image, 'retrying', `Ảnh lỗi, đang thử lại lần ${retry.attempt}/3...`);
+  const timerId = window.setTimeout(() => {
+    state.readerImageRetryTimers.delete(timerId);
+    delete image.dataset.readerRetryTimer;
+    image.src = retry.src;
+  }, retry.delayMs);
+  image.dataset.readerRetryTimer = String(timerId);
+  state.readerImageRetryTimers.add(timerId);
+}
+
+function retryReaderImageNow(image) {
+  if (!image) return;
+  clearReaderImageRetryTimer(image);
+  const source = image.dataset.readerSrc || image.getAttribute('src') || image.src || '';
+  const retry = resolveReaderImageRetry({
+    source,
+    currentAttempt: 0
+  });
+  image.dataset.readerRetryAttempt = String(retry.attempt);
+  setReaderPageStatus(image, 'retrying', 'Đang thử tải lại ảnh...');
+  image.src = retry.canRetry ? retry.src : source;
+  image.loading = 'eager';
+  if ('fetchPriority' in image) image.fetchPriority = 'high';
+  preloadImageUrl(image.src);
+}
+
+function handleReaderImageRetryClick(event) {
+  const button = event.target?.closest?.('[data-reader-image-retry]');
+  if (!button) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const image = button.closest('[data-reader-page]')?.querySelector('[data-reader-image]');
+  retryReaderImageNow(image);
+  showReaderToolbar({ holdMs: 2200 });
+}
+
 function preloadImageUrl(src) {
   if (!src || preloadedImageUrls.has(src)) return;
   preloadedImageUrls.add(src);
@@ -1687,7 +1784,7 @@ function saveReaderProgress() {
     hasReader: Boolean(document.querySelector('.reader'))
   })) return;
   const currentImage = document.elementFromPoint(window.innerWidth / 2, Math.min(window.innerHeight - 120, 360));
-  const pageIndex = Number(currentImage?.dataset?.pageIndex || 0);
+  const pageIndex = Number(currentImage?.closest?.('[data-page-index]')?.dataset?.pageIndex || currentImage?.dataset?.pageIndex || 0);
   const chapterNode = document.querySelector(`[data-chapter-id="${CSS.escape(current.id)}"]`);
   const chapterTop = chapterNode ? window.scrollY + chapterNode.getBoundingClientRect().top : 0;
   const chapterScrollY = Math.max(0, Math.round(window.scrollY - chapterTop));
@@ -1769,6 +1866,7 @@ function stopReaderRuntime() {
   }
   if (state.readerTapHandler) {
     document.querySelector('.chapter-stream')?.removeEventListener('click', state.readerTapHandler);
+    document.querySelector('.chapter-stream')?.removeEventListener('click', handleReaderImageRetryClick);
     state.readerTapHandler = null;
   }
   if (state.readerRestoreCancelHandler) {
@@ -1783,6 +1881,8 @@ function stopReaderRuntime() {
   }
   state.readerObservers.forEach((observer) => observer.disconnect());
   state.readerObservers = [];
+  state.readerImageRetryTimers.forEach((timerId) => window.clearTimeout(timerId));
+  state.readerImageRetryTimers.clear();
 }
 
 function flushReaderProgress() {

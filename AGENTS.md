@@ -6,7 +6,10 @@ Use this file as the first stop for any future AI agent. Keep it short; put deta
 
 ## Start Here
 
+- New developer onboarding: `docs/agent-playbooks/new-developer-onboarding.md`
 - Token-efficient map for AI agents: `docs/agent-playbooks/agent-token-map.md`
+- AI agent handoff checklist: `docs/agent-playbooks/ai-agent-handoff.md`
+- Local PostgreSQL + pgAdmin4: `docs/agent-playbooks/local-postgres-pgadmin.md`
 - Current deployment/storage state: `docs/agent-playbooks/current-deployment.md`
 - SEO launch checklist: `docs/agent-playbooks/seo-launch.md`
 - Revenue tracking and ads: `docs/agent-playbooks/revenue-tracking.md`
@@ -55,6 +58,7 @@ $env:PORT='54533'; npm run dev
 - Node 18 ESM HTTP server, no framework.
 - Static frontend in `public/`.
 - PostgreSQL-only catalog facade; local and production require `CATALOG_DATABASE_URL`, `DATABASE_URL`, or `POSTGRES_URL`.
+- Current local database is the PostgreSQL service installed on the Windows machine at `127.0.0.1:5432/comic_reader_local`, visible in pgAdmin4. The old Docker port `55432` is not the intended local DB anymore.
 - Image cache still lives under `data/imports/` or `IMPORT_ROOT`; catalog, crawl jobs, users, events, and admin content live in PostgreSQL.
 - Separate crawl worker process for durable import jobs.
 - Current preferred public hosting mode: Vercel serves the frontend plus lightweight Node API for public reads/admin content management, Supabase Postgres stores catalog/users/events, Vietnix S3 serves `/imports/*` images, and the local machine runs crawler/optimizer/S3 sync.
@@ -87,6 +91,7 @@ $env:PORT='54533'; npm run dev
 - After frontend behavior changes, verify on the exact local URL the user reports when browser tooling is available.
 - If the user reports a broken URL, test both the API endpoint and the rendered browser route.
 - For public Vercel issues, check `public/config.js`, DB-backed API behavior, and S3 image URLs before changing app logic.
+- For local DB issues, check `.env.local`, `docs/agent-playbooks/local-postgres-pgadmin.md`, and `server/storageConfig.mjs` before starting Docker.
 
 ## Verification Checklist
 
