@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 
 import { POSTGRES_SCHEMA_SQL, makeUniqueChapterSlugForStorage } from '../server/postgresStore.mjs';
 
@@ -35,6 +36,14 @@ test('postgres schema includes durable crawl worker queue columns', () => {
   ]) {
     assert.match(POSTGRES_SCHEMA_SQL, new RegExp(column));
   }
+});
+
+test('postgres catalog summary queries avoid chapter raw payloads', () => {
+  const source = fs.readFileSync(new URL('../server/postgresStore.mjs', import.meta.url), 'utf8');
+
+  assert.match(source, /const chapterColumns = includePages \? '\*' : CHAPTER_SUMMARY_COLUMNS/);
+  assert.match(source, /select \$\{chapterColumns\} from chapters/);
+  assert.doesNotMatch(source.match(/const CHAPTER_SUMMARY_COLUMNS = \[[\s\S]+?\]\.join/)?.[0] || '', /raw/);
 });
 
 test('postgres chapter storage keeps duplicate slugs unique per series', () => {

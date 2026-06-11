@@ -234,9 +234,10 @@ export async function ensurePostgresSchema() {
 
 export async function readCatalogFromPostgres({ includePages = true } = {}) {
   const client = await getPool();
+  const chapterColumns = includePages ? '*' : CHAPTER_SUMMARY_COLUMNS;
   const [seriesResult, chaptersResult, tagsResult] = await Promise.all([
     client.query('select * from series order by updated_at desc nulls last, imported_at desc nulls last, title asc'),
-    client.query('select * from chapters order by series_id, source_order nulls last, id'),
+    client.query(`select ${chapterColumns} from chapters order by series_id, source_order nulls last, id`),
     client.query(`
       select st.series_id, t.slug, t.name
       from series_tags st
@@ -269,8 +270,9 @@ export async function getSeriesFromPostgres(idOrSlug, { includePages = true, inc
   );
   if (!seriesResult.rows.length) return null;
   const seriesIds = seriesResult.rows.map((row) => row.id);
+  const chapterColumns = includePages ? '*' : CHAPTER_SUMMARY_COLUMNS;
   const [chaptersResult, tagsResult] = await Promise.all([
-    client.query('select * from chapters where series_id = any($1::text[]) order by series_id, source_order nulls last, id', [seriesIds]),
+    client.query(`select ${chapterColumns} from chapters where series_id = any($1::text[]) order by series_id, source_order nulls last, id`, [seriesIds]),
     client.query(`
       select st.series_id, t.slug, t.name
       from series_tags st
@@ -290,6 +292,25 @@ export async function getSeriesFromPostgres(idOrSlug, { includePages = true, inc
     includePages
   }).series[0] || null;
 }
+
+const CHAPTER_SUMMARY_COLUMNS = [
+  'series_id',
+  'id',
+  'title',
+  'label',
+  'slug',
+  'status',
+  'source_url',
+  'source_order',
+  'page_count',
+  'imported',
+  'import_mode',
+  'asset_status',
+  'image_error_count',
+  'last_asset_check_at',
+  'published_at',
+  'updated_at'
+].join(', ');
 
 export async function getChapterPagesFromPostgres(seriesId, chapterIds = []) {
   const ids = [...new Set((chapterIds || []).map((id) => String(id || '').trim()).filter(Boolean))];
