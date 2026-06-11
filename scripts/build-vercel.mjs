@@ -1,3 +1,4 @@
+import '../server/env.mjs';
 import { requirePostgresCatalogUrl } from '../server/storageConfig.mjs';
 import { closePostgresPool } from '../server/postgresStore.mjs';
 

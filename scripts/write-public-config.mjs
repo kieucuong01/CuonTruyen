@@ -6,6 +6,7 @@ import '../server/env.mjs';
 const ROOT = process.cwd();
 const PUBLIC_DIR = path.join(ROOT, 'public');
 const CONFIG_PATH = path.join(PUBLIC_DIR, 'config.js');
+const DEFAULT_VERCEL_READER_SNAPSHOT_LIMIT = 300;
 
 function trimTrailingSlash(value = '') {
   return String(value || '').trim().replace(/\/$/, '');
@@ -192,6 +193,7 @@ async function writePublicSnapshotApi() {
   } = await import('../server/contentStore.mjs');
   const { getSeries, readCatalog } = await import('../server/dataStore.mjs');
   const staticApiDir = path.join(PUBLIC_DIR, 'static-api');
+  const readerSnapshotBudget = readerSnapshotLimit();
   const catalog = await readCatalog({ includePages: false });
   const publicData = publicCatalog(catalog, { chapterLimit: 3 });
   const tags = buildTagIndex(catalog);
@@ -217,9 +219,15 @@ async function writePublicSnapshotApi() {
       await writeJson(path.join(staticApiDir, 'series', `${seriesId}.json`), detail);
     }
 
+    const remainingReaderSnapshots = Number.isFinite(readerSnapshotBudget)
+      ? Math.max(0, readerSnapshotBudget - readerCount)
+      : Infinity;
+    if (remainingReaderSnapshots <= 0) continue;
+
     readerCount += await writeReaderSnapshots({
       staticApiDir,
       series: detail,
+      maxSnapshots: remainingReaderSnapshots,
       loadFullSeries: () => getSeries(detail.id, { includePages: true, includeDraft: false }),
       buildReaderChapterPayload
     });
@@ -240,18 +248,24 @@ async function writePublicSnapshotApi() {
     seriesCount: publicData.series.length,
     detailCount,
     readerCount,
+    readerSnapshotLimit: Number.isFinite(readerSnapshotBudget) ? readerSnapshotBudget : 'all',
+    readerSnapshotsTruncated: Number.isFinite(readerSnapshotBudget) && readerCount >= readerSnapshotBudget,
     tagCount
   });
-  console.log(`[vercel-static-api] wrote public snapshots for ${publicData.series.length} series, ${detailCount} detail pages, ${readerCount} reader pages, ${tagCount} tags`);
+  const readerLimitLabel = Number.isFinite(readerSnapshotBudget)
+    ? `, reader limit ${readerSnapshotBudget}`
+    : '';
+  console.log(`[vercel-static-api] wrote public snapshots for ${publicData.series.length} series, ${detailCount} detail pages, ${readerCount} reader pages${readerLimitLabel}, ${tagCount} tags`);
 }
 
 async function writeReaderSnapshots({
   staticApiDir,
   series,
+  maxSnapshots = Infinity,
   loadFullSeries,
   buildReaderChapterPayload
 }) {
-  const seriesKeys = uniqueRouteParts([series.slug, series.id]);
+  const seriesKeys = uniqueRouteParts([series.slug]);
   const chapters = (series.chapters || [])
     .filter((chapter) => chapter.status === 'public' && chapter.imported);
   if (!seriesKeys.length || !chapters.length) return 0;
@@ -261,16 +275,20 @@ async function writeReaderSnapshots({
 
   let count = 0;
   for (const chapter of chapters) {
-    const chapterKeys = uniqueRouteParts([chapter.slug, chapter.id]);
+    if (count >= maxSnapshots) break;
+    const chapterKeys = uniqueRouteParts([chapter.slug || chapter.id]);
     if (!chapterKeys.length) continue;
 
     for (const seriesKey of seriesKeys) {
+      if (count >= maxSnapshots) break;
       for (const chapterKey of chapterKeys) {
+        if (count >= maxSnapshots) break;
         count += await writeReaderSnapshotVariants({
           staticApiDir,
           seriesKey,
           chapterKey,
           catalog: { series: [fullSeries] },
+          maxSnapshots: maxSnapshots - count,
           buildReaderChapterPayload
         });
       }
@@ -284,10 +302,12 @@ async function writeReaderSnapshotVariants({
   seriesKey,
   chapterKey,
   catalog,
+  maxSnapshots = Infinity,
   buildReaderChapterPayload
 }) {
   let count = 0;
   for (const windowSize of [0, 1]) {
+    if (count >= maxSnapshots) break;
     const payload = buildReaderChapterPayload(catalog, seriesKey, chapterKey, {
       window: windowSize
     });
@@ -295,26 +315,11 @@ async function writeReaderSnapshotVariants({
     await writeJson(readerSnapshotPath(staticApiDir, seriesKey, chapterKey, { window: windowSize }), payload);
     count += 1;
   }
-
-  for (const windowSize of [0, 1]) {
-    const payload = buildReaderChapterPayload(catalog, seriesKey, chapterKey, {
-      window: windowSize,
-      start: 'next'
-    });
-    if (!payload) continue;
-    await writeJson(readerSnapshotPath(staticApiDir, seriesKey, chapterKey, { window: windowSize, start: 'next' }), payload);
-    count += 1;
-  }
   return count;
 }
 
-function readerSnapshotPath(staticApiDir, seriesKey, chapterKey, { window = 0, start = '' } = {}) {
+function readerSnapshotPath(staticApiDir, seriesKey, chapterKey, { window = 0 } = {}) {
   const windowSize = Math.max(0, Number(window || 0));
-  const isNext = start === 'next';
-  if (isNext) {
-    const filename = windowSize > 0 ? `next-window-${windowSize}.json` : 'next.json';
-    return path.join(staticApiDir, 'reader', seriesKey, chapterKey, filename);
-  }
   if (windowSize > 0) {
     return path.join(staticApiDir, 'reader', seriesKey, chapterKey, `window-${windowSize}.json`);
   }
@@ -323,6 +328,19 @@ function readerSnapshotPath(staticApiDir, seriesKey, chapterKey, { window = 0, s
 
 function uniqueRouteParts(values = []) {
   return [...new Set(values.map(safeRoutePart).filter(Boolean))];
+}
+
+function readerSnapshotLimit() {
+  const raw = process.env.STATIC_API_READER_SNAPSHOT_LIMIT
+    ?? process.env.PUBLIC_READER_SNAPSHOT_LIMIT
+    ?? (process.env.VERCEL === '1' ? String(DEFAULT_VERCEL_READER_SNAPSHOT_LIMIT) : 'all');
+  const normalized = String(raw || '').trim().toLowerCase();
+  if (!normalized || normalized === 'all' || normalized === 'infinite' || normalized === 'infinity') {
+    return Infinity;
+  }
+  const value = Number(normalized);
+  if (!Number.isFinite(value) || value < 0) return DEFAULT_VERCEL_READER_SNAPSHOT_LIMIT;
+  return Math.floor(value);
 }
 
 await fs.mkdir(PUBLIC_DIR, { recursive: true });
