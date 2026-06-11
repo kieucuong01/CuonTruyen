@@ -34,6 +34,8 @@
 - `tests/adminImportProgressView.test.mjs`: Direct tests for import progress metrics, admin update status class, escaped errors, and usable-image fallbacks.
 - `public/routes/adminShellView.mjs`: Pure admin shell panels for session bar, bulletin messages, production/local notices, catalog storage notice, and local operation panel shells.
 - `tests/adminShellView.test.mjs`: Direct tests for admin shell panel escaping, bulletin time labels, storage notice summary, and local/production panel controls.
+- `public/routes/adminRevenueView.mjs`: Pure admin revenue/analytics dashboard rendering, metric formatting, range tabs, and top-series table markup.
+- `tests/adminRevenueView.test.mjs`: Direct tests for revenue number/percent formatting, unavailable analytics state, active range, escaping, and empty tracking rows.
 
 ## Task 1: Extract Import Chapter Selection Helpers
 
@@ -468,4 +470,46 @@ Run:
 node --check public\routes\adminShellView.mjs
 node --check public\routes\admin.mjs
 node --require ./tests/setup-env.cjs --test tests\adminShellView.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 11: Extract Admin Revenue View Helpers
+
+**Files:**
+- Create: `public/routes/adminRevenueView.mjs`
+- Create: `tests/adminRevenueView.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for revenue dashboard helpers**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminRevenueView.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminRevenueView.mjs`.
+
+- [x] **Step 2: Move pure revenue dashboard helpers**
+
+Move these helpers from `public/routes/admin.mjs` to `public/routes/adminRevenueView.mjs`:
+
+```text
+formatNumber
+formatPercent
+renderRevenueDashboard
+```
+
+Keep analytics API loading, click binding, error insertion, and dashboard refresh in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminRevenueView.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminRevenueView.test.mjs tests\adminRouteSmoke.test.mjs
 ```
