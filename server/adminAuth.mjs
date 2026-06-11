@@ -47,5 +47,5 @@ export function createAdminSession(credentials = {}, config = {}) {
 }
 
 export function isAdminPath(pathname = '') {
-  return pathname.startsWith('/api/admin/') || pathname === '/api/import';
+  return pathname.startsWith('/api/admin/') || pathname === '/api/admin-series-upsert' || pathname === '/api/import';
 }

@@ -730,7 +730,7 @@ async function handleApi(req, res, url) {
     return true;
   }
 
-  if (req.method === 'POST' && url.pathname === '/api/admin/series/upsert') {
+  if (req.method === 'POST' && url.pathname === '/api/admin-series-upsert') {
     const body = await readJsonBody(req);
     const series = body.series && typeof body.series === 'object' ? body.series : body;
     if (!series?.id || !series?.title || !Array.isArray(series?.chapters)) {

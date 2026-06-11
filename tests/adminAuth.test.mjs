@@ -45,6 +45,7 @@ test('createAdminSession returns an API token only for configured valid credenti
 
 test('isAdminPath protects crawl and admin endpoints', () => {
   assert.equal(isAdminPath('/api/admin/import-jobs'), true);
+  assert.equal(isAdminPath('/api/admin-series-upsert'), true);
   assert.equal(isAdminPath('/api/import'), true);
   assert.equal(isAdminPath('/api/series'), false);
 });

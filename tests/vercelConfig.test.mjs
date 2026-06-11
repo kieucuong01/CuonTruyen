@@ -27,8 +27,7 @@ test('vercel serverless API catch-all exists for admin production', () => {
   const apiFiles = listApiFunctionFiles('api');
   assert.deepEqual(apiFiles.sort(), [
     '[...path].mjs',
-    'admin/[...path].mjs',
-    'admin/series/upsert.mjs'
+    'admin/[...path].mjs'
   ].sort());
 });
 
