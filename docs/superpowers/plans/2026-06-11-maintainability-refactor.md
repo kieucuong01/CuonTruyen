@@ -20,6 +20,8 @@
 - `docs/agent-playbooks/agent-token-map.md`: Agent entrypoint map updated when responsibility moves.
 - `public/routes/adminProductionView.mjs`: Pure admin production badge and pipeline-step view helpers.
 - `tests/adminProductionView.test.mjs`: Direct tests for admin production helper rendering and escaping.
+- `server/adminProductionStatus.mjs`: Pure backend Production Health status builder for admin.
+- `tests/adminProductionStatus.test.mjs`: Direct tests for Production Health status calculations.
 
 ## Task 1: Extract Import Chapter Selection Helpers
 
@@ -112,4 +114,45 @@ Run:
 ```powershell
 node --check public\routes\admin.mjs
 node --require ./tests/setup-env.cjs --test tests\adminRouteSmoke.test.mjs tests\adminProductionView.test.mjs
+```
+
+## Task 3: Extract Backend Production Health Helpers
+
+**Files:**
+- Create: `server/adminProductionStatus.mjs`
+- Create: `tests/adminProductionStatus.test.mjs`
+- Modify: `server/index.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+
+- [x] **Step 1: Write failing tests for pure Production Health calculations**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminProductionStatus.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `server/adminProductionStatus.mjs`.
+
+- [x] **Step 2: Extract pure status helpers**
+
+Move these helpers from `server/index.mjs` to `server/adminProductionStatus.mjs`:
+
+```text
+isImportAssetReference
+productionStatusLabel
+estimateProductionImageTotal
+buildAdminProductionStatus
+```
+
+Keep file reads, cache, and `catalogStorageSummary()` ownership in `server/index.mjs`.
+
+- [x] **Step 3: Verify server route behavior**
+
+Run:
+
+```powershell
+node --check server\adminProductionStatus.mjs
+node --check server\index.mjs
+node --require ./tests/setup-env.cjs --test tests\adminProductionStatus.test.mjs tests\adminRouteSmoke.test.mjs tests\productionCheck.test.mjs tests\productionPipeline.test.mjs tests\storageConfig.test.mjs
 ```
