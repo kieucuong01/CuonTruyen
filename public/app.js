@@ -54,6 +54,11 @@ import {
   normalizeMonetizationConfig,
   shouldShowAds
 } from './monetization.mjs';
+import {
+  renderBrandLogoView,
+  renderTopbarView,
+  renderUserAuthPage
+} from './siteChromeView.mjs';
 
 function getMonetizationConfig() {
   const rootConfig = globalThis.COMIC_READER_CONFIG || {};
@@ -492,44 +497,23 @@ function observeVisibleAdSlots(root = document) {
 }
 
 function renderTopbar() {
-  const user = loadUserSession();
-  const navItems = [
-    { href: '/', label: 'Trang chủ', active: location.pathname === '/' && !location.hash },
-    { href: '#/following', label: 'Theo dõi', active: location.hash === '#/following' },
-    { href: '#/history', label: 'Lịch sử', active: location.hash === '#/history' },
-    { href: '#/search', label: 'Tìm kiếm', active: location.hash === '#/search' },
-    { href: '#/genres', label: 'Thể loại', active: location.hash === '#/genres' || location.pathname.startsWith('/the-loai/') }
-  ];
-  return `
-    <header class="topbar">
-      <a class="brand" data-link href="/">
-        ${renderBrandLogo()}
-      </a>
-      <nav class="main-nav" aria-label="Điều hướng chính">
-        ${navItems.map((item) => `
-          <a data-link href="${escapeAttr(item.href)}" ${item.active ? 'aria-current="page" class="active"' : ''}>${escapeHtml(item.label)}</a>
-        `).join('')}
-      </nav>
-      <div class="top-actions ${user ? 'is-authenticated' : ''}">
-        ${user ? `
-          <span class="user-chip">${escapeHtml(user.displayName || 'Reader')}</span>
-          <button class="login-btn muted-btn logout-btn" type="button" data-user-logout>Đăng xuất</button>
-        ` : '<a class="login-btn" data-link href="#/login">Đăng nhập</a>'}
-      </div>
-    </header>
-  `;
+  return renderTopbarView({
+    brandName: BRAND_NAME,
+    brandTagline: BRAND_TAGLINE,
+    brandLogo: BRAND_LOGO,
+    pathname: location.pathname,
+    hash: location.hash,
+    user: loadUserSession()
+  });
 }
 
 function renderBrandLogo({ compact = false } = {}) {
-  return `
-    <span class="brand-logo ${compact ? 'compact' : ''}" aria-label="${BRAND_NAME}">
-      <img src="${BRAND_LOGO}" alt="${BRAND_NAME}" width="${compact ? 152 : 214}" height="${compact ? 46 : 64}" />
-      <span class="brand-logo-fallback">
-        <strong>${BRAND_NAME}</strong>
-        ${compact ? '' : `<small>${BRAND_TAGLINE}</small>`}
-      </span>
-    </span>
-  `;
+  return renderBrandLogoView({
+    brandName: BRAND_NAME,
+    brandTagline: BRAND_TAGLINE,
+    brandLogo: BRAND_LOGO,
+    compact
+  });
 }
 
 function renderContinueShelf(items, lastSeries) {
@@ -844,30 +828,12 @@ function renderUserAuth() {
   stopReaderRuntime();
   const user = loadUserSession();
   const isRegister = location.hash === '#/register';
-  app.innerHTML = `
-    <main class="site-shell">
-      ${renderTopbar()}
-      <section class="auth-card">
-        <form class="auth-panel" data-user-login-form>
-          <h2>${isRegister ? 'T\u1ea1o t\u00e0i kho\u1ea3n \u0111\u1ecdc' : (user ? '\u0110\u1ed5i t\u00e0i kho\u1ea3n \u0111\u1ecdc' : '\u0110\u0103ng nh\u1eadp')}</h2>
-          <p>T\u00e0i kho\u1ea3n c\u1ea7n m\u1eadt kh\u1ea9u \u0111\u1ec3 gi\u1eef danh s\u00e1ch theo d\u00f5i an to\u00e0n h\u01a1n khi \u0111\u1ed5i thi\u1ebft b\u1ecb.</p>
-          <a class="google-login-btn" href="${escapeAttr(apiUrl('/api/auth/google/start'))}">
-            <span aria-hidden="true">G</span>
-            \u0110\u0103ng nh\u1eadp b\u1eb1ng Google
-          </a>
-          <div class="auth-divider"><span>ho\u1eb7c</span></div>
-          <input name="identifier" required placeholder="T\u00ean ho\u1eb7c email" value="${escapeAttr(user?.identifier || '')}" autocomplete="username" />
-          ${isRegister ? '<input name="displayName" placeholder="T\u00ean hi\u1ec3n th\u1ecb" autocomplete="name" />' : ''}
-          <input name="password" type="password" required minlength="6" placeholder="M\u1eadt kh\u1ea9u" autocomplete="${isRegister ? 'new-password' : 'current-password'}" />
-          <button class="primary-btn" type="submit">${isRegister ? '\u0110\u0103ng k\u00fd' : '\u0110\u0103ng nh\u1eadp'}</button>
-          <p class="muted">${isRegister
-            ? '\u0110\u00e3 c\u00f3 t\u00e0i kho\u1ea3n? <a data-link href="#/login">\u0110\u0103ng nh\u1eadp</a>'
-            : 'Ch\u01b0a c\u00f3 t\u00e0i kho\u1ea3n? <a data-link href="#/register">\u0110\u0103ng k\u00fd</a>'}</p>
-          <span class="status-line" data-status></span>
-        </form>
-      </section>
-    </main>
-  `;
+  app.innerHTML = renderUserAuthPage({
+    topbarHtml: renderTopbar(),
+    user,
+    isRegister,
+    googleStartUrl: apiUrl('/api/auth/google/start')
+  });
   app.querySelector('[data-user-login-form]').addEventListener('submit', handleUserLogin);
 }
 

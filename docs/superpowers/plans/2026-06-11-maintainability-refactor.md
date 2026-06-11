@@ -58,6 +58,8 @@
 - `tests/adminAuthActions.test.mjs`: Direct tests for login payloads, session save, logout, error states, and pending-control cleanup.
 - `public/routes/adminPageViews.mjs`: Pure admin dashboard/detail page composition and local crawl form markup.
 - `tests/adminPageViews.test.mjs`: Direct tests for dashboard/detail composition, local/production panel gating, flash escaping, and empty states.
+- `public/siteChromeView.mjs`: Pure public topbar, brand logo, and reader account auth page rendering.
+- `tests/siteChromeView.test.mjs`: Direct tests for public chrome navigation state, auth state, escaping, compact logo, and login/register markup.
 - `public/routes/adminTags.mjs`: Pure admin tag/origin picker, origin detection, and tag merge helpers.
 - `tests/adminTags.test.mjs`: Direct tests for admin tag normalization, origin detection, merge behavior, and picker rendering.
 - `public/routes/adminS3SyncView.mjs`: Pure admin S3 sync status rendering, failed-item list, stale-job warning, and retry-button visibility.
@@ -1269,4 +1271,49 @@ Run:
 node --check public\routes\adminPageViews.mjs
 node --check public\routes\admin.mjs
 node --require ./tests/setup-env.cjs --test tests\adminPageViews.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 29: Extract Public Site Chrome View Helpers
+
+**Files:**
+- Create: `public/siteChromeView.mjs`
+- Create: `tests/siteChromeView.test.mjs`
+- Modify: `public/app.js`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for public chrome rendering**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\siteChromeView.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/siteChromeView.mjs`.
+
+- [x] **Step 2: Move pure topbar/logo/auth markup out of the app orchestrator**
+
+Move these pure rendering paths from `public/app.js` into `public/siteChromeView.mjs`:
+
+```text
+renderBrandLogoView
+topbarNavItems
+renderTopbarView
+renderUserAuthPage
+```
+
+Keep route orchestration, session loading, login submit handling, API URL resolution, and reader runtime cleanup in `public/app.js`.
+
+- [x] **Step 3: Verify public app behavior**
+
+Run:
+
+```powershell
+node --check public\siteChromeView.mjs
+node --check public\app.js
+node --require ./tests/setup-env.cjs --test tests\siteChromeView.test.mjs
+npm run check:encoding
+npm test
 ```
