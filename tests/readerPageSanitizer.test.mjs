@@ -77,3 +77,21 @@ test('publicReaderChapter strips crawler-only page fields from reader payload', 
   assert.deepEqual(Object.keys(chapter.pages[0]).sort(), ['height', 'imageUrl', 'order', 'width']);
   assert.equal(chapter.pages[0].imageUrl, '/imports/demo/chapter-1/001.webp');
 });
+
+test('publicReaderChapter proxies hotlink-protected external image URLs', () => {
+  const sourceImage = 'https://s135.hinhhinh.com/12503/0/0.jpg?gt=hdfgdfg';
+  const chapter = publicReaderChapter({
+    id: 'chapter-1',
+    label: 'Chapter 1',
+    pages: [
+      {
+        imageUrl: sourceImage,
+        width: 900,
+        height: 1300
+      }
+    ]
+  });
+
+  assert.equal(chapter.pages[0].imageUrl.startsWith('/api/image-proxy?url='), true);
+  assert.equal(new URLSearchParams(chapter.pages[0].imageUrl.split('?')[1]).get('url'), sourceImage);
+});

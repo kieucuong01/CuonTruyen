@@ -61,6 +61,7 @@ import {
   buildProductionCheckTargets,
   checkProductionTargets
 } from './productionCheck.mjs';
+import { handleImageProxyRequest } from './imageProxy.mjs';
 import { runWorkerOnce } from './crawlWorker.mjs';
 import { normalizeImportBatchPayload, normalizeImportPayload } from './importOptions.mjs';
 import { createUpdateChaptersPayload, sourceUrlForSeries } from './crawlQueue.mjs';
@@ -577,6 +578,10 @@ function importErrorPayload(error) {
 }
 
 async function handleApi(req, res, url) {
+  if (req.method === 'GET' && url.pathname === '/api/image-proxy') {
+    return handleImageProxyRequest(req, res, url);
+  }
+
   const rateLimit = checkApiRateLimit(req, url.pathname);
   if (!rateLimit.allowed) {
     jsonResponse(res, 429, {

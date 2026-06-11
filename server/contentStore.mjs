@@ -1,5 +1,6 @@
 import { publicImportUrl } from './catalogStore.mjs';
 import { readCatalog, writeCatalog } from './dataStore.mjs';
+import { proxiedExternalImageUrl } from './imageProxy.mjs';
 import { slugify, uniqueBy } from './utils.mjs';
 
 const PUBLIC_STATUS = 'public';
@@ -131,7 +132,8 @@ export function sanitizeReaderPages(pages = []) {
 }
 
 function publicReaderPage(page = {}, index = 0) {
-  const imageUrl = publicImportUrl(page.imageUrl || page.src || page.storageKey || page.sourceUrl || '');
+  const rawImageUrl = page.imageUrl || page.src || page.storageKey || page.sourceUrl || '';
+  const imageUrl = proxiedExternalImageUrl(publicImportUrl(rawImageUrl));
   return {
     order: Number(page.order ?? page.index ?? index),
     imageUrl,
