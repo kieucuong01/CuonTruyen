@@ -40,6 +40,8 @@
 - `tests/adminDataLoaders.test.mjs`: Direct tests for admin read endpoint URLs, admin headers, fallback behavior, and range encoding.
 - `public/routes/adminDomHelpers.mjs`: Admin cover image fallback, auth-error detection, and catalog series lookup helpers.
 - `tests/adminDomHelpers.test.mjs`: Direct tests for cover fallback behavior, event binding, series lookup, and auth-error matching.
+- `public/routes/adminPanelPolling.mjs`: Admin S3 sync and crawl queue panel polling, retry, wake, and status target adapters.
+- `tests/adminPanelPolling.test.mjs`: Direct tests for S3/crawl queue poll intervals, endpoints, retry/wake actions, stale target cleanup, and status adapters.
 - `public/routes/adminTags.mjs`: Pure admin tag/origin picker, origin detection, and tag merge helpers.
 - `tests/adminTags.test.mjs`: Direct tests for admin tag normalization, origin detection, merge behavior, and picker rendering.
 - `public/routes/adminS3SyncView.mjs`: Pure admin S3 sync status rendering, failed-item list, stale-job warning, and retry-button visibility.
@@ -875,4 +877,48 @@ Run:
 node --check public\routes\adminDomHelpers.mjs
 node --check public\routes\admin.mjs
 node --require ./tests/setup-env.cjs --test tests\adminDomHelpers.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 20: Extract Admin Panel Polling Helpers
+
+**Files:**
+- Create: `public/routes/adminPanelPolling.mjs`
+- Create: `tests/adminPanelPolling.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for S3 and crawl queue panel polling**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminPanelPolling.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminPanelPolling.mjs`.
+
+- [x] **Step 2: Move panel polling loops and status adapters**
+
+Move these helpers from `public/routes/admin.mjs` into `public/routes/adminPanelPolling.mjs`:
+
+```text
+bindS3SyncStatus
+bindS3RetryFailed
+bindCrawlQueueStatus
+renderCrawlQueueStatus
+renderS3SyncStatus
+```
+
+Keep page composition, shell rendering, and high-level admin route orchestration in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminPanelPolling.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminPanelPolling.test.mjs tests\adminRouteSmoke.test.mjs
 ```
