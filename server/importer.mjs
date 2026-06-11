@@ -14,9 +14,16 @@ import {
   writeImageWithOptimization
 } from './imageOptimizer.mjs';
 import { normalizeSourceUrl } from './crawlQueue.mjs';
+import {
+  ASSET_MODE_FULL_DOWNLOAD,
+  ASSET_MODE_IMAGE_URL,
+  normalizeAssetMode
+} from './importOptions.mjs';
 import { slugify } from './utils.mjs';
 
 const CRAWL_MODE_NEW_CHAPTERS = 'new-chapters';
+const ASSET_STATUS_EXTERNAL = 'external';
+const ASSET_STATUS_LOCAL = 'local';
 
 function chapterKeys(chapter = {}) {
   return [
@@ -117,6 +124,8 @@ async function fetchHtmlWithLimit(adapter, url, rateLimiter) {
 export async function importSeries(seriesUrl, options = {}, onProgress = () => {}) {
   const adapter = getAdapterForUrl(seriesUrl);
   const mode = options.mode === CRAWL_MODE_NEW_CHAPTERS ? CRAWL_MODE_NEW_CHAPTERS : 'full';
+  const assetMode = resolveAssetMode(options.assetMode);
+  const shouldDownloadImages = assetMode === ASSET_MODE_FULL_DOWNLOAD;
   const maxChapters = Number(options.maxChapters || 0);
   const maxPages = Number(options.maxPages || 0);
   const imageRetries = clampNumber(options.imageRetries ?? process.env.CRAWL_IMAGE_RETRIES ?? 2, 0, 4);
@@ -189,6 +198,7 @@ export async function importSeries(seriesUrl, options = {}, onProgress = () => {
   if (mode === CRAWL_MODE_NEW_CHAPTERS && chaptersToImport.length === 0) {
     const importSummary = {
       mode,
+      assetMode,
       newChapterCount: 0,
       skippedExistingChapterCount
     };
@@ -309,6 +319,35 @@ export async function importSeries(seriesUrl, options = {}, onProgress = () => {
       })
     });
 
+    if (!shouldDownloadImages) {
+      selectedImages.forEach((sourceUrl, index) => {
+        pagesByIndex[index] = buildExternalImageUrlPage(sourceUrl, index);
+      });
+      completedChapterImages = selectedImages.length;
+      await emitProgress({
+        phase: 'collecting-image-urls',
+        message: `${chapter.label}: da luu ${selectedImages.length} URL anh, khong tai file.`,
+        mode,
+        assetMode,
+        currentChapterLabel: chapter.label,
+        processedChapters: chapterIndex,
+        totalImages,
+        downloadedImages,
+        skippedExistingImages,
+        failedImages,
+        imageConcurrency: 0,
+        optimizeDuringCrawl: false,
+        ...progressMetrics({
+          startedAt: crawlStartedAt,
+          totalImages,
+          downloadedImages,
+          skippedExistingImages,
+          failedImages,
+          processedChapters: chapterIndex,
+          totalChapters: chapterJobs.length
+        })
+      });
+    } else {
     await runWithConcurrency(selectedImages, imageConcurrency, async (sourceUrl, index) => {
       const filename = adapter.filenameForImage(sourceUrl, index);
       let storedImage = await findExistingStoredImage(dir, filename, imageOptimizeConfig);
@@ -416,14 +455,17 @@ export async function importSeries(seriesUrl, options = {}, onProgress = () => {
         index,
         sourceUrl,
         src: publicImportPath(id, chapter.id, storedImage.filename),
+        imageUrl: publicImportPath(id, chapter.id, storedImage.filename),
         storageKey: publicImportPath(id, chapter.id, storedImage.filename),
         width: storedImage.width || null,
         height: storedImage.height || null,
         originalBytes: storedImage.originalBytes || null,
         storedBytes: storedImage.storedBytes || null,
-        optimized: Boolean(storedImage.optimized)
+        optimized: Boolean(storedImage.optimized),
+        assetStatus: ASSET_STATUS_LOCAL
       };
     });
+    }
 
     const pages = pagesByIndex.filter(Boolean);
     chapters.push({
@@ -432,7 +474,9 @@ export async function importSeries(seriesUrl, options = {}, onProgress = () => {
       status: chapterStatus,
       pages,
       pageCount: pages.length,
-      imported: pages.length > 0
+      imported: pages.length > 0,
+      importMode: assetMode,
+      assetStatus: assetStatusForPages(pages)
     });
     await emitProgress({
       phase: 'chapter-completed',
@@ -468,7 +512,9 @@ export async function importSeries(seriesUrl, options = {}, onProgress = () => {
       status: 'draft',
       pages: [],
       pageCount: 0,
-      imported: false
+      imported: false,
+      importMode: assetMode,
+      assetStatus: assetMode === ASSET_MODE_IMAGE_URL ? ASSET_STATUS_EXTERNAL : ASSET_STATUS_LOCAL
     }));
   const importedPageCount = chapters.reduce((sum, chapter) => sum + chapter.pageCount, 0);
   if (importedPageCount === 0) {
@@ -488,9 +534,13 @@ export async function importSeries(seriesUrl, options = {}, onProgress = () => {
 
   const importSummary = {
     mode,
+    assetMode,
     newChapterCount: mode === CRAWL_MODE_NEW_CHAPTERS ? chapters.length : 0,
     skippedExistingChapterCount
   };
+  const nextChaptersForStatus = mode === CRAWL_MODE_NEW_CHAPTERS
+    ? [...chapters, ...(existingSeries?.chapters || [])]
+    : [...chapters, ...untouchedChapters];
   const updated = await upsertSeries(mode === CRAWL_MODE_NEW_CHAPTERS ? {
     id,
     title: existingSeries.title || parsed.title,
@@ -507,6 +557,8 @@ export async function importSeries(seriesUrl, options = {}, onProgress = () => {
     stats: existingSeries.stats || {},
     crawlSchedule: existingSeries.crawlSchedule || { enabled: false, intervalHours: 24 },
     status: existingSeries.status || 'draft',
+    importMode: assetMode,
+    assetStatus: assetStatusForChapters(nextChaptersForStatus),
     chapters
   } : {
     id,
@@ -519,6 +571,8 @@ export async function importSeries(seriesUrl, options = {}, onProgress = () => {
     thumbnailUrl: coverThumbnail?.thumbnailUrl || '',
     coverThumbnail: coverThumbnail?.metadata || null,
     status: 'public',
+    importMode: assetMode,
+    assetStatus: assetStatusForChapters(nextChaptersForStatus),
     chapters: [...chapters, ...untouchedChapters]
   });
   return {
@@ -534,6 +588,38 @@ function hashCode(value) {
     hash |= 0;
   }
   return hash;
+}
+
+export function resolveAssetMode(value) {
+  return normalizeAssetMode(value);
+}
+
+export function buildExternalImageUrlPage(sourceUrl, index) {
+  const imageUrl = String(sourceUrl || '').trim();
+  return {
+    index,
+    sourceUrl: imageUrl,
+    src: imageUrl,
+    imageUrl,
+    storageKey: '',
+    width: null,
+    height: null,
+    assetStatus: ASSET_STATUS_EXTERNAL
+  };
+}
+
+function assetStatusForPages(pages = []) {
+  const statuses = new Set(pages.map((page) => page.assetStatus || '').filter(Boolean));
+  if (statuses.size === 1) return [...statuses][0];
+  if (statuses.size > 1) return 'mixed';
+  return ASSET_STATUS_EXTERNAL;
+}
+
+function assetStatusForChapters(chapters = []) {
+  const statuses = new Set(chapters.map((chapter) => chapter.assetStatus || '').filter(Boolean));
+  if (statuses.size === 1) return [...statuses][0];
+  if (statuses.size > 1) return 'mixed';
+  return ASSET_STATUS_EXTERNAL;
 }
 
 function clampNumber(value, min, max) {

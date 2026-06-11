@@ -1,4 +1,5 @@
 import { mergeSeries } from './catalogMerge.mjs';
+import { normalizeAssetMode } from './importOptions.mjs';
 import { catalogStorageMode, requirePostgresCatalogUrl } from './storageConfig.mjs';
 import { slugify } from './utils.mjs';
 
@@ -24,6 +25,10 @@ create table if not exists series (
   source_url text,
   adapter text,
   imported_at timestamptz,
+  import_mode text not null default 'image_url',
+  asset_status text not null default 'external',
+  image_error_count integer not null default 0,
+  last_asset_check_at timestamptz,
   updated_at timestamptz
 );
 
@@ -38,6 +43,10 @@ create table if not exists chapters (
   source_order integer,
   page_count integer not null default 0,
   imported boolean not null default false,
+  import_mode text not null default 'image_url',
+  asset_status text not null default 'external',
+  image_error_count integer not null default 0,
+  last_asset_check_at timestamptz,
   published_at timestamptz,
   updated_at timestamptz,
   raw jsonb not null default '{}'::jsonb,
@@ -53,6 +62,7 @@ create table if not exists pages (
   image_url text not null,
   storage_key text,
   source_url text,
+  asset_status text not null default 'external',
   width integer,
   height integer,
   raw jsonb not null default '{}'::jsonb,
@@ -149,6 +159,41 @@ alter table if exists crawl_jobs add column if not exists locked_at timestamptz;
 alter table if exists crawl_jobs add column if not exists last_error text;
 alter table if exists series add column if not exists thumbnail_url text;
 alter table if exists series add column if not exists cover_thumbnail jsonb;
+alter table if exists series add column if not exists import_mode text not null default 'image_url';
+alter table if exists series add column if not exists asset_status text not null default 'external';
+alter table if exists series add column if not exists image_error_count integer not null default 0;
+alter table if exists series add column if not exists last_asset_check_at timestamptz;
+alter table if exists chapters add column if not exists import_mode text not null default 'image_url';
+alter table if exists chapters add column if not exists asset_status text not null default 'external';
+alter table if exists chapters add column if not exists image_error_count integer not null default 0;
+alter table if exists chapters add column if not exists last_asset_check_at timestamptz;
+alter table if exists pages add column if not exists asset_status text not null default 'external';
+
+update pages
+set asset_status = 'local'
+where asset_status = 'external'
+  and coalesce(storage_key, '') <> '';
+
+update chapters c
+set import_mode = 'full_download',
+    asset_status = 'local'
+where exists (
+  select 1
+  from pages p
+  where p.series_id = c.series_id
+    and p.chapter_id = c.id
+    and coalesce(p.storage_key, '') <> ''
+);
+
+update series s
+set import_mode = 'full_download',
+    asset_status = 'local'
+where exists (
+  select 1
+  from chapters c
+  where c.series_id = s.id
+    and c.asset_status = 'local'
+);
 
 create index if not exists idx_series_slug on series(slug);
 create index if not exists idx_series_status_updated on series(status, updated_at desc);
@@ -344,10 +389,12 @@ async function upsertSeriesRows(client, rawSeries) {
   await client.query(`
     insert into series (
       id, title, slug, aliases, cover_url, thumbnail_url, cover_thumbnail, description, status, source_mappings,
-      tags, stats, crawl_schedule, source_url, adapter, imported_at, updated_at
+      tags, stats, crawl_schedule, source_url, adapter, imported_at, import_mode, asset_status,
+      image_error_count, last_asset_check_at, updated_at
     ) values (
       $1, $2, $3, $4::jsonb, $5, $6, $7::jsonb, $8, $9, $10::jsonb,
-      $11::jsonb, $12::jsonb, $13::jsonb, $14, $15, $16, $17
+      $11::jsonb, $12::jsonb, $13::jsonb, $14, $15, $16, $17, $18,
+      $19, $20, $21
     )
     on conflict (id) do update set
       title = excluded.title,
@@ -365,6 +412,10 @@ async function upsertSeriesRows(client, rawSeries) {
       source_url = excluded.source_url,
       adapter = excluded.adapter,
       imported_at = coalesce(series.imported_at, excluded.imported_at),
+      import_mode = excluded.import_mode,
+      asset_status = excluded.asset_status,
+      image_error_count = excluded.image_error_count,
+      last_asset_check_at = excluded.last_asset_check_at,
       updated_at = excluded.updated_at
   `, [
     series.id,
@@ -383,6 +434,10 @@ async function upsertSeriesRows(client, rawSeries) {
     series.sourceUrl,
     series.adapter,
     timestamp(series.importedAt),
+    series.importMode,
+    series.assetStatus,
+    series.imageErrorCount,
+    timestamp(series.lastAssetCheckAt),
     timestamp(series.updatedAt)
   ]);
 
@@ -407,10 +462,12 @@ async function upsertSeriesRows(client, rawSeries) {
     await client.query(`
       insert into chapters (
         series_id, id, title, label, slug, status, source_url, source_order,
-        page_count, imported, published_at, updated_at, raw
+        page_count, imported, import_mode, asset_status, image_error_count, last_asset_check_at,
+        published_at, updated_at, raw
       ) values (
         $1, $2, $3, $4, $5, $6, $7, $8,
-        $9, $10, $11, $12, $13::jsonb
+        $9, $10, $11, $12, $13, $14,
+        $15, $16, $17::jsonb
       )
     `, [
       series.id,
@@ -423,6 +480,10 @@ async function upsertSeriesRows(client, rawSeries) {
       chapter.sourceOrder,
       chapter.pageCount,
       chapter.imported,
+      chapter.importMode,
+      chapter.assetStatus,
+      chapter.imageErrorCount,
+      timestamp(chapter.lastAssetCheckAt),
       timestamp(chapter.publishedAt),
       timestamp(chapter.updatedAt),
       json(chapter.raw)
@@ -441,7 +502,7 @@ async function insertChapterPages(client, seriesId, chapterId, rawPages = []) {
     const chunk = pages.slice(index, index + chunkSize);
     const values = [];
     const placeholders = chunk.map((page, chunkIndex) => {
-      const offset = chunkIndex * 9;
+      const offset = chunkIndex * 10;
       values.push(
         seriesId,
         chapterId,
@@ -449,16 +510,17 @@ async function insertChapterPages(client, seriesId, chapterId, rawPages = []) {
         page.imageUrl,
         page.storageKey,
         page.sourceUrl,
+        page.assetStatus,
         page.width,
         page.height,
         json(page.raw)
       );
-      return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}::jsonb)`;
+      return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}::jsonb)`;
     });
     await client.query(`
       insert into pages (
         series_id, chapter_id, page_order, image_url, storage_key,
-        source_url, width, height, raw
+        source_url, asset_status, width, height, raw
       ) values ${placeholders.join(', ')}
     `, values);
   }
@@ -514,6 +576,10 @@ function seriesFromRow(row, chapters, tags) {
     sourceUrl: row.source_url || '',
     adapter: row.adapter || '',
     importedAt: iso(row.imported_at),
+    importMode: normalizeAssetMode(row.import_mode),
+    assetStatus: normalizeAssetStatus(row.asset_status),
+    imageErrorCount: Number(row.image_error_count || 0),
+    lastAssetCheckAt: iso(row.last_asset_check_at),
     updatedAt: iso(row.updated_at),
     chapters
   };
@@ -533,6 +599,10 @@ function chapterFromRow(row, pages = null) {
     sourceOrder: row.source_order,
     pageCount: Number(row.page_count || pages?.length || 0),
     imported: Boolean(row.imported || pages?.length),
+    importMode: normalizeAssetMode(row.import_mode || raw.importMode),
+    assetStatus: normalizeAssetStatus(row.asset_status || raw.assetStatus),
+    imageErrorCount: Number(row.image_error_count || raw.imageErrorCount || 0),
+    lastAssetCheckAt: iso(row.last_asset_check_at || raw.lastAssetCheckAt),
     publishedAt: iso(row.published_at),
     updatedAt: iso(row.updated_at)
   };
@@ -542,14 +612,17 @@ function chapterFromRow(row, pages = null) {
 
 function pageFromRow(row) {
   const raw = row.raw || {};
+  const assetStatus = normalizeAssetStatus(row.asset_status || raw.assetStatus);
+  const storageKey = row.storage_key || raw.storageKey || (assetStatus === 'external' ? '' : raw.src || row.image_url);
   return {
     ...raw,
     index: Number(row.page_order),
     order: Number(row.page_order),
     imageUrl: row.image_url,
     src: raw.src || row.image_url,
-    storageKey: row.storage_key || raw.storageKey || raw.src || row.image_url,
+    storageKey,
     sourceUrl: row.source_url || raw.sourceUrl || '',
+    assetStatus,
     width: row.width,
     height: row.height
   };
@@ -585,6 +658,10 @@ function normalizeSeriesForStorage(rawSeries) {
     sourceUrl: rawSeries.sourceUrl || sourceMappings[0]?.sourceUrl || '',
     adapter: rawSeries.adapter || sourceMappings[0]?.adapter || '',
     importedAt: rawSeries.importedAt || new Date().toISOString(),
+    importMode: normalizeAssetMode(rawSeries.importMode),
+    assetStatus: normalizeAssetStatus(rawSeries.assetStatus || assetStatusForChapters(rawSeries.chapters)),
+    imageErrorCount: Number(rawSeries.imageErrorCount || 0),
+    lastAssetCheckAt: rawSeries.lastAssetCheckAt || null,
     updatedAt: rawSeries.updatedAt || new Date().toISOString(),
     chapters: asArray(rawSeries.chapters)
   };
@@ -603,6 +680,10 @@ function normalizeChapterForStorage(rawChapter, index) {
     sourceOrder: Number(rawChapter.sourceOrder ?? index),
     pageCount: Number(rawChapter.pageCount ?? pages.length),
     imported: Boolean(rawChapter.imported || pages.length),
+    importMode: normalizeAssetMode(rawChapter.importMode),
+    assetStatus: normalizeAssetStatus(rawChapter.assetStatus || assetStatusForPages(pages)),
+    imageErrorCount: Number(rawChapter.imageErrorCount || 0),
+    lastAssetCheckAt: rawChapter.lastAssetCheckAt || null,
     publishedAt: rawChapter.publishedAt,
     updatedAt: rawChapter.updatedAt,
     raw: rawChapter,
@@ -639,15 +720,45 @@ export function makeUniqueChapterSlugForStorage(rawSlug, rawId, index, usedSlugs
 
 function normalizePageForStorage(rawPage, index) {
   const imageUrl = rawPage.imageUrl || rawPage.src || '';
+  const assetStatus = normalizeAssetStatus(rawPage.assetStatus || inferPageAssetStatus(rawPage));
   return {
     order: Number(rawPage.order ?? rawPage.index ?? index),
     imageUrl,
-    storageKey: rawPage.storageKey || rawPage.src || imageUrl,
+    storageKey: assetStatus === 'external' ? rawPage.storageKey || '' : rawPage.storageKey || rawPage.src || imageUrl,
     sourceUrl: rawPage.sourceUrl || '',
+    assetStatus,
     width: rawPage.width || null,
     height: rawPage.height || null,
     raw: rawPage
   };
+}
+
+function normalizeAssetStatus(value) {
+  const status = String(value || '').trim().toLowerCase();
+  if (status === 'local' || status === 's3' || status === 'cdn') return status;
+  if (status === 'mixed') return 'mixed';
+  return 'external';
+}
+
+function inferPageAssetStatus(page = {}) {
+  const storageKey = String(page.storageKey || '').trim();
+  const src = String(page.src || page.imageUrl || '').trim();
+  if (storageKey || src.startsWith('/imports/')) return 'local';
+  return 'external';
+}
+
+function assetStatusForPages(pages = []) {
+  const statuses = new Set(asArray(pages).map((page) => normalizeAssetStatus(page.assetStatus || inferPageAssetStatus(page))));
+  if (statuses.size === 0) return 'external';
+  if (statuses.size === 1) return [...statuses][0];
+  return 'mixed';
+}
+
+function assetStatusForChapters(chapters = []) {
+  const statuses = new Set(asArray(chapters).map((chapter) => normalizeAssetStatus(chapter.assetStatus || assetStatusForPages(chapter.pages))));
+  if (statuses.size === 0) return 'external';
+  if (statuses.size === 1) return [...statuses][0];
+  return 'mixed';
 }
 
 function normalizeTags(tags) {

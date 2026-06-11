@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 import { IMPORT_ROOT } from './catalogStore.mjs';
 import { createBoundedCache } from './cacheStore.mjs';
-import { ensureStorageSchema, getChapterPages, getSeries, readCatalog } from './dataStore.mjs';
+import { ensureStorageSchema, getChapterPages, getSeries, readCatalog, upsertSeries } from './dataStore.mjs';
 import { assertCatalogStorageReady, catalogStorageSummary } from './storageConfig.mjs';
 import { appendAnalyticsEvent, buildAnalyticsSummary, listAnalyticsEvents } from './analyticsStore.mjs';
 import { adminConfigStatus, createAdminSession, isAdminAuthorized, isAdminPath } from './adminAuth.mjs';
@@ -464,6 +464,7 @@ function compactImportJob(job = {}) {
     payload: {
       url: payload.url || '',
       mode: payload.mode || 'full',
+      assetMode: payload.assetMode || 'image_url',
       seriesId: payload.seriesId || '',
       maxChapters: payload.maxChapters,
       maxPages: payload.maxPages,
@@ -726,6 +727,31 @@ async function handleApi(req, res, url) {
 
   if (req.method === 'GET' && (url.pathname === '/api/admin/series' || url.pathname === '/api/admin/catalog')) {
     jsonResponse(res, 200, await readAdminCatalog());
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/admin/series/upsert') {
+    const body = await readJsonBody(req);
+    const series = body.series && typeof body.series === 'object' ? body.series : body;
+    if (!series?.id || !series?.title || !Array.isArray(series?.chapters)) {
+      jsonResponse(res, 400, { error: 'series with id, title, and chapters is required.' });
+      return true;
+    }
+    const updated = await upsertSeries(series);
+    clearApiCache();
+    jsonResponse(res, 200, {
+      ok: true,
+      series: {
+        id: updated.id,
+        slug: updated.slug,
+        title: updated.title,
+        status: updated.status,
+        chapterCount: Array.isArray(updated.chapters) ? updated.chapters.length : 0,
+        pageCount: (updated.chapters || []).reduce((sum, chapter) => sum + Number(chapter.pageCount || chapter.pages?.length || 0), 0),
+        importMode: updated.importMode || '',
+        assetStatus: updated.assetStatus || ''
+      }
+    });
     return true;
   }
 

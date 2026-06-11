@@ -1,3 +1,5 @@
+import { normalizeAssetMode } from './importOptions.mjs';
+
 export const ACTIVE_JOB_STATUSES = new Set(['queued', 'running', 'retrying']);
 
 export function normalizeSourceUrl(value = '') {
@@ -24,6 +26,7 @@ export function buildInitialProgress(payload = {}, now = new Date().toISOString(
     processedSeries: Math.min(totalSeries, seriesIndex - 1),
     seriesIndex,
     currentSeriesUrl: String(payload.url || ''),
+    assetMode: normalizeAssetMode(payload.assetMode),
     totalChapters: 0,
     processedChapters: 0,
     totalImages: 0,
@@ -43,6 +46,7 @@ export function createQueuedImportJob(payload = {}, {
   reason = payload.reason || 'manual'
 } = {}) {
   const sourceUrl = normalizeSourceUrl(payload.url);
+  const assetMode = normalizeAssetMode(payload.assetMode);
   return {
     id,
     sourceUrl,
@@ -50,9 +54,10 @@ export function createQueuedImportJob(payload = {}, {
     status: 'queued',
     payload: {
       ...payload,
-      url: sourceUrl
+      url: sourceUrl,
+      assetMode
     },
-    progress: buildInitialProgress({ ...payload, url: sourceUrl }, now),
+    progress: buildInitialProgress({ ...payload, url: sourceUrl, assetMode }, now),
     logs: [],
     result: null,
     series: null,
@@ -152,6 +157,7 @@ export function createUpdateChaptersPayload(series = {}, options = {}) {
     url,
     seriesId: series.id,
     mode: 'new-chapters',
+    assetMode: normalizeAssetMode(options.assetMode || series.importMode),
     publishNewChapters: options.publishNewChapters ?? true,
     maxChapters: numberOrZero(options.maxChapters),
     maxPages: numberOrZero(options.maxPages),

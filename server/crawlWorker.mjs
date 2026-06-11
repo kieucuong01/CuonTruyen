@@ -50,6 +50,7 @@ export async function runClaimedImportJob(job, { workerId = DEFAULT_WORKER_ID } 
     const payload = job.payload || {};
     const series = await importSeries(payload.url, {
       mode: payload.mode,
+      assetMode: payload.assetMode,
       seriesId: payload.seriesId,
       publishNewChapters: payload.publishNewChapters,
       maxChapters: payload.maxChapters,

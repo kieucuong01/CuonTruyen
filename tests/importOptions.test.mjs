@@ -21,6 +21,16 @@ test('normalizeImportPayload uses defaults only when limits are missing', () => 
 
   assert.equal(payload.maxChapters, 2);
   assert.equal(payload.maxPages, 8);
+  assert.equal(payload.assetMode, 'image_url');
+});
+
+test('normalizeImportPayload accepts full download mode explicitly', () => {
+  const payload = normalizeImportPayload({
+    url: 'https://truyenqqko.com/truyen-tranh/manh-nhat-lich-su-5968',
+    assetMode: 'full_download'
+  });
+
+  assert.equal(payload.assetMode, 'full_download');
 });
 
 test('parseImportUrls accepts multiple lines, commas, spaces, and removes duplicates', () => {
@@ -42,7 +52,7 @@ test('normalizeImportBatchPayload applies the same limits to every URL', () => {
   });
 
   assert.deepEqual(payloads, [
-    { url: 'https://example.test/a', maxChapters: 3, maxPages: 0 },
-    { url: 'https://example.test/b', maxChapters: 3, maxPages: 0 }
+    { url: 'https://example.test/a', maxChapters: 3, maxPages: 0, assetMode: 'image_url' },
+    { url: 'https://example.test/b', maxChapters: 3, maxPages: 0, assetMode: 'image_url' }
   ]);
 });

@@ -134,6 +134,10 @@ export function createAdminRoute({
               <option value="8">8 ảnh/chapter</option>
               <option value="20">20 ảnh/chapter</option>
             </select>
+            <select name="assetMode" aria-label="Chế độ lấy ảnh">
+              <option value="image_url" selected>Chỉ lấy URL ảnh</option>
+              <option value="full_download">Cào toàn bộ + tải ảnh</option>
+            </select>
             <button class="primary-btn" type="submit">Crawl</button>
           </form>` : renderProductionAdminNotice()}
           ${localOps ? renderCrawlQueuePanel() : ''}
@@ -767,6 +771,7 @@ export function createAdminRoute({
             <strong title="${escapeAttr(series.title)}">${escapeHtml(series.title)}</strong>
             <span>${stats.importedChapterCount}/${stats.chapterCount} chapter - ${stats.pageCount} ảnh</span>
             ${renderAdminSeriesBadges(stats)}
+            ${renderAssetModeBadge(series)}
             ${renderAdminProductionBadge(series)}
           </div>
         </div>
@@ -797,6 +802,7 @@ export function createAdminRoute({
             <h2>${escapeHtml(series.title)}</h2>
             <p>${stats.importedChapterCount}/${stats.chapterCount} chapter - ${stats.pageCount} ảnh - ${escapeHtml(statusLabel(stats.status))}</p>
             ${renderAdminSeriesBadges(stats)}
+            ${renderAssetModeBadge(series)}
             ${renderAdminProductionBadge(series)}
           </div>
           ${localOps ? `<div class="admin-detail-actions">
@@ -982,6 +988,37 @@ export function createAdminRoute({
         ${stats.missingImageCount ? `<span>${stats.missingImageCount} thiếu ảnh</span>` : ''}
       </div>
     `;
+  }
+
+  function renderAssetModeBadge(series = {}) {
+    const mode = series.importMode || 'image_url';
+    const status = series.assetStatus || (mode === 'full_download' ? 'local' : 'external');
+    const label = status === 'mixed'
+      ? 'Lẫn URL và file'
+      : mode === 'full_download'
+      ? 'Cào từ gốc + tải ảnh'
+      : 'Chỉ URL ảnh';
+    const detail = assetStatusLabel(status);
+    return `
+      <div class="admin-series-badges">
+        <span class="admin-series-status is-${escapeAttr(assetStatusClass(status))}">${escapeHtml(label)}</span>
+        <span>${escapeHtml(detail)}</span>
+      </div>
+    `;
+  }
+
+  function assetStatusLabel(status = '') {
+    if (status === 'local') return 'Đã có file local/S3';
+    if (status === 's3') return 'Đã sync S3';
+    if (status === 'cdn') return 'Đã qua CDN';
+    if (status === 'mixed') return 'Lẫn URL và file';
+    return 'Đọc ảnh từ nguồn';
+  }
+
+  function assetStatusClass(status = '') {
+    if (status === 'local' || status === 's3' || status === 'cdn') return 'public';
+    if (status === 'mixed') return 'draft';
+    return 'removed';
   }
 
   function productionStatusForSeries(series = {}) {
@@ -1191,6 +1228,7 @@ export function createAdminRoute({
         urls,
         maxChapters: Number(formData.get('maxChapters') || 0),
         maxPages: Number(formData.get('maxPages') || 0),
+        assetMode: formData.get('assetMode') || 'image_url',
         publish: true
       };
       const result = await fetchJson('/api/admin/import-jobs', {
