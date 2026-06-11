@@ -15,6 +15,7 @@ Stable helper modules now include:
 - `public/analyticsClient.mjs`: sends analytics events to `/api/events`.
 - `public/runtimeConfig.mjs`: reads `window.COMIC_READER_CONFIG`.
 - `public/siteChromeView.mjs`: pure public topbar, brand logo, and reader account auth page rendering.
+- `public/seriesDisplayView.mjs`: pure public cover image, tag normalization, and origin-label rendering helpers.
 - `public/readerRestore.mjs`: pure saved-scroll restore helpers.
 - `public/readerWindow.mjs`: image release/restore and reader window helpers.
 - `public/readingProgress.mjs`: localStorage progress and history.
@@ -51,6 +52,7 @@ Stable helper modules now include:
 
 - Home / Doc tiep shelf: start in `public/routes/home.mjs`.
 - Series detail: `renderSeriesDetail()`, `renderSeriesContinueCard()`.
+- Public cover images/origin labels: `public/seriesDisplayView.mjs`; route-specific card composition still lives in `public/app.js` and `public/routes/home.mjs`.
 - Public site chrome/topbar/account login markup: `public/siteChromeView.mjs`; route/session orchestration stays in `public/app.js`.
 - Reader shell: `drawReader()`, `renderChapter()`, `attachReaderObservers()`.
 - Reader progress: prefer editing `public/readerRestore.mjs`, `public/readerWindow.mjs`, or `public/readingProgress.mjs` before adding more logic to `public/app.js`.

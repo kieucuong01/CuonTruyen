@@ -60,6 +60,8 @@
 - `tests/adminPageViews.test.mjs`: Direct tests for dashboard/detail composition, local/production panel gating, flash escaping, and empty states.
 - `public/siteChromeView.mjs`: Pure public topbar, brand logo, and reader account auth page rendering.
 - `tests/siteChromeView.test.mjs`: Direct tests for public chrome navigation state, auth state, escaping, compact logo, and login/register markup.
+- `public/seriesDisplayView.mjs`: Pure public cover image URL, cover image markup, tag normalization, and origin-label helpers.
+- `tests/seriesDisplayView.test.mjs`: Direct tests for cover URL priority, cover/fallback escaping, tag normalization, and origin label resolution.
 - `public/routes/adminTags.mjs`: Pure admin tag/origin picker, origin detection, and tag merge helpers.
 - `tests/adminTags.test.mjs`: Direct tests for admin tag normalization, origin detection, merge behavior, and picker rendering.
 - `public/routes/adminS3SyncView.mjs`: Pure admin S3 sync status rendering, failed-item list, stale-job warning, and retry-button visibility.
@@ -1314,6 +1316,51 @@ Run:
 node --check public\siteChromeView.mjs
 node --check public\app.js
 node --require ./tests/setup-env.cjs --test tests\siteChromeView.test.mjs
+npm run check:encoding
+npm test
+```
+
+## Task 30: Extract Public Series Display Helpers
+
+**Files:**
+- Create: `public/seriesDisplayView.mjs`
+- Create: `tests/seriesDisplayView.test.mjs`
+- Modify: `public/app.js`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for public cover/origin helpers**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\seriesDisplayView.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/seriesDisplayView.mjs`.
+
+- [x] **Step 2: Move pure cover and origin helpers out of the app orchestrator**
+
+Move these pure helper paths from `public/app.js` into `public/seriesDisplayView.mjs`:
+
+```text
+coverImageUrl
+renderCoverImageView
+normalizeTagValue
+seriesOriginLabel
+```
+
+Keep route-specific card/list composition, chapter readability checks, and app state orchestration in `public/app.js`.
+
+- [x] **Step 3: Verify public app behavior**
+
+Run:
+
+```powershell
+node --check public\seriesDisplayView.mjs
+node --check public\app.js
+node --require ./tests/setup-env.cjs --test tests\seriesDisplayView.test.mjs
 npm run check:encoding
 npm test
 ```

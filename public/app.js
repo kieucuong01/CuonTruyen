@@ -59,6 +59,12 @@ import {
   renderTopbarView,
   renderUserAuthPage
 } from './siteChromeView.mjs';
+import {
+  coverImageUrl as resolveCoverImageUrl,
+  normalizeTagValue as normalizeDisplayTagValue,
+  renderCoverImageView,
+  seriesOriginLabel as resolveSeriesOriginLabel
+} from './seriesDisplayView.mjs';
 
 function getMonetizationConfig() {
   const rootConfig = globalThis.COMIC_READER_CONFIG || {};
@@ -558,33 +564,19 @@ function renderContinueItem(series, progress) {
 }
 
 function coverImageUrl(series = {}) {
-  return series.thumbnailUrl || series.coverThumbnailUrl || series.coverUrl || series.imageUrl || '';
+  return resolveCoverImageUrl(series);
 }
 
 function renderCoverImage(series = {}, fallback = 'No cover', attributes = 'loading="lazy" decoding="async"') {
-  const coverUrl = coverImageUrl(series);
-  return coverUrl
-    ? `<img ${attributes} src="${escapeAttr(coverUrl)}" alt="${escapeAttr(series.title || 'Truyen')}">`
-    : `<span>${escapeHtml(fallback)}</span>`;
+  return renderCoverImageView(series, fallback, attributes);
 }
 
 function normalizeTagValue(value = '') {
-  return String(value)
-    .toLowerCase()
-    .replace(/đ/g, 'd')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-');
+  return normalizeDisplayTagValue(value);
 }
 
 function seriesOriginLabel(series = {}) {
-  const tagValues = (series.tags || []).map((tag) => normalizeTagValue(
-    typeof tag === 'string' ? tag : `${tag.slug || ''} ${tag.name || ''}`
-  ));
-  if (tagValues.some((tag) => tag.includes('manhwa') || tag.includes('truyen-han'))) return 'Truyện Hàn';
-  if (tagValues.some((tag) => tag.includes('manga') || tag.includes('truyen-nhat'))) return 'Truyện Nhật';
-  if (tagValues.some((tag) => tag.includes('manhua') || tag.includes('truyen-trung'))) return 'Truyện Trung';
-  return series.sourceMappings?.[0]?.adapter || 'Truyện tranh';
+  return resolveSeriesOriginLabel(series);
 }
 
 function renderTrendingSection(seriesList) {
