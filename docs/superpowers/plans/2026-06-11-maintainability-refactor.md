@@ -50,6 +50,8 @@
 - `tests/adminBulletinActions.test.mjs`: Direct tests for bulletin endpoints, payloads, form reset, flash messages, and error states.
 - `public/routes/adminRevenueActions.mjs`: Admin revenue dashboard range binding, analytics refresh, and error insertion.
 - `tests/adminRevenueActions.test.mjs`: Direct tests for revenue range clicks, dashboard replacement, error escaping, and absent-dashboard no-op behavior.
+- `public/routes/adminImportActions.mjs`: Admin crawl/import form submit flow, import job creation, polling, flash messages, and cache invalidation.
+- `tests/adminImportActions.test.mjs`: Direct tests for import payload posting, single-job polling, batch summaries, empty URL validation, and error states.
 - `public/routes/adminTags.mjs`: Pure admin tag/origin picker, origin detection, and tag merge helpers.
 - `tests/adminTags.test.mjs`: Direct tests for admin tag normalization, origin detection, merge behavior, and picker rendering.
 - `public/routes/adminS3SyncView.mjs`: Pure admin S3 sync status rendering, failed-item list, stale-job warning, and retry-button visibility.
@@ -1096,4 +1098,44 @@ Run:
 node --check public\routes\adminRevenueActions.mjs
 node --check public\routes\admin.mjs
 node --require ./tests/setup-env.cjs --test tests\adminRevenueActions.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 25: Extract Admin Import Actions
+
+**Files:**
+- Create: `public/routes/adminImportActions.mjs`
+- Create: `tests/adminImportActions.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for crawl/import form action**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminImportActions.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminImportActions.mjs`.
+
+- [x] **Step 2: Move import submit flow**
+
+Move this handler path from `public/routes/admin.mjs` into `public/routes/adminImportActions.mjs`:
+
+```text
+handleImport
+```
+
+Keep import panel markup in `public/routes/admin.mjs`, payload shaping in `public/routes/adminPayloads.mjs`, and job polling in `public/routes/adminJobPolling.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminImportActions.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminImportActions.test.mjs tests\adminRouteSmoke.test.mjs
 ```
