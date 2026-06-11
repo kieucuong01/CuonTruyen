@@ -2,7 +2,8 @@ import { hasReadableChapter } from '../chapterState.mjs';
 import { localOperationsEnabled } from '../runtimeConfig.mjs';
 import {
   renderAdminProductionBadge as renderProductionBadgeView,
-  renderProductionPipelineStep
+  renderProductionPipelineStep,
+  renderProductionProgressView
 } from './adminProductionView.mjs';
 import {
   adminSeriesStats,
@@ -1278,72 +1279,9 @@ export function createAdminRoute({
 
   function renderProductionProgress(status, job) {
     if (!status) return;
-    const steps = Array.isArray(job.steps) ? job.steps : [];
-    const done = steps.filter((step) => step.status === 'completed').length;
-    const percent = steps.length ? Math.round((done / steps.length) * 100) : 0;
-    const activeStep = steps.find((step) => step.status === 'running') || steps.find((step) => step.status === 'failed') || steps[steps.length - 1] || {};
-    const logs = Array.isArray(job.logs) ? job.logs.slice(-6) : [];
-    status.className = `status-line production-progress${job.status === 'failed' ? ' error' : ''}`;
-    status.innerHTML = `
-      <div class="progress-copy">
-        <strong>${escapeHtml(productionJobMessage(job, activeStep))}</strong>
-        ${job.error ? `<small>${escapeHtml(job.error)}</small>` : ''}
-        <span>${done}/${steps.length || '?'} bước - ${escapeHtml(job.status || 'running')}</span>
-      </div>
-      <div class="crawl-meter" aria-label="Tiến độ production workflow">
-        <div style="width:${Math.max(4, Math.min(100, percent))}%"></div>
-      </div>
-      <div class="production-step-list">
-        ${steps.map((step, index) => `
-          <article class="production-step is-${escapeAttr(step.status || 'pending')}">
-            <b>${productionStepIcon(step.status)} ${index + 1}. ${escapeHtml(step.label || step.key || 'Bước')}</b>
-            <span>${escapeHtml(step.description || '')}</span>
-            ${renderProductionStepProgress(step)}
-            ${step.error ? `<small>${escapeHtml(step.error)}</small>` : step.output && step.status === 'completed' ? `<small>${escapeHtml(step.output.split('\n').slice(-2).join(' · '))}</small>` : ''}
-          </article>
-        `).join('')}
-      </div>
-      ${logs.length ? `<div class="production-log">${logs.map((log) => `<span>${escapeHtml(log.text || '')}</span>`).join('')}</div>` : ''}
-    `;
-  }
-
-  function renderProductionStepProgress(step = {}) {
-    const progress = step.progress || {};
-    const total = Number(progress.total || 0);
-    if (!total) return '';
-    const checked = Number(progress.checked || 0);
-    const percent = Math.round((checked / total) * 100);
-    return `
-      <div class="production-step-progress">
-        <div class="crawl-meter" aria-label="Tiến độ ${escapeAttr(step.label || step.key || 'sync')}">
-          <div style="width:${Math.max(4, Math.min(100, percent))}%"></div>
-        </div>
-        <div class="production-step-metrics">
-          <span>Đã kiểm tra: ${checked}/${total}</span>
-          <span>Upload: ${Number(progress.uploaded || 0)}</span>
-          <span>Skip: ${Number(progress.skipped || 0)}</span>
-          <span>Skip cache local: ${Number(progress.cached || progress.cachedSkipped || 0)}</span>
-          <span>Lỗi: ${Number(progress.failed || 0)}</span>
-          <span>Tốc độ: ${Number(progress.ratePerMinute || 0).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} file/phút</span>
-          <span>ETA: ${escapeHtml(progress.eta || 'đang tính')}</span>
-          <span>Luồng: ${Number(progress.concurrency || 0) || '?'}</span>
-        </div>
-      </div>
-    `;
-  }
-
-  function productionJobMessage(job, activeStep = {}) {
-    if (job.status === 'completed') return job.result?.message || 'Đã sync production xong.';
-    if (job.status === 'failed') return job.error || activeStep.error || 'Workflow production bị lỗi.';
-    if (activeStep.label) return `Đang chạy: ${activeStep.label}`;
-    return 'Đang chuẩn bị workflow production...';
-  }
-
-  function productionStepIcon(status) {
-    if (status === 'completed') return '✓';
-    if (status === 'running') return '…';
-    if (status === 'failed') return '!';
-    return '○';
+    const view = renderProductionProgressView(job);
+    status.className = view.className;
+    status.innerHTML = view.html;
   }
 
   function delay(ms) {

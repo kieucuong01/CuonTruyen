@@ -18,8 +18,8 @@
 - `tests/importerIdentity.test.mjs`: Existing mirror/source mapping tests, migrated to the focused helper module.
 - `tests/importerIncremental.test.mjs`: Existing incremental/refresh behavior tests, migrated to the focused helper module where appropriate.
 - `docs/agent-playbooks/agent-token-map.md`: Agent entrypoint map updated when responsibility moves.
-- `public/routes/adminProductionView.mjs`: Pure admin production badge and pipeline-step view helpers.
-- `tests/adminProductionView.test.mjs`: Direct tests for admin production helper rendering and escaping.
+- `public/routes/adminProductionView.mjs`: Pure admin production badge, pipeline-step, workflow progress, step progress, message, and icon helpers.
+- `tests/adminProductionView.test.mjs`: Direct tests for admin production helper rendering, escaping, progress, message, and icon behavior.
 - `server/adminProductionStatus.mjs`: Pure backend Production Health status builder for admin.
 - `tests/adminProductionStatus.test.mjs`: Direct tests for Production Health status calculations.
 - `public/routes/adminSeriesView.mjs`: Pure admin series card/detail stats and badge helpers.
@@ -377,4 +377,46 @@ Run:
 node --check public\routes\adminImportProgressView.mjs
 node --check public\routes\admin.mjs
 node --require ./tests/setup-env.cjs --test tests\adminImportProgressView.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 9: Expand Admin Production View Helpers
+
+**Files:**
+- Modify: `public/routes/adminProductionView.mjs`
+- Modify: `tests/adminProductionView.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for production workflow progress helpers**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminProductionView.test.mjs
+```
+
+Expected: FAIL because `adminProductionView.mjs` does not export `renderProductionProgressView`, `renderProductionStepProgress`, `productionJobMessage`, and `productionStepIcon`.
+
+- [x] **Step 2: Move production progress view helpers**
+
+Move these helpers from `public/routes/admin.mjs` to `public/routes/adminProductionView.mjs`:
+
+```text
+renderProductionProgress
+renderProductionStepProgress
+productionJobMessage
+productionStepIcon
+```
+
+Keep production job polling, API calls, DOM target checks, and error handling in `public/routes/admin.mjs`; expose the moved markup as `renderProductionProgressView()`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminProductionView.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminProductionView.test.mjs tests\adminRouteSmoke.test.mjs
 ```
