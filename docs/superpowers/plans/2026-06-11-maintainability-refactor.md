@@ -36,6 +36,8 @@
 - `tests/adminSession.test.mjs`: Direct tests for admin session persistence, memory fallback, and clearing credentials.
 - `public/routes/adminJobPolling.mjs`: Admin import/production job polling loops and status render adapters.
 - `tests/adminJobPolling.test.mjs`: Direct tests for poll loop fetch/wait behavior, navigation, failure reporting, and status adapters.
+- `public/routes/adminDataLoaders.mjs`: Admin dashboard read endpoints and optional fallback loaders.
+- `tests/adminDataLoaders.test.mjs`: Direct tests for admin read endpoint URLs, admin headers, fallback behavior, and range encoding.
 - `public/routes/adminTags.mjs`: Pure admin tag/origin picker, origin detection, and tag merge helpers.
 - `tests/adminTags.test.mjs`: Direct tests for admin tag normalization, origin detection, merge behavior, and picker rendering.
 - `public/routes/adminS3SyncView.mjs`: Pure admin S3 sync status rendering, failed-item list, stale-job warning, and retry-button visibility.
@@ -785,4 +787,47 @@ Run:
 node --check public\routes\adminJobPolling.mjs
 node --check public\routes\admin.mjs
 node --require ./tests/setup-env.cjs --test tests\adminJobPolling.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 18: Extract Admin Data Loaders
+
+**Files:**
+- Create: `public/routes/adminDataLoaders.mjs`
+- Create: `tests/adminDataLoaders.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for admin dashboard read loaders**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminDataLoaders.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminDataLoaders.mjs`.
+
+- [x] **Step 2: Move dashboard read endpoint helpers**
+
+Move these read helpers from `public/routes/admin.mjs` into `public/routes/adminDataLoaders.mjs`:
+
+```text
+loadAdminCatalog
+loadAdminBulletin
+loadAdminAnalytics
+loadAdminProductionStatus
+```
+
+Keep orchestration and render decisions in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminDataLoaders.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminDataLoaders.test.mjs tests\adminRouteSmoke.test.mjs
 ```

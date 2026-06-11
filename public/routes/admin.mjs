@@ -42,6 +42,7 @@ import {
   createAdminJobPollers,
   renderProductionProgressStatus
 } from './adminJobPolling.mjs';
+import { createAdminDataLoaders } from './adminDataLoaders.mjs';
 
 export { loadAdminToken };
 
@@ -74,28 +75,14 @@ export function createAdminRoute({
   });
   const pollImportJob = adminJobPollers.pollImportJob;
   const pollProductionJob = adminJobPollers.pollProductionJob;
+  const adminDataLoaders = createAdminDataLoaders({ adminHeaders, fetchJson });
+  const loadAdminAnalytics = adminDataLoaders.loadAdminAnalytics;
+  const loadAdminBulletin = adminDataLoaders.loadAdminBulletin;
+  const loadAdminCatalog = adminDataLoaders.loadAdminCatalog;
+  const loadAdminProductionStatus = adminDataLoaders.loadAdminProductionStatus;
 
   function canRunLocalOperations() {
     return localOperationsEnabled();
-  }
-
-  async function loadAdminCatalog() {
-    return fetchJson('/api/admin/series', { headers: adminHeaders() });
-  }
-
-  async function loadAdminBulletin() {
-    return fetchJson('/api/admin/bulletin/messages?limit=40', { headers: adminHeaders() })
-      .catch(() => ({ messages: [] }));
-  }
-
-  async function loadAdminAnalytics(range = '30d') {
-    return fetchJson(`/api/admin/analytics/summary?range=${encodeURIComponent(range)}`, { headers: adminHeaders() })
-      .catch(() => null);
-  }
-
-  async function loadAdminProductionStatus() {
-    return fetchJson('/api/admin/production-status', { headers: adminHeaders() })
-      .catch(() => ({ statuses: {}, stateFileExists: false }));
   }
 
   async function renderAdmin() {
