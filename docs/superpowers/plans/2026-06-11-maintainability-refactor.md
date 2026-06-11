@@ -56,6 +56,8 @@
 - `tests/adminSaveActions.test.mjs`: Direct tests for series save payloads, chapter moderation PATCH order, local schedule gating, and failure short-circuiting.
 - `public/routes/adminAuthActions.mjs`: Admin login submit, logout binding, session save/clear, and auth status UI.
 - `tests/adminAuthActions.test.mjs`: Direct tests for login payloads, session save, logout, error states, and pending-control cleanup.
+- `public/routes/adminPageViews.mjs`: Pure admin dashboard/detail page composition and local crawl form markup.
+- `tests/adminPageViews.test.mjs`: Direct tests for dashboard/detail composition, local/production panel gating, flash escaping, and empty states.
 - `public/routes/adminTags.mjs`: Pure admin tag/origin picker, origin detection, and tag merge helpers.
 - `tests/adminTags.test.mjs`: Direct tests for admin tag normalization, origin detection, merge behavior, and picker rendering.
 - `public/routes/adminS3SyncView.mjs`: Pure admin S3 sync status rendering, failed-item list, stale-job warning, and retry-button visibility.
@@ -1223,4 +1225,48 @@ Run:
 node --check public\routes\adminAuthActions.mjs
 node --check public\routes\admin.mjs
 node --require ./tests/setup-env.cjs --test tests\adminAuthActions.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 28: Extract Admin Page View Composition
+
+**Files:**
+- Create: `public/routes/adminPageViews.mjs`
+- Create: `tests/adminPageViews.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for page-level admin composition**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminPageViews.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminPageViews.mjs`.
+
+- [x] **Step 2: Move dashboard/detail page markup into a pure view module**
+
+Move these page composition paths from `public/routes/admin.mjs` into `public/routes/adminPageViews.mjs`:
+
+```text
+dashboard shell composition
+detail shell composition
+local crawl import panel markup
+local/production panel gating
+flash and empty-state placement
+```
+
+Keep route orchestration, data loading, auth-expired handling, event binding, action wiring, and production status state in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminPageViews.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminPageViews.test.mjs tests\adminRouteSmoke.test.mjs
 ```

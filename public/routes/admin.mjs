@@ -15,6 +15,10 @@ import {
   renderAdminLoginView
 } from './adminFeedbackView.mjs';
 import {
+  renderAdminDashboardPage,
+  renderAdminSeriesDetailPage
+} from './adminPageViews.mjs';
+import {
   clearAdminSession,
   loadAdminEmail,
   loadAdminToken
@@ -192,50 +196,20 @@ export function createAdminRoute({
       throw error;
     }
     const localOps = canRunLocalOperations();
-    app.innerHTML = `
-      <main class="site-shell admin-shell">
-        ${renderTopbar()}
-        ${renderAdminSessionBar(loadAdminEmail())}
-        <section class="admin-grid">
-          ${localOps ? `<form class="import-panel admin-panel" data-import-form>
-            <h2>Crawl truyện</h2>
-            <textarea name="url" required rows="4" placeholder="Dán mỗi URL truyện trên một dòng...">https://truyenqqko.com/truyen-tranh/manh-nhat-lich-su-5968</textarea>
-            <select name="maxChapters" aria-label="Số chapter tải trước">
-              <option value="1">1 chapter</option>
-              <option value="2">2 chapter</option>
-              <option value="3" selected>3 chapter</option>
-              <option value="5">5 chapter</option>
-              <option value="0">Tất cả chapter</option>
-            </select>
-            <select name="maxPages" aria-label="Số ảnh mỗi chapter">
-              <option value="0" selected>Tất cả ảnh</option>
-              <option value="8">8 ảnh/chapter</option>
-              <option value="20">20 ảnh/chapter</option>
-            </select>
-            <select name="assetMode" aria-label="Chế độ lấy ảnh">
-              <option value="image_url" selected>Chỉ lấy URL ảnh</option>
-              <option value="full_download">Cào toàn bộ + tải ảnh</option>
-            </select>
-            <button class="primary-btn" type="submit">Crawl</button>
-          </form>` : renderProductionAdminNotice()}
-          ${localOps ? renderCrawlQueuePanel() : ''}
-          ${renderAdminBulletinPanel(bulletin.messages || [])}
-          ${localOps ? renderS3SyncPanel(adminProductionStatus) : ''}
-          <div class="status-line" data-status></div>
-        </section>
-        ${renderRevenueDashboard(analytics)}
-        ${adminFlashMessage ? `<div class="status-line success">${escapeHtml(adminFlashMessage)}</div>` : ''}
-        <section class="admin-list">
-          <div class="admin-list-head">
-            <div>
-              <h2 class="section-title">CMS truyện</h2>
-              <p class="muted">Chọn một truyện để mở trang quản lý riêng. Danh sách này chỉ giữ thông tin nhận diện và thao tác nhanh.</p>
-            </div>
-          </div>
-          ${catalog.series.length ? `<div class="admin-series-list-grid">${catalog.series.map(renderAdminSeriesCard).join('')}</div>` : '<div class="empty-state">Chưa có truyện để quản lý.</div>'}
-        </section>
-      </main>
-    `;
+    app.innerHTML = renderAdminDashboardPage({
+      topbarHtml: renderTopbar(),
+      sessionBarHtml: renderAdminSessionBar(loadAdminEmail()),
+      localOps,
+      productionNoticeHtml: renderProductionAdminNotice(),
+      crawlQueuePanelHtml: renderCrawlQueuePanel(),
+      bulletinPanelHtml: renderAdminBulletinPanel(bulletin.messages || []),
+      s3SyncPanelHtml: renderS3SyncPanel(adminProductionStatus),
+      revenueDashboardHtml: renderRevenueDashboard(analytics),
+      flashMessage: adminFlashMessage,
+      series: catalog.series,
+      renderSeriesCard: renderAdminSeriesCard,
+      escapeHtml
+    });
     adminFlashMessage = '';
     bindAdminCommonActions();
     bindAdminImageFallbacks(app);
@@ -273,19 +247,17 @@ export function createAdminRoute({
     }
     const series = findAdminSeries(catalog, seriesId);
     const localOps = canRunLocalOperations();
-    app.innerHTML = `
-      <main class="site-shell admin-shell admin-detail-shell">
-        ${renderTopbar()}
-        ${renderAdminSessionBar(loadAdminEmail())}
-        <div class="admin-detail-nav">
-          <a class="ghost-btn" data-link href="/admin">Quay lại CMS</a>
-          ${series?.slug ? `<a class="ghost-btn" data-link href="/truyen/${escapeAttr(series.slug)}">Mở trang public</a>` : ''}
-        </div>
-        ${adminFlashMessage ? `<div class="status-line success">${escapeHtml(adminFlashMessage)}</div>` : ''}
-        ${!localOps ? renderProductionAdminNotice() : ''}
-        ${series ? renderAdminSeriesEditor(series, { localOps }) : '<section class="empty-state">Không tìm thấy truyện trong catalog admin.</section>'}
-      </main>
-    `;
+    app.innerHTML = renderAdminSeriesDetailPage({
+      topbarHtml: renderTopbar(),
+      sessionBarHtml: renderAdminSessionBar(loadAdminEmail()),
+      localOps,
+      productionNoticeHtml: renderProductionAdminNotice(),
+      flashMessage: adminFlashMessage,
+      series,
+      editorHtml: series ? renderAdminSeriesEditor(series, { localOps }) : '',
+      escapeHtml,
+      escapeAttr
+    });
     adminFlashMessage = '';
     bindAdminCommonActions();
     bindAdminImageFallbacks(app);
