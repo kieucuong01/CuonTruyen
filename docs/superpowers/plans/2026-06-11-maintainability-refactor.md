@@ -48,6 +48,8 @@
 - `tests/adminProductionActions.test.mjs`: Direct tests for production publish/check endpoints, button/status states, polling, and public URL opening.
 - `public/routes/adminBulletinActions.mjs`: Admin bulletin submit, pin/unpin actions, status updates, and rerender hooks.
 - `tests/adminBulletinActions.test.mjs`: Direct tests for bulletin endpoints, payloads, form reset, flash messages, and error states.
+- `public/routes/adminRevenueActions.mjs`: Admin revenue dashboard range binding, analytics refresh, and error insertion.
+- `tests/adminRevenueActions.test.mjs`: Direct tests for revenue range clicks, dashboard replacement, error escaping, and absent-dashboard no-op behavior.
 - `public/routes/adminTags.mjs`: Pure admin tag/origin picker, origin detection, and tag merge helpers.
 - `tests/adminTags.test.mjs`: Direct tests for admin tag normalization, origin detection, merge behavior, and picker rendering.
 - `public/routes/adminS3SyncView.mjs`: Pure admin S3 sync status rendering, failed-item list, stale-job warning, and retry-button visibility.
@@ -1053,4 +1055,45 @@ Run:
 node --check public\routes\adminBulletinActions.mjs
 node --check public\routes\admin.mjs
 node --require ./tests/setup-env.cjs --test tests\adminBulletinActions.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 24: Extract Admin Revenue Actions
+
+**Files:**
+- Create: `public/routes/adminRevenueActions.mjs`
+- Create: `tests/adminRevenueActions.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for revenue range actions**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminRevenueActions.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminRevenueActions.mjs`.
+
+- [x] **Step 2: Move revenue dashboard binding and refresh action**
+
+Move this handler path from `public/routes/admin.mjs` into `public/routes/adminRevenueActions.mjs`:
+
+```text
+bindRevenueDashboard
+revenue range click refresh/error handling
+```
+
+Keep dashboard markup in `public/routes/adminRevenueView.mjs` and high-level admin page composition in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminRevenueActions.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminRevenueActions.test.mjs tests\adminRouteSmoke.test.mjs
 ```

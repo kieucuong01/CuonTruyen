@@ -43,6 +43,7 @@ import { createAdminPanelPollers } from './adminPanelPolling.mjs';
 import { createAdminSeriesJobActions } from './adminSeriesJobActions.mjs';
 import { createAdminProductionActions } from './adminProductionActions.mjs';
 import { createAdminBulletinActions } from './adminBulletinActions.mjs';
+import { createAdminRevenueActions } from './adminRevenueActions.mjs';
 
 export { loadAdminToken };
 
@@ -125,6 +126,13 @@ export function createAdminRoute({
     setControlPending
   });
   const bindAdminBulletinActions = adminBulletinActions.bindAdminBulletinActions;
+  const adminRevenueActions = createAdminRevenueActions({
+    app,
+    escapeHtml,
+    loadAdminAnalytics,
+    renderRevenueDashboard
+  });
+  const bindRevenueDashboard = adminRevenueActions.bindRevenueDashboard;
 
   function canRunLocalOperations() {
     return localOperationsEnabled();
@@ -256,26 +264,6 @@ export function createAdminRoute({
     bindAdminImageFallbacks(app);
     app.querySelectorAll('[data-admin-series]').forEach((form) => form.addEventListener('submit', handleAdminSave));
     bindProductionPipelineActions();
-  }
-
-  function bindRevenueDashboard() {
-    const dashboard = app.querySelector('[data-revenue-dashboard]');
-    if (!dashboard) return;
-    dashboard.querySelectorAll('[data-analytics-range]').forEach((button) => {
-      button.addEventListener('click', async () => {
-        const range = button.dataset.analyticsRange || '30d';
-        button.disabled = true;
-        try {
-          const summary = await loadAdminAnalytics(range);
-          dashboard.outerHTML = renderRevenueDashboard(summary);
-          bindRevenueDashboard();
-        } catch (error) {
-          dashboard.insertAdjacentHTML('afterbegin', `<div class="status-line error">Không tải được analytics: ${escapeHtml(error.message)}</div>`);
-        } finally {
-          button.disabled = false;
-        }
-      });
-    });
   }
 
   function bindAdminCommonActions() {
