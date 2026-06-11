@@ -42,6 +42,8 @@
 - `tests/adminDomHelpers.test.mjs`: Direct tests for cover fallback behavior, event binding, series lookup, and auth-error matching.
 - `public/routes/adminPanelPolling.mjs`: Admin S3 sync and crawl queue panel polling, retry, wake, and status target adapters.
 - `tests/adminPanelPolling.test.mjs`: Direct tests for S3/crawl queue poll intervals, endpoints, retry/wake actions, stale target cleanup, and status adapters.
+- `public/routes/adminSeriesJobActions.mjs`: Admin per-series update-chapters and refresh-image-urls job actions.
+- `tests/adminSeriesJobActions.test.mjs`: Direct tests for scoped update/refresh endpoints, button/status states, flash messages, and post-job navigation.
 - `public/routes/adminTags.mjs`: Pure admin tag/origin picker, origin detection, and tag merge helpers.
 - `tests/adminTags.test.mjs`: Direct tests for admin tag normalization, origin detection, merge behavior, and picker rendering.
 - `public/routes/adminS3SyncView.mjs`: Pure admin S3 sync status rendering, failed-item list, stale-job warning, and retry-button visibility.
@@ -921,4 +923,45 @@ Run:
 node --check public\routes\adminPanelPolling.mjs
 node --check public\routes\admin.mjs
 node --require ./tests/setup-env.cjs --test tests\adminPanelPolling.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 21: Extract Admin Series Job Actions
+
+**Files:**
+- Create: `public/routes/adminSeriesJobActions.mjs`
+- Create: `tests/adminSeriesJobActions.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for per-series job actions**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminSeriesJobActions.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminSeriesJobActions.mjs`.
+
+- [x] **Step 2: Move update and refresh job handlers**
+
+Move these handlers from `public/routes/admin.mjs` into `public/routes/adminSeriesJobActions.mjs`:
+
+```text
+handleUpdateChapters
+handleRefreshImageUrls
+```
+
+Keep production publish/check actions and generic page orchestration in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminSeriesJobActions.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminSeriesJobActions.test.mjs tests\adminRouteSmoke.test.mjs
 ```
