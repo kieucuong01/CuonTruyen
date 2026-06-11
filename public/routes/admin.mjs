@@ -1,5 +1,4 @@
 import { localOperationsEnabled } from '../runtimeConfig.mjs';
-import { renderProductionProgressView } from './adminProductionView.mjs';
 import {
   renderAdminSeriesCard as renderAdminSeriesCardView,
   renderAdminSeriesEditor as renderAdminSeriesEditorView
@@ -22,7 +21,6 @@ import {
   formatCrawlRate,
   renderCrawlQueueStatusView
 } from './adminCrawlQueueView.mjs';
-import { renderImportProgressView } from './adminImportProgressView.mjs';
 import { renderS3SyncStatusView } from './adminS3SyncView.mjs';
 import {
   buildAdminChapterPatch,
@@ -32,8 +30,7 @@ import {
 import {
   importJobsFlashMessage,
   importJobsFromResult,
-  parseProductionSteps,
-  resolveImportJobSeries
+  parseProductionSteps
 } from './adminJobHelpers.mjs';
 import {
   clearAdminSession,
@@ -41,6 +38,10 @@ import {
   loadAdminToken,
   saveAdminSession
 } from './adminSession.mjs';
+import {
+  createAdminJobPollers,
+  renderProductionProgressStatus
+} from './adminJobPolling.mjs';
 
 export { loadAdminToken };
 
@@ -64,6 +65,15 @@ export function createAdminRoute({
   let s3SyncPollTimer = null;
   let crawlQueuePollTimer = null;
   let adminProductionStatus = null;
+  const adminJobPollers = createAdminJobPollers({
+    adminHeaders,
+    fetchJson,
+    navigateTo: (url) => {
+      window.location.href = url;
+    }
+  });
+  const pollImportJob = adminJobPollers.pollImportJob;
+  const pollProductionJob = adminJobPollers.pollProductionJob;
 
   function canRunLocalOperations() {
     return localOperationsEnabled();
@@ -682,7 +692,7 @@ export function createAdminRoute({
         status.textContent = 'Dang dung lai job production dang chay cho buoc nay...';
       }
       const job = await pollProductionJob(result.job.id, status);
-      if (status) renderProductionProgress(status, job);
+      if (status) renderProductionProgressStatus(status, job);
       if (job.status === 'completed') button.textContent = steps.length ? 'Chay lai buoc nay' : 'Sync lai production';
     } catch (error) {
       if (status) {
@@ -729,57 +739,6 @@ export function createAdminRoute({
       button.disabled = false;
       button.textContent = originalText;
     }
-  }
-
-  async function pollImportJob(jobId, status, { navigateOnComplete = false } = {}) {
-    while (true) {
-      const job = await fetchJson(`/api/admin/import-jobs/${encodeURIComponent(jobId)}`, {
-        headers: adminHeaders()
-      });
-      renderImportProgress(status, job);
-      if (job.status === 'completed') {
-        const series = resolveImportJobSeries(job);
-        if (navigateOnComplete && series?.id) {
-          window.location.href = `/admin/series/${encodeURIComponent(series.id)}`;
-        }
-        return series;
-      }
-      if (job.status === 'failed') {
-        throw new Error(job.error || job.lastError || 'Import job failed.');
-      }
-      await delay(1500);
-    }
-  }
-
-  async function pollProductionJob(jobId, status) {
-    while (true) {
-      const job = await fetchJson(`/api/admin/production-jobs/${encodeURIComponent(jobId)}`, {
-        headers: adminHeaders()
-      });
-      renderProductionProgress(status, job);
-      if (job.status === 'completed') return job;
-      if (job.status === 'failed') throw new Error(job.error || 'Production workflow thất bại.');
-      await new Promise((resolve) => setTimeout(resolve, 1200));
-    }
-  }
-
-  function renderProductionProgress(status, job) {
-    if (!status) return;
-    const view = renderProductionProgressView(job);
-    status.className = view.className;
-    status.innerHTML = view.html;
-  }
-
-  function delay(ms) {
-    return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms || 0))));
-  }
-
-  function renderImportProgress(status, job) {
-    if (!status) return;
-    const isAdminUpdateStatus = Boolean(status.hasAttribute && status.hasAttribute('data-update-chapters-status'));
-    const view = renderImportProgressView(job, { isAdminUpdateStatus });
-    status.className = view.className;
-    status.innerHTML = view.html;
   }
 
   return {

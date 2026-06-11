@@ -34,6 +34,8 @@
 - `tests/adminJobHelpers.test.mjs`: Direct tests for admin job response normalization, flash messages, result unwrapping, and production step parsing.
 - `public/routes/adminSession.mjs`: Admin token/email session storage and localStorage fallback helpers.
 - `tests/adminSession.test.mjs`: Direct tests for admin session persistence, memory fallback, and clearing credentials.
+- `public/routes/adminJobPolling.mjs`: Admin import/production job polling loops and status render adapters.
+- `tests/adminJobPolling.test.mjs`: Direct tests for poll loop fetch/wait behavior, navigation, failure reporting, and status adapters.
 - `public/routes/adminTags.mjs`: Pure admin tag/origin picker, origin detection, and tag merge helpers.
 - `tests/adminTags.test.mjs`: Direct tests for admin tag normalization, origin detection, merge behavior, and picker rendering.
 - `public/routes/adminS3SyncView.mjs`: Pure admin S3 sync status rendering, failed-item list, stale-job warning, and retry-button visibility.
@@ -739,4 +741,48 @@ Run:
 node --check public\routes\adminSession.mjs
 node --check public\routes\admin.mjs
 node --require ./tests/setup-env.cjs --test tests\adminSession.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 17: Extract Admin Job Polling Helpers
+
+**Files:**
+- Create: `public/routes/adminJobPolling.mjs`
+- Create: `tests/adminJobPolling.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for admin job polling**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminJobPolling.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminJobPolling.mjs`.
+
+- [x] **Step 2: Move polling loops and status adapters**
+
+Move these paths from `public/routes/admin.mjs` into `public/routes/adminJobPolling.mjs`:
+
+```text
+pollImportJob
+pollProductionJob
+renderImportProgress
+renderProductionProgress
+delay
+```
+
+Keep event handlers, button state, route navigation call sites, and API start-job actions in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminJobPolling.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminJobPolling.test.mjs tests\adminRouteSmoke.test.mjs
 ```
