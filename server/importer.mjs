@@ -17,11 +17,13 @@ import { normalizeSourceUrl } from './crawlQueue.mjs';
 import {
   ASSET_MODE_FULL_DOWNLOAD,
   ASSET_MODE_IMAGE_URL,
+  IMPORT_MODE_FULL,
+  IMPORT_MODE_NEW_CHAPTERS,
+  IMPORT_MODE_REFRESH_IMAGE_URLS,
   normalizeAssetMode
 } from './importOptions.mjs';
 import { slugify } from './utils.mjs';
 
-const CRAWL_MODE_NEW_CHAPTERS = 'new-chapters';
 const ASSET_STATUS_EXTERNAL = 'external';
 const ASSET_STATUS_LOCAL = 'local';
 
@@ -88,6 +90,46 @@ export function selectNewChaptersForImport(parsedChapters = [], existingChapters
   };
 }
 
+export function selectRefreshImageUrlChapters(parsedChapters = [], existingChapters = []) {
+  const usedExistingIds = new Set();
+  const chapters = parsedChapters.map((parsedChapter) => {
+    const existingChapter = findExistingChapterForParsed(parsedChapter, existingChapters, usedExistingIds);
+    if (!existingChapter) return parsedChapter;
+    usedExistingIds.add(existingChapter.id);
+    return {
+      ...parsedChapter,
+      id: existingChapter.id || parsedChapter.id,
+      slug: existingChapter.slug || parsedChapter.slug,
+      label: existingChapter.label || existingChapter.title || parsedChapter.label,
+      title: existingChapter.title || existingChapter.label || parsedChapter.title,
+      sourceOrder: parsedChapter.sourceOrder ?? existingChapter.sourceOrder
+    };
+  });
+  const refreshedExistingChapterCount = chapters.filter((chapter) => usedExistingIds.has(chapter.id)).length;
+  return {
+    chapters,
+    refreshedExistingChapterCount,
+    newChapterCount: chapters.length - refreshedExistingChapterCount
+  };
+}
+
+function findExistingChapterForParsed(parsedChapter = {}, existingChapters = [], usedExistingIds = new Set()) {
+  const parsedUrl = chapterSourceUrl(parsedChapter);
+  if (parsedUrl) {
+    const byUrl = existingChapters.find((chapter) => (
+      !usedExistingIds.has(chapter.id)
+      && chapterSourceUrl(chapter)
+      && chapterSourceUrl(chapter) === parsedUrl
+    ));
+    if (byUrl) return byUrl;
+  }
+  const parsedKeys = new Set(chapterKeys(parsedChapter));
+  return existingChapters.find((chapter) => (
+    !usedExistingIds.has(chapter.id)
+    && chapterKeys(chapter).some((key) => parsedKeys.has(key))
+  )) || null;
+}
+
 export function resolveImportedChapterStatus({
   mode = 'full',
   publishNewChapters = false,
@@ -123,8 +165,10 @@ async function fetchHtmlWithLimit(adapter, url, rateLimiter) {
 
 export async function importSeries(seriesUrl, options = {}, onProgress = () => {}) {
   const adapter = getAdapterForUrl(seriesUrl);
-  const mode = options.mode === CRAWL_MODE_NEW_CHAPTERS ? CRAWL_MODE_NEW_CHAPTERS : 'full';
-  const assetMode = resolveAssetMode(options.assetMode);
+  const mode = [IMPORT_MODE_NEW_CHAPTERS, IMPORT_MODE_REFRESH_IMAGE_URLS].includes(options.mode)
+    ? options.mode
+    : IMPORT_MODE_FULL;
+  const assetMode = mode === IMPORT_MODE_REFRESH_IMAGE_URLS ? ASSET_MODE_IMAGE_URL : resolveAssetMode(options.assetMode);
   const shouldDownloadImages = assetMode === ASSET_MODE_FULL_DOWNLOAD;
   const maxChapters = Number(options.maxChapters || 0);
   const maxPages = Number(options.maxPages || 0);
@@ -163,22 +207,29 @@ export async function importSeries(seriesUrl, options = {}, onProgress = () => {
     throw new Error('Không tìm thấy danh sách chapter hợp lệ trong trang truyện.');
   }
   const defaultId = `${parsed.slug}-${Math.abs(hashCode(sourceIdentityKey(seriesUrl) || seriesUrl)).toString(36)}`;
-  const existingSeries = mode === CRAWL_MODE_NEW_CHAPTERS
+  const needsExistingSeries = mode === IMPORT_MODE_NEW_CHAPTERS || mode === IMPORT_MODE_REFRESH_IMAGE_URLS;
+  const existingSeries = needsExistingSeries
     ? (options.existingSeries || await getSeries(String(options.seriesId || defaultId), { includePages: true, includeDraft: true }))
     : (options.existingSeries || findExistingSeriesForImport(await readCatalog(), parsed, seriesUrl));
   const id = String(options.seriesId || existingSeries?.id || defaultId);
-  if (mode === CRAWL_MODE_NEW_CHAPTERS && !existingSeries) {
-    throw new Error('Không tìm thấy truyện hiện có để cập nhật chapter mới.');
+  if (needsExistingSeries && !existingSeries) {
+    throw new Error(mode === IMPORT_MODE_REFRESH_IMAGE_URLS
+      ? 'Khong tim thay truyen hien co de refresh URL anh.'
+      : 'Không tìm thấy truyện hiện có để cập nhật chapter mới.');
   }
-  const selected = mode === CRAWL_MODE_NEW_CHAPTERS
+  const selected = mode === IMPORT_MODE_NEW_CHAPTERS
     ? selectNewChaptersForImport(parsed.chapters, existingSeries.chapters || [])
-    : { chapters: parsed.chapters, skippedExistingChapterCount: 0 };
+    : mode === IMPORT_MODE_REFRESH_IMAGE_URLS
+      ? selectRefreshImageUrlChapters(parsed.chapters, existingSeries.chapters || [])
+      : { chapters: parsed.chapters, skippedExistingChapterCount: 0, refreshedExistingChapterCount: 0, newChapterCount: 0 };
   const chaptersToImport = maxChapters > 0 ? selected.chapters.slice(0, maxChapters) : selected.chapters;
-  const skippedExistingChapterCount = selected.skippedExistingChapterCount;
+  const skippedExistingChapterCount = Number(selected.skippedExistingChapterCount || 0);
   await emitProgress({
     phase: 'fetching-chapters',
-    message: mode === CRAWL_MODE_NEW_CHAPTERS
+    message: mode === IMPORT_MODE_NEW_CHAPTERS
       ? `Tìm thấy ${parsed.chapters.length} chapter, bỏ qua ${skippedExistingChapterCount} chapter đã có, sẽ tải ${chaptersToImport.length} chapter mới.`
+      : mode === IMPORT_MODE_REFRESH_IMAGE_URLS
+        ? `Tim thay ${parsed.chapters.length} chapter, se refresh URL anh cho ${chaptersToImport.length} chapter.`
       : `Tìm thấy ${parsed.chapters.length} chapter, sẽ tải ${chaptersToImport.length} chapter.`,
     mode,
     totalChapters: chaptersToImport.length,
@@ -195,7 +246,7 @@ export async function importSeries(seriesUrl, options = {}, onProgress = () => {
     startedAt: crawlStartedAt
   });
 
-  if (mode === CRAWL_MODE_NEW_CHAPTERS && chaptersToImport.length === 0) {
+  if (mode === IMPORT_MODE_NEW_CHAPTERS && chaptersToImport.length === 0) {
     const importSummary = {
       mode,
       assetMode,
@@ -504,7 +555,7 @@ export async function importSeries(seriesUrl, options = {}, onProgress = () => {
     });
   }
 
-  const untouchedChapters = mode === CRAWL_MODE_NEW_CHAPTERS
+  const untouchedChapters = needsExistingSeries
     ? []
     : parsed.chapters.slice(chaptersToImport.length).map((chapter) => ({
       ...chapter,
@@ -535,13 +586,14 @@ export async function importSeries(seriesUrl, options = {}, onProgress = () => {
   const importSummary = {
     mode,
     assetMode,
-    newChapterCount: mode === CRAWL_MODE_NEW_CHAPTERS ? chapters.length : 0,
-    skippedExistingChapterCount
+    newChapterCount: mode === IMPORT_MODE_NEW_CHAPTERS ? chapters.length : Number(selected.newChapterCount || 0),
+    skippedExistingChapterCount,
+    refreshedExistingChapterCount: mode === IMPORT_MODE_REFRESH_IMAGE_URLS ? Number(selected.refreshedExistingChapterCount || 0) : 0
   };
-  const nextChaptersForStatus = mode === CRAWL_MODE_NEW_CHAPTERS
+  const nextChaptersForStatus = needsExistingSeries
     ? [...chapters, ...(existingSeries?.chapters || [])]
     : [...chapters, ...untouchedChapters];
-  const updated = await upsertSeries(mode === CRAWL_MODE_NEW_CHAPTERS ? {
+  const updated = await upsertSeries(needsExistingSeries ? {
     id,
     title: existingSeries.title || parsed.title,
     slug: existingSeries.slug || slugify(existingSeries.title || parsed.title),

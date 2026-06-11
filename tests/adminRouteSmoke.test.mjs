@@ -72,6 +72,8 @@ const sampleSeries = {
   coverThumb: '/imports/sample/cover-thumb.webp',
   sourceUrl: 'https://example.test/series',
   sourceMappings: [{ sourceUrl: 'https://example.test/series' }],
+  importMode: 'image_url',
+  assetStatus: 'external',
   tags: ['manhwa'],
   aliases: [],
   description: 'Sample',
@@ -175,6 +177,8 @@ test('admin route renders dashboard and series detail with required handlers bou
     await route.renderAdminSeriesDetail('s1');
     assert.match(app.innerHTML, /Sample Series/);
     assert.match(app.innerHTML, /Crawl chapter/);
+    assert.match(app.innerHTML, /Refresh URL/);
+    assert.match(app.innerHTML, /data-refresh-image-urls="s1"/);
     assert.match(app.innerHTML, /Optimize/);
     assert.match(app.innerHTML, /Sync .*S3/);
     assert.doesNotMatch(app.innerHTML, /Export static API/);
@@ -188,6 +192,7 @@ test('admin route renders dashboard and series detail with required handlers bou
       'handleAdminBulletinSubmit',
       'handleAdminBulletinPin',
       'handleUpdateChapters',
+      'handleRefreshImageUrls',
       'handleProductionPublish',
       'handleProductionStep',
       'handleProductionCheck',
@@ -324,6 +329,7 @@ test('production admin hides local crawl, S3, and publish pipeline controls', as
     await route.renderAdminSeriesDetail('s1');
     assert.match(app.innerHTML, /Production admin/);
     assert.doesNotMatch(app.innerHTML, /data-update-chapters=/);
+    assert.doesNotMatch(app.innerHTML, /data-refresh-image-urls=/);
     assert.doesNotMatch(app.innerHTML, /data-publish-production=/);
     assert.doesNotMatch(app.innerHTML, /data-production-step=/);
     assert.doesNotMatch(app.innerHTML, /Production pipeline/);

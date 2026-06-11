@@ -6,9 +6,18 @@ function numberOrDefault(value, fallback) {
 
 export const ASSET_MODE_IMAGE_URL = 'image_url';
 export const ASSET_MODE_FULL_DOWNLOAD = 'full_download';
+export const IMPORT_MODE_FULL = 'full';
+export const IMPORT_MODE_NEW_CHAPTERS = 'new-chapters';
+export const IMPORT_MODE_REFRESH_IMAGE_URLS = 'refresh-image-urls';
 
 export function normalizeAssetMode(value) {
   return value === ASSET_MODE_FULL_DOWNLOAD ? ASSET_MODE_FULL_DOWNLOAD : ASSET_MODE_IMAGE_URL;
+}
+
+export function normalizeImportMode(value) {
+  return value === IMPORT_MODE_NEW_CHAPTERS || value === IMPORT_MODE_REFRESH_IMAGE_URLS
+    ? value
+    : IMPORT_MODE_FULL;
 }
 
 export function parseImportUrls(input) {
@@ -24,11 +33,13 @@ export function parseImportUrls(input) {
 }
 
 export function normalizeImportPayload(body) {
+  const mode = normalizeImportMode(body.mode);
   return {
     url: String(body.url || '').trim(),
     maxChapters: numberOrDefault(body.maxChapters, 2),
     maxPages: numberOrDefault(body.maxPages, 8),
-    assetMode: normalizeAssetMode(body.assetMode)
+    assetMode: mode === IMPORT_MODE_REFRESH_IMAGE_URLS ? ASSET_MODE_IMAGE_URL : normalizeAssetMode(body.assetMode),
+    mode
   };
 }
 

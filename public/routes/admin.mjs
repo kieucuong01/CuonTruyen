@@ -778,6 +778,7 @@ export function createAdminRoute({
         <div class="admin-series-card-actions">
           <a class="primary-btn" data-link href="/admin/series/${escapeAttr(series.id)}">Quản lý</a>
           ${localOps ? `<button class="ghost-btn" type="button" data-update-chapters="${escapeAttr(series.id)}" ${sourceUrl ? '' : 'disabled'}>Cập nhật chapter mới</button>` : ''}
+          ${localOps && seriesUsesExternalImageUrls(series) ? `<button class="ghost-btn" type="button" data-refresh-image-urls="${escapeAttr(series.id)}" ${sourceUrl ? '' : 'disabled'}>Refresh URL ảnh</button>` : ''}
           ${localOps ? `<button class="ghost-btn production-quick-btn" type="button" data-publish-production="${escapeAttr(series.id)}" ${adminProductionStatus?.storage?.productionPostgres?.configured ? '' : 'disabled'}>Đưa lên production</button>` : ''}
           ${series.slug ? `<button class="ghost-btn" type="button" data-production-check="${escapeAttr(series.id)}" data-production-url="${escapeAttr(productionSeriesUrl(series))}">Check</button>` : ''}
           ${series.slug ? `<a class="ghost-btn" data-link href="/truyen/${escapeAttr(series.slug)}">Mở public</a>` : ''}
@@ -807,6 +808,7 @@ export function createAdminRoute({
           </div>
           ${localOps ? `<div class="admin-detail-actions">
             <button class="ghost-btn" type="button" data-update-chapters="${escapeAttr(series.id)}" ${sourceUrl ? '' : 'disabled'}>Cập nhật chapter mới</button>
+            ${seriesUsesExternalImageUrls(series) ? `<button class="ghost-btn" type="button" data-refresh-image-urls="${escapeAttr(series.id)}" ${sourceUrl ? '' : 'disabled'}>Refresh URL ảnh</button>` : ''}
             <span class="muted">${sourceUrl ? 'Chỉ tải chapter chưa có, không tải lại ảnh cÅ©.' : 'Chưa có source URL để cập nhật.'}</span>
           </div>` : `<div class="admin-detail-actions"><span class="muted">Production admin chỉ quản lý nội dung; crawl và sync chạy ở local.</span></div>`}
         </section>
@@ -851,6 +853,7 @@ export function createAdminRoute({
   function renderProductionPublishPanel(series) {
     const productionUrl = productionSeriesUrl(series);
     const sourceUrl = sourceUrlForAdminSeries(series);
+    const urlOnlyAssets = seriesUsesExternalImageUrls(series);
     const productionDbConfigured = Boolean(adminProductionStatus?.storage?.productionPostgres?.configured);
     const productionDbWarning = productionDbConfigured ? '' : `
       <div class="status-line admin-wide production-publish-status error">
@@ -858,6 +861,16 @@ export function createAdminRoute({
       </div>
     `;
     const steps = [
+      ...(urlOnlyAssets ? [{
+        key: 'refresh-image-urls',
+        label: 'Refresh URL ảnh',
+        description: sourceUrl
+          ? 'Crawl lại URL ảnh cho chapter hiện có, thêm chapter mới nếu nguồn có. Xong bước này cần Sync DB production.'
+          : 'Cần source URL trước khi refresh URL ảnh.',
+        button: 'Refresh URL ảnh',
+        disabled: !sourceUrl,
+        buttonAttr: `data-refresh-image-urls="${escapeAttr(series.id)}"`
+      }] : []),
       {
         key: 'update-chapters',
         label: '1. Crawl chapter mới',
@@ -1005,6 +1018,12 @@ export function createAdminRoute({
         <span>${escapeHtml(detail)}</span>
       </div>
     `;
+  }
+
+  function seriesUsesExternalImageUrls(series = {}) {
+    const mode = series.importMode || 'image_url';
+    const status = series.assetStatus || (mode === 'full_download' ? 'local' : 'external');
+    return mode === 'image_url' || status === 'external' || status === 'mixed';
   }
 
   function assetStatusLabel(status = '') {
@@ -1372,8 +1391,45 @@ export function createAdminRoute({
     }
   }
 
+  async function handleRefreshImageUrls(event) {
+    event.preventDefault();
+    const button = event.currentTarget;
+    const seriesId = button.dataset.refreshImageUrls;
+    const status = app.querySelector(`[data-update-chapters-status="${CSS.escape(seriesId)}"]`);
+    button.disabled = true;
+    button.textContent = 'Đang refresh...';
+    if (status) {
+      status.className = 'status-line admin-wide admin-update-status';
+      status.textContent = 'Đang tạo job refresh URL ảnh...';
+    }
+
+    try {
+      const result = await fetchJson(`/api/admin/series/${encodeURIComponent(seriesId)}/refresh-image-urls`, {
+        method: 'POST',
+        headers: adminHeaders(),
+        body: JSON.stringify({})
+      });
+      if (result.reused && status) status.textContent = 'Truyện này đang có job crawl, đang theo dõi job hiện tại...';
+      const series = await pollImportJob(result.job.id, status, { navigateOnComplete: false });
+      const summary = series.importSummary || {};
+      const refreshed = Number(summary.refreshedExistingChapterCount || 0);
+      const added = Number(summary.newChapterCount || 0);
+      adminFlashMessage = `Đã refresh URL ảnh cho ${refreshed} chapter${added ? ` và thêm ${added} chapter mới` : ''}. Hãy kiểm tra reader local rồi bấm Sync DB để cập nhật production.`;
+      invalidateContentCache();
+      await renderAdminSeriesDetail(series.id || seriesId);
+    } catch (error) {
+      if (status) {
+        status.className = 'status-line admin-wide admin-update-status error';
+        status.textContent = error.message;
+      }
+      button.disabled = false;
+      button.textContent = 'Refresh URL ảnh';
+    }
+  }
+
   function bindProductionPipelineActions() {
     app.querySelectorAll('[data-update-chapters]').forEach((button) => button.addEventListener('click', handleUpdateChapters));
+    app.querySelectorAll('[data-refresh-image-urls]').forEach((button) => button.addEventListener('click', handleRefreshImageUrls));
     app.querySelectorAll('[data-publish-production]').forEach((button) => button.addEventListener('click', handleProductionPublish));
     app.querySelectorAll('[data-production-step]').forEach((button) => button.addEventListener('click', handleProductionStep));
     app.querySelectorAll('[data-production-check]').forEach((button) => button.addEventListener('click', handleProductionCheck));

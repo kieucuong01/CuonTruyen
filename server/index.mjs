@@ -64,7 +64,7 @@ import {
 import { handleImageProxyRequest } from './imageProxy.mjs';
 import { runWorkerOnce } from './crawlWorker.mjs';
 import { normalizeImportBatchPayload, normalizeImportPayload } from './importOptions.mjs';
-import { createUpdateChaptersPayload, sourceUrlForSeries } from './crawlQueue.mjs';
+import { createRefreshImageUrlsPayload, createUpdateChaptersPayload, sourceUrlForSeries } from './crawlQueue.mjs';
 import { checkApiRateLimit } from './rateLimit.mjs';
 import { corsHeaders, jsonResponse, mimeFromPath, readJsonBody } from './utils.mjs';
 import {
@@ -1019,6 +1019,32 @@ async function handleApi(req, res, url) {
     }
     const body = await readJsonBody(req);
     const result = await startImportJob(createUpdateChaptersPayload(series, {
+      ...body,
+      publishNewChapters: true
+    }));
+    clearApiCache();
+    jsonResponse(res, result.status, { job: result.job, reused: result.reused });
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname.match(/^\/api\/admin\/series\/[^/]+\/refresh-image-urls$/)) {
+    if (!CRAWL_API_ENABLED) {
+      jsonResponse(res, 503, crawlDisabledPayload());
+      return true;
+    }
+    const id = decodeURIComponent(url.pathname.split('/')[4]);
+    const catalog = await readCatalog({ includePages: false });
+    const series = findSeriesBySlug(catalog, id, { includeDraft: true }) || await getSeries(id, { includePages: false, includeDraft: true });
+    if (!series) {
+      jsonResponse(res, 404, { error: 'Series not found' });
+      return true;
+    }
+    if (!sourceUrlForSeries(series)) {
+      jsonResponse(res, 400, { error: 'Truyen nay chua co source URL de refresh URL anh.' });
+      return true;
+    }
+    const body = await readJsonBody(req);
+    const result = await startImportJob(createRefreshImageUrlsPayload(series, {
       ...body,
       publishNewChapters: true
     }));

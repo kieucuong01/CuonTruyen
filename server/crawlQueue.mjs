@@ -1,4 +1,10 @@
-import { normalizeAssetMode } from './importOptions.mjs';
+import {
+  ASSET_MODE_IMAGE_URL,
+  IMPORT_MODE_NEW_CHAPTERS,
+  IMPORT_MODE_REFRESH_IMAGE_URLS,
+  normalizeAssetMode,
+  normalizeImportMode
+} from './importOptions.mjs';
 
 export const ACTIVE_JOB_STATUSES = new Set(['queued', 'running', 'retrying']);
 
@@ -19,6 +25,7 @@ export function normalizeSourceUrl(value = '') {
 export function buildInitialProgress(payload = {}, now = new Date().toISOString()) {
   const totalSeries = Math.max(1, Number(payload.totalSeries || 1));
   const seriesIndex = Math.max(1, Number(payload.seriesIndex || 1));
+  const mode = normalizeImportMode(payload.mode);
   return {
     phase: 'queued',
     message: 'Đã xếp hàng crawl. Server sẽ tự xử lý job này.',
@@ -26,7 +33,8 @@ export function buildInitialProgress(payload = {}, now = new Date().toISOString(
     processedSeries: Math.min(totalSeries, seriesIndex - 1),
     seriesIndex,
     currentSeriesUrl: String(payload.url || ''),
-    assetMode: normalizeAssetMode(payload.assetMode),
+    mode,
+    assetMode: mode === IMPORT_MODE_REFRESH_IMAGE_URLS ? ASSET_MODE_IMAGE_URL : normalizeAssetMode(payload.assetMode),
     totalChapters: 0,
     processedChapters: 0,
     totalImages: 0,
@@ -47,6 +55,7 @@ export function createQueuedImportJob(payload = {}, {
 } = {}) {
   const sourceUrl = normalizeSourceUrl(payload.url);
   const assetMode = normalizeAssetMode(payload.assetMode);
+  const mode = normalizeImportMode(payload.mode);
   return {
     id,
     sourceUrl,
@@ -55,9 +64,15 @@ export function createQueuedImportJob(payload = {}, {
     payload: {
       ...payload,
       url: sourceUrl,
-      assetMode
+      assetMode: mode === IMPORT_MODE_REFRESH_IMAGE_URLS ? ASSET_MODE_IMAGE_URL : assetMode,
+      mode
     },
-    progress: buildInitialProgress({ ...payload, url: sourceUrl, assetMode }, now),
+    progress: buildInitialProgress({
+      ...payload,
+      url: sourceUrl,
+      assetMode: mode === IMPORT_MODE_REFRESH_IMAGE_URLS ? ASSET_MODE_IMAGE_URL : assetMode,
+      mode
+    }, now),
     logs: [],
     result: null,
     series: null,
@@ -156,13 +171,30 @@ export function createUpdateChaptersPayload(series = {}, options = {}) {
   return {
     url,
     seriesId: series.id,
-    mode: 'new-chapters',
+    mode: IMPORT_MODE_NEW_CHAPTERS,
     assetMode: normalizeAssetMode(options.assetMode || series.importMode),
     publishNewChapters: options.publishNewChapters ?? true,
     maxChapters: numberOrZero(options.maxChapters),
     maxPages: numberOrZero(options.maxPages),
     reason: options.reason || 'manual-update',
     priority: Number(options.priority ?? 5),
+    totalSeries: options.totalSeries,
+    seriesIndex: options.seriesIndex
+  };
+}
+
+export function createRefreshImageUrlsPayload(series = {}, options = {}) {
+  const url = sourceUrlForSeries(series);
+  return {
+    url,
+    seriesId: series.id,
+    mode: IMPORT_MODE_REFRESH_IMAGE_URLS,
+    assetMode: ASSET_MODE_IMAGE_URL,
+    publishNewChapters: options.publishNewChapters ?? true,
+    maxChapters: numberOrZero(options.maxChapters),
+    maxPages: numberOrZero(options.maxPages),
+    reason: options.reason || 'manual-refresh-image-urls',
+    priority: Number(options.priority ?? 6),
     totalSeries: options.totalSeries,
     seriesIndex: options.seriesIndex
   };
