@@ -38,6 +38,8 @@
 - `tests/adminJobPolling.test.mjs`: Direct tests for poll loop fetch/wait behavior, navigation, failure reporting, and status adapters.
 - `public/routes/adminDataLoaders.mjs`: Admin dashboard read endpoints and optional fallback loaders.
 - `tests/adminDataLoaders.test.mjs`: Direct tests for admin read endpoint URLs, admin headers, fallback behavior, and range encoding.
+- `public/routes/adminDomHelpers.mjs`: Admin cover image fallback, auth-error detection, and catalog series lookup helpers.
+- `tests/adminDomHelpers.test.mjs`: Direct tests for cover fallback behavior, event binding, series lookup, and auth-error matching.
 - `public/routes/adminTags.mjs`: Pure admin tag/origin picker, origin detection, and tag merge helpers.
 - `tests/adminTags.test.mjs`: Direct tests for admin tag normalization, origin detection, merge behavior, and picker rendering.
 - `public/routes/adminS3SyncView.mjs`: Pure admin S3 sync status rendering, failed-item list, stale-job warning, and retry-button visibility.
@@ -830,4 +832,47 @@ Run:
 node --check public\routes\adminDataLoaders.mjs
 node --check public\routes\admin.mjs
 node --require ./tests/setup-env.cjs --test tests\adminDataLoaders.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 19: Extract Admin DOM Helpers
+
+**Files:**
+- Create: `public/routes/adminDomHelpers.mjs`
+- Create: `tests/adminDomHelpers.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for admin DOM helpers**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminDomHelpers.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminDomHelpers.mjs`.
+
+- [x] **Step 2: Move cover fallback and route helper predicates**
+
+Move these helpers from `public/routes/admin.mjs` into `public/routes/adminDomHelpers.mjs`:
+
+```text
+bindAdminImageFallbacks
+handleAdminCoverError
+findAdminSeries
+isAdminAuthError
+```
+
+Keep route render, login submit handling, and catalog fetch orchestration in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminDomHelpers.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminDomHelpers.test.mjs tests\adminRouteSmoke.test.mjs
 ```

@@ -43,6 +43,11 @@ import {
   renderProductionProgressStatus
 } from './adminJobPolling.mjs';
 import { createAdminDataLoaders } from './adminDataLoaders.mjs';
+import {
+  bindAdminImageFallbacks,
+  findAdminSeries,
+  isAdminAuthError
+} from './adminDomHelpers.mjs';
 
 export { loadAdminToken };
 
@@ -158,7 +163,7 @@ export function createAdminRoute({
     `;
     adminFlashMessage = '';
     bindAdminCommonActions();
-    bindAdminImageFallbacks();
+    bindAdminImageFallbacks(app);
     bindRevenueDashboard();
     app.querySelector('[data-import-form]')?.addEventListener('submit', handleImport);
     bindAdminBulletinActions();
@@ -208,7 +213,7 @@ export function createAdminRoute({
     `;
     adminFlashMessage = '';
     bindAdminCommonActions();
-    bindAdminImageFallbacks();
+    bindAdminImageFallbacks(app);
     app.querySelectorAll('[data-admin-series]').forEach((form) => form.addEventListener('submit', handleAdminSave));
     bindProductionPipelineActions();
   }
@@ -403,28 +408,6 @@ export function createAdminRoute({
     target.innerHTML = view.html;
   }
 
-  function bindAdminImageFallbacks() {
-    app.querySelectorAll('[data-admin-cover-img]').forEach((image) => {
-      image.addEventListener('error', handleAdminCoverError, { once: false });
-    });
-  }
-
-  function handleAdminCoverError(event) {
-    const image = event.currentTarget;
-    const fallbackSrc = image.dataset.fallbackSrc || '';
-    if (fallbackSrc && image.getAttribute('src') !== fallbackSrc) {
-      image.removeAttribute('data-fallback-src');
-      image.src = fallbackSrc;
-      return;
-    }
-    image.closest('.admin-series-cover')?.classList.add('is-missing');
-    image.remove();
-  }
-  function findAdminSeries(catalog, seriesId) {
-    const id = String(seriesId || '');
-    return (catalog.series || []).find((series) => series.id === id || series.slug === id) || null;
-  }
-
   function renderAdminLogin(message = '') {
     app.innerHTML = renderAdminLoginView({
       topbarHtml: renderTopbar(),
@@ -432,10 +415,6 @@ export function createAdminRoute({
       message
     });
     app.querySelector('[data-admin-login-form]').addEventListener('submit', handleAdminLogin);
-  }
-
-  function isAdminAuthError(error) {
-    return /admin token is required|unauthorized|401/i.test(error?.message || '');
   }
 
   function renderAdminSeriesCard(series) {
