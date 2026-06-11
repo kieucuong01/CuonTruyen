@@ -5,7 +5,7 @@ import {
   findExistingSeriesForImport,
   sourceIdentityKey,
   sourceMappingsWith
-} from '../server/importer.mjs';
+} from '../server/importChapterSelection.mjs';
 
 test('sourceIdentityKey matches TruyenQQ mirror URLs by path', () => {
   assert.equal(

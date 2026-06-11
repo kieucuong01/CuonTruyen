@@ -4,9 +4,9 @@ import assert from 'node:assert/strict';
 import { createRefreshImageUrlsPayload } from '../server/crawlQueue.mjs';
 import {
   selectRefreshImageUrlChapters,
-  resolveImportedChapterStatus,
   selectNewChaptersForImport
-} from '../server/importer.mjs';
+} from '../server/importChapterSelection.mjs';
+import { resolveImportedChapterStatus } from '../server/importer.mjs';
 import { mergeSeries } from '../server/catalogMerge.mjs';
 
 test('selectNewChaptersForImport skips existing chapters by normalized source URL', () => {
