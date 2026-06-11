@@ -25,7 +25,11 @@ test('vercel serverless API catch-all exists for admin production', () => {
   assert.match(adminSource, /handleNodeRequest/);
 
   const apiFiles = listApiFunctionFiles('api');
-  assert.deepEqual(apiFiles.sort(), ['[...path].mjs', 'admin/[...path].mjs'].sort());
+  assert.deepEqual(apiFiles.sort(), [
+    '[...path].mjs',
+    'admin/[...path].mjs',
+    'admin/series/upsert.mjs'
+  ].sort());
 });
 
 test('vercel avoids duplicate public API functions on Hobby deployments', () => {
