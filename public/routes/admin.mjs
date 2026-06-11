@@ -15,10 +15,6 @@ import {
   renderAdminLoginView
 } from './adminFeedbackView.mjs';
 import {
-  buildAdminChapterPatch,
-  buildAdminSeriesPatch
-} from './adminPayloads.mjs';
-import {
   clearAdminSession,
   loadAdminEmail,
   loadAdminToken,
@@ -40,6 +36,7 @@ import { createAdminProductionActions } from './adminProductionActions.mjs';
 import { createAdminBulletinActions } from './adminBulletinActions.mjs';
 import { createAdminRevenueActions } from './adminRevenueActions.mjs';
 import { createAdminImportActions } from './adminImportActions.mjs';
+import { createAdminSaveActions } from './adminSaveActions.mjs';
 
 export { loadAdminToken };
 
@@ -144,6 +141,16 @@ export function createAdminRoute({
     splitList
   });
   const handleImport = adminImportActions.handleImport;
+  const adminSaveActions = createAdminSaveActions({
+    adminHeaders,
+    canRunLocalOperations,
+    fetchJson,
+    invalidateContentCache,
+    renderAdmin,
+    setControlPending,
+    splitList
+  });
+  const handleAdminSave = adminSaveActions.handleAdminSave;
 
   function canRunLocalOperations() {
     return localOperationsEnabled();
@@ -307,36 +314,6 @@ export function createAdminRoute({
       productionStatus: adminProductionStatus
     });
   }
-  async function handleAdminSave(event) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const formData = new FormData(form);
-    const seriesId = form.dataset.adminSeries;
-    const patch = buildAdminSeriesPatch(formData, {
-      splitList,
-      localOps: canRunLocalOperations()
-    });
-
-    setControlPending(form.querySelector('button[type="submit"]'));
-    await fetchJson(`/api/admin/series/${encodeURIComponent(seriesId)}`, {
-      method: 'PATCH',
-      headers: adminHeaders(),
-      body: JSON.stringify(patch)
-    });
-
-    for (const row of form.querySelectorAll('[data-admin-chapter]')) {
-      const chapterId = row.dataset.adminChapter;
-      await fetchJson(`/api/admin/series/${encodeURIComponent(seriesId)}/chapters/${encodeURIComponent(chapterId)}`, {
-        method: 'PATCH',
-        headers: adminHeaders(),
-        body: JSON.stringify(buildAdminChapterPatch(formData, chapterId))
-      });
-    }
-
-    invalidateContentCache();
-    await renderAdmin();
-  }
-
   async function handleAdminLogin(event) {
     event.preventDefault();
     const form = event.currentTarget;
