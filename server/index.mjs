@@ -578,7 +578,7 @@ function importErrorPayload(error) {
 }
 
 async function handleApi(req, res, url) {
-  if (req.method === 'GET' && url.pathname === '/api/image-proxy') {
+  if ((req.method === 'GET' || req.method === 'HEAD') && url.pathname === '/api/image-proxy') {
     return handleImageProxyRequest(req, res, url);
   }
 

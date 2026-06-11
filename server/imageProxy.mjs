@@ -78,13 +78,14 @@ export async function handleImageProxyRequest(req, res, url) {
     return true;
   }
 
-  res.writeHead(200, {
+  const headers = {
     'content-type': contentType,
     'content-length': String(buffer.byteLength),
     'cache-control': 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800',
     'x-content-type-options': 'nosniff'
-  });
-  res.end(buffer);
+  };
+  res.writeHead(200, headers);
+  res.end(req.method === 'HEAD' ? undefined : buffer);
   return true;
 }
 

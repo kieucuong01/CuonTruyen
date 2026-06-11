@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  handleImageProxyRequest,
   proxiedExternalImageUrl,
   shouldProxyExternalImageUrl
 } from '../server/imageProxy.mjs';
@@ -35,3 +36,41 @@ test('respects configured allowed host suffixes', () => {
     IMAGE_PROXY_ALLOWED_HOSTS: 'cdn.example.net'
   }), false);
 });
+
+test('handles HEAD image proxy checks without returning a response body', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(new Uint8Array([1, 2, 3]), {
+    status: 200,
+    headers: { 'content-type': 'image/jpeg', 'content-length': '3' }
+  });
+  const res = createMockResponse();
+  try {
+    const handled = await handleImageProxyRequest(
+      { method: 'HEAD' },
+      res,
+      new URL(`https://cuontruyen.test/api/image-proxy?url=${encodeURIComponent(SOURCE_IMAGE)}`)
+    );
+
+    assert.equal(handled, true);
+    assert.equal(res.status, 200);
+    assert.equal(res.headers['content-type'], 'image/jpeg');
+    assert.equal(res.body.byteLength, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+function createMockResponse() {
+  return {
+    status: null,
+    headers: {},
+    body: Buffer.alloc(0),
+    writeHead(status, headers = {}) {
+      this.status = status;
+      this.headers = Object.fromEntries(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value]));
+    },
+    end(body = Buffer.alloc(0)) {
+      this.body = Buffer.isBuffer(body) ? body : Buffer.from(String(body || ''));
+    }
+  };
+}
