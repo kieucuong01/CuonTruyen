@@ -23,10 +23,12 @@ import {
   renderCrawlQueueStatusView
 } from './adminCrawlQueueView.mjs';
 import { renderImportProgressView } from './adminImportProgressView.mjs';
-import {
-  mergeTagsWithOrigin
-} from './adminTags.mjs';
 import { renderS3SyncStatusView } from './adminS3SyncView.mjs';
+import {
+  buildAdminChapterPatch,
+  buildAdminImportPayload,
+  buildAdminSeriesPatch
+} from './adminPayloads.mjs';
 
 const ADMIN_TOKEN_KEY = 'comic-admin-token';
 const ADMIN_EMAIL_KEY = 'comic-admin-email';
@@ -487,7 +489,8 @@ export function createAdminRoute({
     const status = app.querySelector('[data-status]');
     const button = form.querySelector('button[type="submit"]');
     const formData = new FormData(form);
-    const urls = splitList(String(formData.get('url') || '').replace(/\r?\n/g, ','));
+    const payload = buildAdminImportPayload(formData, { splitList });
+    const urls = payload.urls;
     if (!urls.length) {
       if (status) {
         status.className = 'status-line error';
@@ -503,13 +506,6 @@ export function createAdminRoute({
     }
 
     try {
-      const payload = {
-        urls,
-        maxChapters: Number(formData.get('maxChapters') || 0),
-        maxPages: Number(formData.get('maxPages') || 0),
-        assetMode: formData.get('assetMode') || 'image_url',
-        publish: true
-      };
       const result = await fetchJson('/api/admin/import-jobs', {
         method: 'POST',
         headers: adminHeaders(),
@@ -540,21 +536,10 @@ export function createAdminRoute({
     const form = event.currentTarget;
     const formData = new FormData(form);
     const seriesId = form.dataset.adminSeries;
-    const patch = {
-      title: formData.get('title'),
-      slug: formData.get('slug'),
-      coverUrl: formData.get('coverUrl'),
-      aliases: splitList(formData.get('aliases')),
-      tags: mergeTagsWithOrigin(splitList(formData.get('tags')), formData.get('originType')),
-      description: formData.get('description'),
-      status: formData.get('status')
-    };
-    if (canRunLocalOperations()) {
-      patch.crawlSchedule = {
-        enabled: formData.get('scheduleEnabled') === 'on',
-        intervalHours: Number(formData.get('intervalHours') || 24)
-      };
-    }
+    const patch = buildAdminSeriesPatch(formData, {
+      splitList,
+      localOps: canRunLocalOperations()
+    });
 
     setControlPending(form.querySelector('button[type="submit"]'));
     await fetchJson(`/api/admin/series/${encodeURIComponent(seriesId)}`, {
@@ -568,12 +553,7 @@ export function createAdminRoute({
       await fetchJson(`/api/admin/series/${encodeURIComponent(seriesId)}/chapters/${encodeURIComponent(chapterId)}`, {
         method: 'PATCH',
         headers: adminHeaders(),
-        body: JSON.stringify({
-          title: formData.get(`chapterTitle:${chapterId}`),
-          label: formData.get(`chapterTitle:${chapterId}`),
-          status: formData.get(`chapterStatus:${chapterId}`),
-          takedownReason: formData.get(`chapterReason:${chapterId}`)
-        })
+        body: JSON.stringify(buildAdminChapterPatch(formData, chapterId))
       });
     }
 
