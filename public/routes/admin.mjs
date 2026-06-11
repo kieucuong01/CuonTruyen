@@ -17,8 +17,7 @@ import {
 import {
   clearAdminSession,
   loadAdminEmail,
-  loadAdminToken,
-  saveAdminSession
+  loadAdminToken
 } from './adminSession.mjs';
 import {
   createAdminJobPollers,
@@ -37,6 +36,7 @@ import { createAdminBulletinActions } from './adminBulletinActions.mjs';
 import { createAdminRevenueActions } from './adminRevenueActions.mjs';
 import { createAdminImportActions } from './adminImportActions.mjs';
 import { createAdminSaveActions } from './adminSaveActions.mjs';
+import { createAdminAuthActions } from './adminAuthActions.mjs';
 
 export { loadAdminToken };
 
@@ -151,6 +151,15 @@ export function createAdminRoute({
     splitList
   });
   const handleAdminSave = adminSaveActions.handleAdminSave;
+  const adminAuthActions = createAdminAuthActions({
+    app,
+    clearControlPending,
+    fetchJson,
+    route,
+    setControlPending
+  });
+  const bindAdminCommonActions = adminAuthActions.bindAdminCommonActions;
+  const bindAdminLoginForm = adminAuthActions.bindAdminLoginForm;
 
   function canRunLocalOperations() {
     return localOperationsEnabled();
@@ -284,20 +293,13 @@ export function createAdminRoute({
     bindProductionPipelineActions();
   }
 
-  function bindAdminCommonActions() {
-    app.querySelector('[data-admin-logout]')?.addEventListener('click', () => {
-      clearAdminSession();
-      route();
-    });
-  }
-
   function renderAdminLogin(message = '') {
     app.innerHTML = renderAdminLoginView({
       topbarHtml: renderTopbar(),
       email: loadAdminEmail(),
       message
     });
-    app.querySelector('[data-admin-login-form]').addEventListener('submit', handleAdminLogin);
+    bindAdminLoginForm();
   }
 
   function renderAdminSeriesCard(series) {
@@ -314,39 +316,6 @@ export function createAdminRoute({
       productionStatus: adminProductionStatus
     });
   }
-  async function handleAdminLogin(event) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const button = form.querySelector('button[type="submit"]');
-    const status = app.querySelector('[data-status]');
-    const formData = new FormData(form);
-    setControlPending(button);
-    if (status) {
-      status.className = 'status-line';
-      status.textContent = 'Đang đăng nhập...';
-    }
-  
-    try {
-      const session = await fetchJson('/api/admin/login', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          email: formData.get('email'),
-          password: formData.get('password')
-        })
-      });
-      saveAdminSession(session);
-      await route();
-    } catch (error) {
-      if (status) {
-        status.className = 'status-line error';
-        status.textContent = error.message;
-      }
-    } finally {
-      clearControlPending();
-    }
-  }
-
   return {
     renderAdmin,
     renderAdminSeriesDetail

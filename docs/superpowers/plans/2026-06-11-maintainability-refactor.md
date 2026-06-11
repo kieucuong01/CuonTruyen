@@ -54,6 +54,8 @@
 - `tests/adminImportActions.test.mjs`: Direct tests for import payload posting, single-job polling, batch summaries, empty URL validation, and error states.
 - `public/routes/adminSaveActions.mjs`: Admin series metadata save flow and chapter moderation PATCH actions.
 - `tests/adminSaveActions.test.mjs`: Direct tests for series save payloads, chapter moderation PATCH order, local schedule gating, and failure short-circuiting.
+- `public/routes/adminAuthActions.mjs`: Admin login submit, logout binding, session save/clear, and auth status UI.
+- `tests/adminAuthActions.test.mjs`: Direct tests for login payloads, session save, logout, error states, and pending-control cleanup.
 - `public/routes/adminTags.mjs`: Pure admin tag/origin picker, origin detection, and tag merge helpers.
 - `tests/adminTags.test.mjs`: Direct tests for admin tag normalization, origin detection, merge behavior, and picker rendering.
 - `public/routes/adminS3SyncView.mjs`: Pure admin S3 sync status rendering, failed-item list, stale-job warning, and retry-button visibility.
@@ -1180,4 +1182,45 @@ Run:
 node --check public\routes\adminSaveActions.mjs
 node --check public\routes\admin.mjs
 node --require ./tests/setup-env.cjs --test tests\adminSaveActions.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 27: Extract Admin Auth Actions
+
+**Files:**
+- Create: `public/routes/adminAuthActions.mjs`
+- Create: `tests/adminAuthActions.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for login/logout actions**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminAuthActions.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminAuthActions.mjs`.
+
+- [x] **Step 2: Move login submit and logout binding**
+
+Move these handler paths from `public/routes/admin.mjs` into `public/routes/adminAuthActions.mjs`:
+
+```text
+bindAdminCommonActions
+handleAdminLogin
+```
+
+Keep auth-expired session clearing during catalog/data loads in `public/routes/admin.mjs`, because that belongs to page orchestration.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminAuthActions.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminAuthActions.test.mjs tests\adminRouteSmoke.test.mjs
 ```
