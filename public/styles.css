@@ -629,9 +629,10 @@
 
   .desktop-feature-slide {
     display: none;
-    grid-template-columns: minmax(0, 1fr) 220px;
+    grid-template-columns: minmax(0, 1fr) minmax(180px, 220px);
     gap: 26px;
     align-items: center;
+    min-width: 0;
   }
 
   .desktop-feature-slide.is-active {
@@ -655,6 +656,7 @@
     z-index: 1;
     grid-template-columns: 70px minmax(0, 1fr);
     gap: 18px;
+    min-width: 0;
     color: #101828;
   }
 
@@ -671,15 +673,22 @@
   .desktop-feature-copy h3 {
     max-width: 18ch;
     color: #101828;
-    font-size: clamp(30px, 3.2vw, 48px);
-    line-height: 0.98;
-    letter-spacing: -0.055em;
+    font-size: 38px;
+    line-height: 1.04;
+    letter-spacing: 0;
   }
 
   .desktop-feature-copy p {
     max-width: 58ch;
     color: #475467;
     font-size: 15px;
+  }
+
+  .desktop-feature-copy strong + p {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
   }
 
   .desktop-feature-copy strong {
@@ -695,7 +704,8 @@
   .desktop-feature-cover {
     position: relative;
     z-index: 1;
-    width: 210px;
+    overflow: hidden;
+    width: min(210px, 100%);
     height: 292px;
     border: 8px solid #ffffff;
     border-radius: 24px;
@@ -704,6 +714,20 @@
     box-shadow: 0 24px 46px rgba(15, 23, 42, 0.2);
     transform: rotate(1.5deg);
     transition: transform 180ms ease, box-shadow 180ms ease;
+  }
+
+  .desktop-feature-cover img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center top;
+  }
+
+  .desktop-feature-cover.is-image-broken {
+    display: grid;
+    place-items: center;
+    text-align: center;
   }
 
   .desktop-feature-cover:hover {
@@ -1018,9 +1042,14 @@
     padding: 30px;
   }
 
+  .desktop-feature-slide {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .desktop-feature-cover {
     width: 190px;
     height: 260px;
+    justify-self: center;
   }
 }
 

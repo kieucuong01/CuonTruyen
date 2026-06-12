@@ -463,6 +463,7 @@ export function createHomeRoute({
   function bindDesktopFeatureSlider() {
     const slider = app.querySelector('[data-desktop-feature-slider]');
     if (!slider) return;
+    bindDesktopFeatureCovers(slider);
     const slides = [...slider.querySelectorAll('[data-feature-slide]')];
     const dots = [...slider.querySelectorAll('[data-feature-dot]')];
     if (slides.length < 2) return;
@@ -486,6 +487,27 @@ export function createHomeRoute({
       }
       activate(currentIndex + 1);
     }, 4500);
+  }
+
+  function bindDesktopFeatureCovers(slider) {
+    slider.querySelectorAll('.desktop-feature-cover img').forEach((image) => {
+      const markBroken = () => {
+        const cover = image.closest('.desktop-feature-cover');
+        if (!cover) return;
+        cover.classList.add('is-image-broken');
+        image.remove();
+        if (!cover.querySelector('span')) {
+          const fallback = document.createElement('span');
+          fallback.textContent = 'Cuon Truyen';
+          cover.append(fallback);
+        }
+      };
+      if (image.complete && image.naturalWidth === 0) {
+        markBroken();
+        return;
+      }
+      image.addEventListener('error', markBroken, { once: true });
+    });
   }
 
   function clearDesktopFeatureAutoplay() {
