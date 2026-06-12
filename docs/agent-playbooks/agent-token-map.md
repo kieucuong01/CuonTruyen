@@ -40,6 +40,7 @@ These can be large or temporary. Use targeted file paths only.
 | Reader scroll/images | `public/app.js`, `public/siteChromeView.mjs`, `public/seriesDisplayView.mjs`, `public/readerWindow.mjs`, `public/readerRestore.mjs`, `public/readingProgress.mjs` |
 | Admin/crawl UI | `public/routes/admin.mjs`, `public/routes/adminPageViews.mjs`, `public/routes/adminAuthActions.mjs`, `public/routes/adminImportActions.mjs`, `public/routes/adminSaveActions.mjs`, `public/routes/adminSeriesJobActions.mjs`, `public/routes/adminProductionActions.mjs`, `public/routes/adminBulletinActions.mjs`, `public/routes/adminRevenueActions.mjs`, `public/routes/adminPanelPolling.mjs`, `public/routes/adminDomHelpers.mjs`, `public/routes/adminDataLoaders.mjs`, `public/routes/adminSession.mjs`, `public/routes/adminJobPolling.mjs`, `public/routes/adminJobHelpers.mjs`, `public/routes/adminPayloads.mjs`, `public/routes/adminFeedbackView.mjs`, `public/routes/adminSeriesEditorView.mjs`, `public/routes/adminRevenueView.mjs`, `public/routes/adminShellView.mjs`, `public/routes/adminImportProgressView.mjs`, `public/routes/adminCrawlQueueView.mjs`, `public/routes/adminS3SyncView.mjs`, `public/routes/adminTags.mjs`, `public/routes/adminSeriesView.mjs`, `public/routes/adminProductionView.mjs`, `server/index.mjs`, `server/crawlJobStore.mjs` |
 | Production Health API | `server/adminProductionStatus.mjs`, `server/index.mjs`, `server/storageConfig.mjs` |
+| Broken/wrong cover images | `scripts/audit-cover-quality.mjs`, `scripts/refresh-source-covers.mjs`, `scripts/backfill-cover-thumbnails.mjs`, `server/importer.mjs` |
 | New chapter updates | `server/importChapterSelection.mjs`, `server/importer.mjs`, `server/crawlQueue.mjs`, `server/crawlWorker.mjs`, `public/routes/admin.mjs` |
 | Public catalog/filtering | `server/contentStore.mjs`, `server/dataStore.mjs`, `server/postgresStore.mjs` |
 | Local DB/pgAdmin | `docs/agent-playbooks/local-postgres-pgadmin.md`, `.env.local`, `server/storageConfig.mjs`, `server/postgresStore.mjs` |
@@ -70,6 +71,7 @@ node --check public\routes\home.mjs
 node --check public\routes\admin.mjs
 npm run check:encoding
 npm run db:setup:schema
+npm run covers:audit
 npm run sync:s3:dry-run
 npm test
 ```
@@ -107,6 +109,13 @@ Run the full DB-aware publish flow for one series:
 ```powershell
 npm run publish:series -- --series-id <series-id> --dry-run
 npm run publish:series -- --series-id <series-id>
+```
+
+Audit and refresh suspicious cover thumbnails from the source series page:
+
+```powershell
+npm run covers:audit
+npm run covers:refresh-source -- --apply
 ```
 
 Deploy static frontend:

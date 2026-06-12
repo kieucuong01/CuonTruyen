@@ -137,6 +137,20 @@ For a newly completed crawl, prefer syncing only that series' images first:
 node scripts/sync-vietnix-s3.mjs --images-only --catalog-only --series-id <series-id> --apply
 ```
 
+If covers look missing, stretched, or copied from an internal comic page, audit
+them first and refresh suspicious thumbnails from the source series page:
+
+```powershell
+npm run covers:audit
+npm run covers:refresh-source -- --apply
+```
+
+After a cover refresh, upload only the regenerated cover object when possible:
+
+```powershell
+node scripts/sync-vietnix-s3.mjs --images-only --image-file /imports/<series-id>/_cover/cover.webp --apply --force
+```
+
 The S3 script refuses full image sync unless a series id, `--retry-failed`, or
 explicit `--all` is provided. This prevents accidentally rechecking hundreds of
 thousands of images.

@@ -93,6 +93,11 @@ export async function importSeries(seriesUrl, options = {}, onProgress = () => {
   const imageOptimizeConfig = options.imageOptimizeConfig || imageOptimizationConfig();
   const downloadImageConfig = optimizeDuringCrawl ? imageOptimizeConfig : { ...imageOptimizeConfig, enabled: false };
   const thumbnailConfig = options.coverThumbnailConfig || coverThumbnailConfig();
+  const allowFirstPageCoverFallback = parseBooleanOption(
+    options.allowFirstPageCoverFallback,
+    process.env.CRAWL_ALLOW_FIRST_PAGE_COVER_FALLBACK,
+    false
+  );
   const rateLimiter = options.rateLimiter || new DomainRateLimiter({
     minDelayMs: Number(options.domainDelayMs ?? process.env.CRAWL_DOMAIN_DELAY_MS ?? 650)
   });
@@ -483,7 +488,7 @@ export async function importSeries(seriesUrl, options = {}, onProgress = () => {
     throw new Error('Không tìm thấy ảnh truyện trong các chapter đã tải. Nguồn có thể chặn crawler hoặc ảnh được nạp bằng cơ chế riêng.');
   }
 
-  if (!coverThumbnail && fallbackCoverImagePath) {
+  if (!coverThumbnail && fallbackCoverImagePath && allowFirstPageCoverFallback) {
     coverThumbnail = await createSeriesCoverThumbnailFromFile({
       id,
       filePath: fallbackCoverImagePath,

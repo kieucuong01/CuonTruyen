@@ -33,7 +33,8 @@ async function main() {
     promotedCovers: 0,
     changedSeries: [],
     sourceBytes: 0,
-    thumbnailBytes: 0
+    thumbnailBytes: 0,
+    allowFirstPageFallback: args.allowFirstPageFallback
   };
 
   for (const series of seriesList) {
@@ -47,7 +48,9 @@ async function main() {
       continue;
     }
 
-    const source = await resolveCoverSource(root, series);
+    const source = await resolveCoverSource(root, series, {
+      allowFirstPageFallback: args.allowFirstPageFallback
+    });
     if (!source) {
       summary.skippedNoSource += 1;
       continue;
@@ -126,7 +129,7 @@ async function hasExistingLocalThumbnail(root, value = '') {
   }
 }
 
-async function resolveCoverSource(root, series = {}) {
+async function resolveCoverSource(root, series = {}, { allowFirstPageFallback = false } = {}) {
   const localCover = importFileFromPublicPath(root, series.coverUrl || series.cover || '');
   if (localCover && await isReadableFile(localCover)) {
     return {
@@ -135,6 +138,8 @@ async function resolveCoverSource(root, series = {}) {
       sourceType: 'cover'
     };
   }
+
+  if (!allowFirstPageFallback) return null;
 
   for (const chapter of series.chapters || []) {
     for (const page of chapter.pages || []) {
@@ -181,6 +186,7 @@ function parseArgs(args) {
     json: false,
     overwrite: false,
     promoteCover: false,
+    allowFirstPageFallback: false,
     limit: 0,
     seriesId: '',
     root: ''
@@ -191,6 +197,7 @@ function parseArgs(args) {
     else if (arg === '--json') parsed.json = true;
     else if (arg === '--overwrite') parsed.overwrite = true;
     else if (arg === '--promote-cover') parsed.promoteCover = true;
+    else if (arg === '--allow-first-page-fallback') parsed.allowFirstPageFallback = true;
     else if (arg === '--limit') parsed.limit = Number(args[index += 1] || 0);
     else if (arg === '--series-id') parsed.seriesId = args[index += 1] || '';
     else if (arg === '--root') parsed.root = args[index += 1] || '';
@@ -220,6 +227,7 @@ function printSummary(summary, { json = false } = {}) {
   console.log(`Created thumbnails: ${summary.createdThumbnails}`);
   console.log(`Existing thumbnails: ${summary.existingThumbnails}`);
   console.log(`Promoted covers: ${summary.promotedCovers}`);
+  console.log(`First-page fallback: ${summary.allowFirstPageFallback ? 'enabled' : 'disabled'}`);
   console.log(`Skipped: no-source=${summary.skippedNoSource}; failed=${summary.skippedFailed}; unsafe=${summary.skippedUnsafe}`);
   console.log(`Source: ${view.sourceMB} MiB; thumbnails: ${view.thumbnailMB} MiB`);
 }
