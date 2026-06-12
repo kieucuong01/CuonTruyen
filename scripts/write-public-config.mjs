@@ -6,7 +6,7 @@ import '../server/env.mjs';
 const ROOT = process.cwd();
 const PUBLIC_DIR = path.join(ROOT, 'public');
 const CONFIG_PATH = path.join(PUBLIC_DIR, 'config.js');
-const DEFAULT_VERCEL_READER_SNAPSHOT_LIMIT = 300;
+const DEFAULT_READER_SNAPSHOT_LIMIT = 0;
 
 function trimTrailingSlash(value = '') {
   return String(value || '').trim().replace(/\/$/, '');
@@ -201,7 +201,7 @@ async function writePublicSnapshotApi() {
   let readerCount = 0;
   let tagCount = 0;
 
-  await fs.rm(staticApiDir, { recursive: true, force: true });
+  await removeDirectoryTree(staticApiDir);
   await writeJson(path.join(staticApiDir, 'home.json'), buildHomeCollections(catalog));
   await writeJson(path.join(staticApiDir, 'series.json'), publicData);
   await writeJson(path.join(staticApiDir, 'search-index.json'), publicData);
@@ -256,6 +256,15 @@ async function writePublicSnapshotApi() {
     ? `, reader limit ${readerSnapshotBudget}`
     : '';
   console.log(`[vercel-static-api] wrote public snapshots for ${publicData.series.length} series, ${detailCount} detail pages, ${readerCount} reader pages${readerLimitLabel}, ${tagCount} tags`);
+}
+
+async function removeDirectoryTree(dir) {
+  await fs.rm(dir, {
+    recursive: true,
+    force: true,
+    maxRetries: 5,
+    retryDelay: 100
+  });
 }
 
 async function writeReaderSnapshots({
@@ -333,13 +342,13 @@ function uniqueRouteParts(values = []) {
 function readerSnapshotLimit() {
   const raw = process.env.STATIC_API_READER_SNAPSHOT_LIMIT
     ?? process.env.PUBLIC_READER_SNAPSHOT_LIMIT
-    ?? (process.env.VERCEL === '1' ? String(DEFAULT_VERCEL_READER_SNAPSHOT_LIMIT) : 'all');
+    ?? String(DEFAULT_READER_SNAPSHOT_LIMIT);
   const normalized = String(raw || '').trim().toLowerCase();
   if (!normalized || normalized === 'all' || normalized === 'infinite' || normalized === 'infinity') {
     return Infinity;
   }
   const value = Number(normalized);
-  if (!Number.isFinite(value) || value < 0) return DEFAULT_VERCEL_READER_SNAPSHOT_LIMIT;
+  if (!Number.isFinite(value) || value < 0) return DEFAULT_READER_SNAPSHOT_LIMIT;
   return Math.floor(value);
 }
 

@@ -71,6 +71,9 @@ preferPublicSnapshots=true
 
 Do not point `PUBLIC_SNAPSHOT_BASE_URL` at Vietnix S3 unless the full
 `static-api/` tree, including `static-api/series/<slug>.json`, is synced there.
+Reader snapshots default to `0` during builds because live reader APIs are
+DB-backed. Set `STATIC_API_READER_SNAPSHOT_LIMIT=all` only for a deliberate full
+static reader export.
 Missing detail snapshots force the browser to fall back to slower live API
 reads.
 

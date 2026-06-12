@@ -63,6 +63,7 @@ test('vercel build and public config honor DB-first catalog mode', () => {
   assert.match(buildSource, /closePostgresPool/);
   assert.match(configSource, /writePublicSnapshotApi/);
   assert.match(configSource, /writeReaderSnapshots/);
+  assert.match(configSource, /DEFAULT_READER_SNAPSHOT_LIMIT = 0/);
   assert.match(configSource, /readerCount/);
   assert.match(configSource, /STATIC_API_READER_SNAPSHOT_LIMIT/);
   assert.match(configSource, /readerSnapshotLimit/);
