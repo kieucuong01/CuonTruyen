@@ -18,6 +18,62 @@
 - `tests/importerIdentity.test.mjs`: Existing mirror/source mapping tests, migrated to the focused helper module.
 - `tests/importerIncremental.test.mjs`: Existing incremental/refresh behavior tests, migrated to the focused helper module where appropriate.
 - `docs/agent-playbooks/agent-token-map.md`: Agent entrypoint map updated when responsibility moves.
+- `public/routes/adminProductionView.mjs`: Pure admin production badge, pipeline-step, workflow progress, step progress, message, and icon helpers.
+- `tests/adminProductionView.test.mjs`: Direct tests for admin production helper rendering, escaping, progress, message, and icon behavior.
+- `server/adminProductionStatus.mjs`: Pure backend Production Health status builder for admin.
+- `tests/adminProductionStatus.test.mjs`: Direct tests for Production Health status calculations.
+- `public/routes/adminSeriesView.mjs`: Pure admin series card/detail stats and badge helpers.
+- `tests/adminSeriesView.test.mjs`: Direct tests for admin series stats, status badges, asset badges, and source URL selection.
+- `public/routes/adminSeriesEditorView.mjs`: Pure admin series list card, detail editor, cover fallback, chapter row, and production publish panel rendering.
+- `tests/adminSeriesEditorView.test.mjs`: Direct tests for admin series editor/card markup, production URL resolution, escaping, local/production controls, and cover fallback behavior.
+- `public/routes/adminFeedbackView.mjs`: Pure admin login shell, production check result, and API error feedback rendering.
+- `tests/adminFeedbackView.test.mjs`: Direct tests for admin feedback escaping, production check details, storage labels, and API hint rendering.
+- `public/routes/adminPayloads.mjs`: Pure admin import job, series metadata, and chapter moderation payload builders.
+- `tests/adminPayloads.test.mjs`: Direct tests for admin payload URL normalization, crawl settings, tag/origin merging, local schedule fields, and chapter moderation patches.
+- `public/routes/adminJobHelpers.mjs`: Pure admin job response normalization, flash-message helpers, import result unwrapping, and production step parsing.
+- `tests/adminJobHelpers.test.mjs`: Direct tests for admin job response normalization, flash messages, result unwrapping, and production step parsing.
+- `public/routes/adminSession.mjs`: Admin token/email session storage and localStorage fallback helpers.
+- `tests/adminSession.test.mjs`: Direct tests for admin session persistence, memory fallback, and clearing credentials.
+- `public/routes/adminJobPolling.mjs`: Admin import/production job polling loops and status render adapters.
+- `tests/adminJobPolling.test.mjs`: Direct tests for poll loop fetch/wait behavior, navigation, failure reporting, and status adapters.
+- `public/routes/adminDataLoaders.mjs`: Admin dashboard read endpoints and optional fallback loaders.
+- `tests/adminDataLoaders.test.mjs`: Direct tests for admin read endpoint URLs, admin headers, fallback behavior, and range encoding.
+- `public/routes/adminDomHelpers.mjs`: Admin cover image fallback, auth-error detection, and catalog series lookup helpers.
+- `tests/adminDomHelpers.test.mjs`: Direct tests for cover fallback behavior, event binding, series lookup, and auth-error matching.
+- `public/routes/adminPanelPolling.mjs`: Admin S3 sync and crawl queue panel polling, retry, wake, and status target adapters.
+- `tests/adminPanelPolling.test.mjs`: Direct tests for S3/crawl queue poll intervals, endpoints, retry/wake actions, stale target cleanup, and status adapters.
+- `public/routes/adminSeriesJobActions.mjs`: Admin per-series update-chapters and refresh-image-urls job actions.
+- `tests/adminSeriesJobActions.test.mjs`: Direct tests for scoped update/refresh endpoints, button/status states, flash messages, and post-job navigation.
+- `public/routes/adminProductionActions.mjs`: Admin production publish, selected-step publish, production check, and production action button binding.
+- `tests/adminProductionActions.test.mjs`: Direct tests for production publish/check endpoints, button/status states, polling, and public URL opening.
+- `public/routes/adminBulletinActions.mjs`: Admin bulletin submit, pin/unpin actions, status updates, and rerender hooks.
+- `tests/adminBulletinActions.test.mjs`: Direct tests for bulletin endpoints, payloads, form reset, flash messages, and error states.
+- `public/routes/adminRevenueActions.mjs`: Admin revenue dashboard range binding, analytics refresh, and error insertion.
+- `tests/adminRevenueActions.test.mjs`: Direct tests for revenue range clicks, dashboard replacement, error escaping, and absent-dashboard no-op behavior.
+- `public/routes/adminImportActions.mjs`: Admin crawl/import form submit flow, import job creation, polling, flash messages, and cache invalidation.
+- `tests/adminImportActions.test.mjs`: Direct tests for import payload posting, single-job polling, batch summaries, empty URL validation, and error states.
+- `public/routes/adminSaveActions.mjs`: Admin series metadata save flow and chapter moderation PATCH actions.
+- `tests/adminSaveActions.test.mjs`: Direct tests for series save payloads, chapter moderation PATCH order, local schedule gating, and failure short-circuiting.
+- `public/routes/adminAuthActions.mjs`: Admin login submit, logout binding, session save/clear, and auth status UI.
+- `tests/adminAuthActions.test.mjs`: Direct tests for login payloads, session save, logout, error states, and pending-control cleanup.
+- `public/routes/adminPageViews.mjs`: Pure admin dashboard/detail page composition and local crawl form markup.
+- `tests/adminPageViews.test.mjs`: Direct tests for dashboard/detail composition, local/production panel gating, flash escaping, and empty states.
+- `public/siteChromeView.mjs`: Pure public topbar, brand logo, and reader account auth page rendering.
+- `tests/siteChromeView.test.mjs`: Direct tests for public chrome navigation state, auth state, escaping, compact logo, and login/register markup.
+- `public/seriesDisplayView.mjs`: Pure public cover image URL, cover image markup, tag normalization, and origin-label helpers.
+- `tests/seriesDisplayView.test.mjs`: Direct tests for cover URL priority, cover/fallback escaping, tag normalization, and origin label resolution.
+- `public/routes/adminTags.mjs`: Pure admin tag/origin picker, origin detection, and tag merge helpers.
+- `tests/adminTags.test.mjs`: Direct tests for admin tag normalization, origin detection, merge behavior, and picker rendering.
+- `public/routes/adminS3SyncView.mjs`: Pure admin S3 sync status rendering, failed-item list, stale-job warning, and retry-button visibility.
+- `tests/adminS3SyncView.test.mjs`: Direct tests for S3 sync progress, failed item escaping, retry controls, and clock skew guidance.
+- `public/routes/adminCrawlQueueView.mjs`: Pure admin crawl queue status rendering, running-job progress, waiting/failed job lists, and crawl ETA/rate formatting.
+- `tests/adminCrawlQueueView.test.mjs`: Direct tests for crawl queue summaries, escaping, list limits, running-job metrics, and format helpers.
+- `public/routes/adminImportProgressView.mjs`: Pure admin import/update progress status rendering, batch/chapter/image metrics, errors, and crawl speed formatting.
+- `tests/adminImportProgressView.test.mjs`: Direct tests for import progress metrics, admin update status class, escaped errors, and usable-image fallbacks.
+- `public/routes/adminShellView.mjs`: Pure admin shell panels for session bar, bulletin messages, production/local notices, catalog storage notice, and local operation panel shells.
+- `tests/adminShellView.test.mjs`: Direct tests for admin shell panel escaping, bulletin time labels, storage notice summary, and local/production panel controls.
+- `public/routes/adminRevenueView.mjs`: Pure admin revenue/analytics dashboard rendering, metric formatting, range tabs, and top-series table markup.
+- `tests/adminRevenueView.test.mjs`: Direct tests for revenue number/percent formatting, unavailable analytics state, active range, escaping, and empty tracking rows.
 
 ## Task 1: Extract Import Chapter Selection Helpers
 
@@ -87,7 +143,7 @@ Expected: all checks pass.
 - Create: `tests/adminProductionView.test.mjs`
 - Modify: `public/routes/admin.mjs`
 
-- [ ] **Step 1: Write failing tests for pure production status rendering helpers**
+- [x] **Step 1: Write failing tests for pure production status rendering helpers**
 
 Start with helpers currently embedded in `public/routes/admin.mjs`:
 
@@ -99,15 +155,1212 @@ renderAdminProductionBadge
 renderProductionPipelineStep
 ```
 
-- [ ] **Step 2: Extract only pure rendering/status helpers**
+- [x] **Step 2: Extract only pure rendering/status helpers**
 
 Do not move event binding or network calls in the first slice.
 
-- [ ] **Step 3: Verify admin route behavior**
+- [x] **Step 3: Verify admin route behavior**
 
 Run:
 
 ```powershell
 node --check public\routes\admin.mjs
 node --require ./tests/setup-env.cjs --test tests\adminRouteSmoke.test.mjs tests\adminProductionView.test.mjs
+```
+
+## Task 3: Extract Backend Production Health Helpers
+
+**Files:**
+- Create: `server/adminProductionStatus.mjs`
+- Create: `tests/adminProductionStatus.test.mjs`
+- Modify: `server/index.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+
+- [x] **Step 1: Write failing tests for pure Production Health calculations**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminProductionStatus.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `server/adminProductionStatus.mjs`.
+
+- [x] **Step 2: Extract pure status helpers**
+
+Move these helpers from `server/index.mjs` to `server/adminProductionStatus.mjs`:
+
+```text
+isImportAssetReference
+productionStatusLabel
+estimateProductionImageTotal
+buildAdminProductionStatus
+```
+
+Keep file reads, cache, and `catalogStorageSummary()` ownership in `server/index.mjs`.
+
+- [x] **Step 3: Verify server route behavior**
+
+Run:
+
+```powershell
+node --check server\adminProductionStatus.mjs
+node --check server\index.mjs
+node --require ./tests/setup-env.cjs --test tests\adminProductionStatus.test.mjs tests\adminRouteSmoke.test.mjs tests\productionCheck.test.mjs tests\productionPipeline.test.mjs tests\storageConfig.test.mjs
+```
+
+## Task 4: Extract Admin Series View Helpers
+
+**Files:**
+- Create: `public/routes/adminSeriesView.mjs`
+- Create: `tests/adminSeriesView.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+
+- [x] **Step 1: Write failing tests for pure admin series helpers**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminSeriesView.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminSeriesView.mjs`.
+
+- [x] **Step 2: Extract pure series display helpers**
+
+Move these helpers from `public/routes/admin.mjs` to `public/routes/adminSeriesView.mjs`:
+
+```text
+adminSeriesStats
+renderAdminSeriesBadges
+renderAssetModeBadge
+seriesUsesExternalImageUrls
+assetStatusLabel
+assetStatusClass
+statusLabel
+normalizeStatusClass
+sourceUrlForAdminSeries
+```
+
+Keep route event binding, form submission, and chapter row rendering in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminSeriesView.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminSeriesView.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 5: Extract Admin Tag And Origin Helpers
+
+**Files:**
+- Create: `public/routes/adminTags.mjs`
+- Create: `tests/adminTags.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+
+- [x] **Step 1: Write failing tests for pure tag/origin helpers**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminTags.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminTags.mjs`.
+
+- [x] **Step 2: Extract pure tag/origin helpers**
+
+Move these helpers from `public/routes/admin.mjs` to `public/routes/adminTags.mjs`:
+
+```text
+renderOriginTagPicker
+getOriginTagOptions
+getSeriesTagNames
+getManualTagNames
+mergeTagsWithOrigin
+uniqueTagNames
+detectOriginType
+isOriginTagName
+normalizeAdminTagName
+```
+
+Keep form submission and API persistence in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminTags.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminTags.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 6: Extract Admin S3 Sync View Helpers
+
+**Files:**
+- Create: `public/routes/adminS3SyncView.mjs`
+- Create: `tests/adminS3SyncView.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+
+- [x] **Step 1: Write failing tests for pure S3 sync rendering helpers**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminS3SyncView.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminS3SyncView.mjs`.
+
+- [x] **Step 2: Extract S3 sync status view helpers**
+
+Move these helpers from `public/routes/admin.mjs` to `public/routes/adminS3SyncView.mjs`:
+
+```text
+renderS3FailedItems
+S3 sync status class/markup calculation
+```
+
+Keep polling, retry API calls, and DOM event binding in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminS3SyncView.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminS3SyncView.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 7: Extract Admin Crawl Queue View Helpers
+
+**Files:**
+- Create: `public/routes/adminCrawlQueueView.mjs`
+- Create: `tests/adminCrawlQueueView.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+
+- [x] **Step 1: Write failing tests for pure crawl queue rendering helpers**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminCrawlQueueView.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminCrawlQueueView.mjs`.
+
+- [x] **Step 2: Extract crawl queue view helpers**
+
+Move these helpers from `public/routes/admin.mjs` to `public/routes/adminCrawlQueueView.mjs`:
+
+```text
+renderCrawlQueueRunningJob
+renderCrawlQueueWaitingList
+crawl queue status class/markup calculation
+formatCrawlDuration
+formatCrawlRate
+```
+
+Keep polling, wake API calls, and DOM event binding in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminCrawlQueueView.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminCrawlQueueView.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 8: Extract Admin Import Progress View Helpers
+
+**Files:**
+- Create: `public/routes/adminImportProgressView.mjs`
+- Create: `tests/adminImportProgressView.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+
+- [x] **Step 1: Write failing tests for pure import progress rendering**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminImportProgressView.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminImportProgressView.mjs`.
+
+- [x] **Step 2: Extract import progress view helper**
+
+Move the pure markup and metric calculation from `renderImportProgress()` in `public/routes/admin.mjs` to `renderImportProgressView()` in `public/routes/adminImportProgressView.mjs`.
+
+Keep DOM target checks, polling, navigation on completion, and API calls in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminImportProgressView.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminImportProgressView.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 9: Expand Admin Production View Helpers
+
+**Files:**
+- Modify: `public/routes/adminProductionView.mjs`
+- Modify: `tests/adminProductionView.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for production workflow progress helpers**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminProductionView.test.mjs
+```
+
+Expected: FAIL because `adminProductionView.mjs` does not export `renderProductionProgressView`, `renderProductionStepProgress`, `productionJobMessage`, and `productionStepIcon`.
+
+- [x] **Step 2: Move production progress view helpers**
+
+Move these helpers from `public/routes/admin.mjs` to `public/routes/adminProductionView.mjs`:
+
+```text
+renderProductionProgress
+renderProductionStepProgress
+productionJobMessage
+productionStepIcon
+```
+
+Keep production job polling, API calls, DOM target checks, and error handling in `public/routes/admin.mjs`; expose the moved markup as `renderProductionProgressView()`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminProductionView.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminProductionView.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 10: Extract Admin Shell Panel Helpers
+
+**Files:**
+- Create: `public/routes/adminShellView.mjs`
+- Create: `tests/adminShellView.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for admin shell panels**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminShellView.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminShellView.mjs`.
+
+- [x] **Step 2: Move pure shell panel helpers**
+
+Move these helpers from `public/routes/admin.mjs` to `public/routes/adminShellView.mjs`:
+
+```text
+renderAdminSessionBar
+renderAdminBulletinPanel
+renderAdminBulletinMessage
+renderProductionAdminNotice
+renderS3SyncPanel
+renderCatalogStorageNotice
+renderCrawlQueuePanel
+formatAdminBulletinTime
+```
+
+Keep bulletin submit/pin handlers, logout binding, poll timers, and API calls in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminShellView.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminShellView.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 11: Extract Admin Revenue View Helpers
+
+**Files:**
+- Create: `public/routes/adminRevenueView.mjs`
+- Create: `tests/adminRevenueView.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for revenue dashboard helpers**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminRevenueView.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminRevenueView.mjs`.
+
+- [x] **Step 2: Move pure revenue dashboard helpers**
+
+Move these helpers from `public/routes/admin.mjs` to `public/routes/adminRevenueView.mjs`:
+
+```text
+formatNumber
+formatPercent
+renderRevenueDashboard
+```
+
+Keep analytics API loading, click binding, error insertion, and dashboard refresh in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminRevenueView.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminRevenueView.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 12: Extract Admin Series Editor View Helpers
+
+**Files:**
+- Create: `public/routes/adminSeriesEditorView.mjs`
+- Create: `tests/adminSeriesEditorView.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for admin series editor/card markup**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminSeriesEditorView.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminSeriesEditorView.mjs`.
+
+- [x] **Step 2: Move pure series editor rendering**
+
+Move these helpers from `public/routes/admin.mjs` to `public/routes/adminSeriesEditorView.mjs`:
+
+```text
+renderAdminSeriesCard
+renderAdminSeriesEditor
+renderProductionPublishPanel
+resolveProductionSeriesUrl
+renderAdminSeriesCover
+firstReadablePageImage
+renderStatusSelect
+renderAdminChapterRow
+```
+
+Keep admin auth, catalog loading, form submission, crawl/update/publish handlers, polling, and route navigation in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminSeriesEditorView.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminSeriesEditorView.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 13: Extract Admin Feedback View Helpers
+
+**Files:**
+- Create: `public/routes/adminFeedbackView.mjs`
+- Create: `tests/adminFeedbackView.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for admin feedback rendering**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminFeedbackView.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminFeedbackView.mjs`.
+
+- [x] **Step 2: Move pure feedback rendering**
+
+Move these pure render paths from `public/routes/admin.mjs` into `public/routes/adminFeedbackView.mjs`:
+
+```text
+renderAdminLoginView
+renderProductionCheckResult
+renderAdminApiError
+```
+
+Keep login submit handling, production check API calls, production job polling, and DOM status targeting in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminFeedbackView.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminFeedbackView.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 14: Extract Admin Payload Helpers
+
+**Files:**
+- Create: `public/routes/adminPayloads.mjs`
+- Create: `tests/adminPayloads.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for admin form payloads**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminPayloads.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminPayloads.mjs`.
+
+- [x] **Step 2: Move pure payload builders**
+
+Move these pure data-shaping paths from `public/routes/admin.mjs` into `public/routes/adminPayloads.mjs`:
+
+```text
+buildAdminImportPayload
+buildAdminSeriesPatch
+buildAdminChapterPatch
+```
+
+Keep DOM reads, API calls, status updates, route navigation, and job polling in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminPayloads.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminPayloads.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 15: Extract Admin Job Helpers
+
+**Files:**
+- Create: `public/routes/adminJobHelpers.mjs`
+- Create: `tests/adminJobHelpers.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for admin job helpers**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminJobHelpers.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminJobHelpers.mjs`.
+
+- [x] **Step 2: Move pure job helpers**
+
+Move these pure job helper paths from `public/routes/admin.mjs` into `public/routes/adminJobHelpers.mjs`:
+
+```text
+importJobsFromResult
+importJobsFlashMessage
+resolveImportJobSeries
+parseProductionSteps
+```
+
+Keep DOM reads, API calls, status updates, route navigation, and polling loops in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminJobHelpers.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminJobHelpers.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 16: Extract Admin Session Helpers
+
+**Files:**
+- Create: `public/routes/adminSession.mjs`
+- Create: `tests/adminSession.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for admin session persistence**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminSession.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminSession.mjs`.
+
+- [x] **Step 2: Move admin session storage helpers**
+
+Move these session helpers from `public/routes/admin.mjs` into `public/routes/adminSession.mjs`:
+
+```text
+loadAdminToken
+loadAdminEmail
+saveAdminSession
+clearAdminSession
+```
+
+Keep `loadAdminToken` re-exported from `public/routes/admin.mjs` for compatibility with older callers.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminSession.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminSession.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 17: Extract Admin Job Polling Helpers
+
+**Files:**
+- Create: `public/routes/adminJobPolling.mjs`
+- Create: `tests/adminJobPolling.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for admin job polling**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminJobPolling.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminJobPolling.mjs`.
+
+- [x] **Step 2: Move polling loops and status adapters**
+
+Move these paths from `public/routes/admin.mjs` into `public/routes/adminJobPolling.mjs`:
+
+```text
+pollImportJob
+pollProductionJob
+renderImportProgress
+renderProductionProgress
+delay
+```
+
+Keep event handlers, button state, route navigation call sites, and API start-job actions in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminJobPolling.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminJobPolling.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 18: Extract Admin Data Loaders
+
+**Files:**
+- Create: `public/routes/adminDataLoaders.mjs`
+- Create: `tests/adminDataLoaders.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for admin dashboard read loaders**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminDataLoaders.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminDataLoaders.mjs`.
+
+- [x] **Step 2: Move dashboard read endpoint helpers**
+
+Move these read helpers from `public/routes/admin.mjs` into `public/routes/adminDataLoaders.mjs`:
+
+```text
+loadAdminCatalog
+loadAdminBulletin
+loadAdminAnalytics
+loadAdminProductionStatus
+```
+
+Keep orchestration and render decisions in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminDataLoaders.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminDataLoaders.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 19: Extract Admin DOM Helpers
+
+**Files:**
+- Create: `public/routes/adminDomHelpers.mjs`
+- Create: `tests/adminDomHelpers.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for admin DOM helpers**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminDomHelpers.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminDomHelpers.mjs`.
+
+- [x] **Step 2: Move cover fallback and route helper predicates**
+
+Move these helpers from `public/routes/admin.mjs` into `public/routes/adminDomHelpers.mjs`:
+
+```text
+bindAdminImageFallbacks
+handleAdminCoverError
+findAdminSeries
+isAdminAuthError
+```
+
+Keep route render, login submit handling, and catalog fetch orchestration in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminDomHelpers.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminDomHelpers.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 20: Extract Admin Panel Polling Helpers
+
+**Files:**
+- Create: `public/routes/adminPanelPolling.mjs`
+- Create: `tests/adminPanelPolling.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for S3 and crawl queue panel polling**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminPanelPolling.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminPanelPolling.mjs`.
+
+- [x] **Step 2: Move panel polling loops and status adapters**
+
+Move these helpers from `public/routes/admin.mjs` into `public/routes/adminPanelPolling.mjs`:
+
+```text
+bindS3SyncStatus
+bindS3RetryFailed
+bindCrawlQueueStatus
+renderCrawlQueueStatus
+renderS3SyncStatus
+```
+
+Keep page composition, shell rendering, and high-level admin route orchestration in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminPanelPolling.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminPanelPolling.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 21: Extract Admin Series Job Actions
+
+**Files:**
+- Create: `public/routes/adminSeriesJobActions.mjs`
+- Create: `tests/adminSeriesJobActions.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for per-series job actions**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminSeriesJobActions.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminSeriesJobActions.mjs`.
+
+- [x] **Step 2: Move update and refresh job handlers**
+
+Move these handlers from `public/routes/admin.mjs` into `public/routes/adminSeriesJobActions.mjs`:
+
+```text
+handleUpdateChapters
+handleRefreshImageUrls
+```
+
+Keep production publish/check actions and generic page orchestration in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminSeriesJobActions.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminSeriesJobActions.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 22: Extract Admin Production Actions
+
+**Files:**
+- Create: `public/routes/adminProductionActions.mjs`
+- Create: `tests/adminProductionActions.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for production publish/check actions**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminProductionActions.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminProductionActions.mjs`.
+
+- [x] **Step 2: Move production publish/check handlers**
+
+Move these handlers from `public/routes/admin.mjs` into `public/routes/adminProductionActions.mjs`:
+
+```text
+handleProductionPublish
+handleProductionStep
+runProductionPipelineJob
+handleProductionCheck
+```
+
+Keep admin page composition, data loading, form save orchestration, and login handling in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminProductionActions.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminProductionActions.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 23: Extract Admin Bulletin Actions
+
+**Files:**
+- Create: `public/routes/adminBulletinActions.mjs`
+- Create: `tests/adminBulletinActions.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for bulletin submit/pin actions**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminBulletinActions.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminBulletinActions.mjs`.
+
+- [x] **Step 2: Move bulletin submit and pin handlers**
+
+Move these handlers from `public/routes/admin.mjs` into `public/routes/adminBulletinActions.mjs`:
+
+```text
+bindAdminBulletinActions
+handleAdminBulletinSubmit
+handleAdminBulletinPin
+```
+
+Keep admin page composition, bulletin panel rendering, and dashboard data loading in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminBulletinActions.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminBulletinActions.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 24: Extract Admin Revenue Actions
+
+**Files:**
+- Create: `public/routes/adminRevenueActions.mjs`
+- Create: `tests/adminRevenueActions.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for revenue range actions**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminRevenueActions.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminRevenueActions.mjs`.
+
+- [x] **Step 2: Move revenue dashboard binding and refresh action**
+
+Move this handler path from `public/routes/admin.mjs` into `public/routes/adminRevenueActions.mjs`:
+
+```text
+bindRevenueDashboard
+revenue range click refresh/error handling
+```
+
+Keep dashboard markup in `public/routes/adminRevenueView.mjs` and high-level admin page composition in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminRevenueActions.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminRevenueActions.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 25: Extract Admin Import Actions
+
+**Files:**
+- Create: `public/routes/adminImportActions.mjs`
+- Create: `tests/adminImportActions.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for crawl/import form action**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminImportActions.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminImportActions.mjs`.
+
+- [x] **Step 2: Move import submit flow**
+
+Move this handler path from `public/routes/admin.mjs` into `public/routes/adminImportActions.mjs`:
+
+```text
+handleImport
+```
+
+Keep import panel markup in `public/routes/admin.mjs`, payload shaping in `public/routes/adminPayloads.mjs`, and job polling in `public/routes/adminJobPolling.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminImportActions.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminImportActions.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 26: Extract Admin Save Actions
+
+**Files:**
+- Create: `public/routes/adminSaveActions.mjs`
+- Create: `tests/adminSaveActions.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for series/chapter save action**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminSaveActions.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminSaveActions.mjs`.
+
+- [x] **Step 2: Move series metadata and chapter moderation save flow**
+
+Move this handler path from `public/routes/admin.mjs` into `public/routes/adminSaveActions.mjs`:
+
+```text
+handleAdminSave
+```
+
+Keep form markup in `public/routes/adminSeriesEditorView.mjs`, payload shaping in `public/routes/adminPayloads.mjs`, and page composition in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminSaveActions.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminSaveActions.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 27: Extract Admin Auth Actions
+
+**Files:**
+- Create: `public/routes/adminAuthActions.mjs`
+- Create: `tests/adminAuthActions.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for login/logout actions**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminAuthActions.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminAuthActions.mjs`.
+
+- [x] **Step 2: Move login submit and logout binding**
+
+Move these handler paths from `public/routes/admin.mjs` into `public/routes/adminAuthActions.mjs`:
+
+```text
+bindAdminCommonActions
+handleAdminLogin
+```
+
+Keep auth-expired session clearing during catalog/data loads in `public/routes/admin.mjs`, because that belongs to page orchestration.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminAuthActions.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminAuthActions.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 28: Extract Admin Page View Composition
+
+**Files:**
+- Create: `public/routes/adminPageViews.mjs`
+- Create: `tests/adminPageViews.test.mjs`
+- Modify: `public/routes/admin.mjs`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for page-level admin composition**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\adminPageViews.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/routes/adminPageViews.mjs`.
+
+- [x] **Step 2: Move dashboard/detail page markup into a pure view module**
+
+Move these page composition paths from `public/routes/admin.mjs` into `public/routes/adminPageViews.mjs`:
+
+```text
+dashboard shell composition
+detail shell composition
+local crawl import panel markup
+local/production panel gating
+flash and empty-state placement
+```
+
+Keep route orchestration, data loading, auth-expired handling, event binding, action wiring, and production status state in `public/routes/admin.mjs`.
+
+- [x] **Step 3: Verify admin route behavior**
+
+Run:
+
+```powershell
+node --check public\routes\adminPageViews.mjs
+node --check public\routes\admin.mjs
+node --require ./tests/setup-env.cjs --test tests\adminPageViews.test.mjs tests\adminRouteSmoke.test.mjs
+```
+
+## Task 29: Extract Public Site Chrome View Helpers
+
+**Files:**
+- Create: `public/siteChromeView.mjs`
+- Create: `tests/siteChromeView.test.mjs`
+- Modify: `public/app.js`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for public chrome rendering**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\siteChromeView.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/siteChromeView.mjs`.
+
+- [x] **Step 2: Move pure topbar/logo/auth markup out of the app orchestrator**
+
+Move these pure rendering paths from `public/app.js` into `public/siteChromeView.mjs`:
+
+```text
+renderBrandLogoView
+topbarNavItems
+renderTopbarView
+renderUserAuthPage
+```
+
+Keep route orchestration, session loading, login submit handling, API URL resolution, and reader runtime cleanup in `public/app.js`.
+
+- [x] **Step 3: Verify public app behavior**
+
+Run:
+
+```powershell
+node --check public\siteChromeView.mjs
+node --check public\app.js
+node --require ./tests/setup-env.cjs --test tests\siteChromeView.test.mjs
+npm run check:encoding
+npm test
+```
+
+## Task 30: Extract Public Series Display Helpers
+
+**Files:**
+- Create: `public/seriesDisplayView.mjs`
+- Create: `tests/seriesDisplayView.test.mjs`
+- Modify: `public/app.js`
+- Modify: `docs/agent-playbooks/agent-token-map.md`
+- Modify: `docs/agent-playbooks/frontend-map.md`
+- Modify: `docs/superpowers/plans/2026-06-11-maintainability-refactor.md`
+
+- [x] **Step 1: Write failing tests for public cover/origin helpers**
+
+Run:
+
+```powershell
+node --require ./tests/setup-env.cjs --test tests\seriesDisplayView.test.mjs
+```
+
+Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `public/seriesDisplayView.mjs`.
+
+- [x] **Step 2: Move pure cover and origin helpers out of the app orchestrator**
+
+Move these pure helper paths from `public/app.js` into `public/seriesDisplayView.mjs`:
+
+```text
+coverImageUrl
+renderCoverImageView
+normalizeTagValue
+seriesOriginLabel
+```
+
+Keep route-specific card/list composition, chapter readability checks, and app state orchestration in `public/app.js`.
+
+- [x] **Step 3: Verify public app behavior**
+
+Run:
+
+```powershell
+node --check public\seriesDisplayView.mjs
+node --check public\app.js
+node --require ./tests/setup-env.cjs --test tests\seriesDisplayView.test.mjs
+npm run check:encoding
+npm test
 ```
