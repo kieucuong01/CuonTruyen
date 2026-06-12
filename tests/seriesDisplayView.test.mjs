@@ -25,6 +25,27 @@ test('coverImageUrl prefers thumbnail variants before original cover fields', ()
   assert.equal(coverImageUrl({}), '');
 });
 
+test('coverImageUrl cache-busts refreshed cover thumbnails', () => {
+  const url = coverImageUrl({
+    thumbnailUrl: '/imports/demo/_cover/cover.webp',
+    updatedAt: '2026-06-12T00:00:00.000Z',
+    coverThumbnail: {
+      sourceType: 'source-cover',
+      sourceUrl: 'https://example.test/source.jpg',
+      width: 320,
+      height: 464,
+      storedBytes: 19014,
+      format: 'webp'
+    }
+  });
+
+  assert.match(url, /^\/imports\/demo\/_cover\/cover\.webp\?v=[a-z0-9]+$/);
+  assert.equal(
+    coverImageUrl({ thumbnailUrl: '/cover.webp?v=old', coverThumbnail: { storedBytes: 1 } }),
+    '/cover.webp?v=old'
+  );
+});
+
 test('renderCoverImageView escapes cover URL, title, attributes, and fallback text', () => {
   const imageHtml = renderCoverImageView(
     { thumbnailUrl: '/cover.webp?x=<1>', title: 'A <B>' },

@@ -1,7 +1,10 @@
 import { escapeAttr, escapeHtml } from './domUtils.mjs';
 
 export function coverImageUrl(series = {}) {
-  return series.thumbnailUrl || series.coverThumbnailUrl || series.coverUrl || series.imageUrl || '';
+  return appendCoverCacheVersion(
+    series.thumbnailUrl || series.coverThumbnailUrl || series.coverUrl || series.imageUrl || '',
+    coverCacheVersion(series)
+  );
 }
 
 export function renderCoverImageView(
@@ -36,4 +39,37 @@ export function seriesOriginLabel(series = {}) {
 
 function escapeImageAttributes(attributes = '') {
   return String(attributes).replace(/"([^"]*)"/g, (_match, value) => `"${escapeAttr(value)}"`);
+}
+
+function appendCoverCacheVersion(url = '', version = '') {
+  const raw = String(url || '');
+  const cacheVersion = String(version || '').trim();
+  if (!raw || !cacheVersion || /^data:/i.test(raw) || /[?&]v=/.test(raw)) return raw;
+  const hashIndex = raw.indexOf('#');
+  const base = hashIndex >= 0 ? raw.slice(0, hashIndex) : raw;
+  const hash = hashIndex >= 0 ? raw.slice(hashIndex) : '';
+  return `${base}${base.includes('?') ? '&' : '?'}v=${encodeURIComponent(cacheVersion)}${hash}`;
+}
+
+function coverCacheVersion(series = {}) {
+  const thumbnail = series.coverThumbnail || {};
+  const value = [
+    thumbnail.sourceType,
+    thumbnail.sourceUrl,
+    thumbnail.width,
+    thumbnail.height,
+    thumbnail.sourceBytes,
+    thumbnail.storedBytes,
+    thumbnail.format,
+    series.updatedAt
+  ].filter((item) => item !== undefined && item !== null && item !== '').join('|');
+  return value ? Math.abs(hashCode(value)).toString(36) : '';
+}
+
+function hashCode(value = '') {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = ((hash << 5) - hash + value.charCodeAt(index)) | 0;
+  }
+  return hash;
 }

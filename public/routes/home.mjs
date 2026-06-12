@@ -1,3 +1,5 @@
+import { coverImageUrl } from '../seriesDisplayView.mjs';
+
 export const STATIC_INFO_PAGES = {
   '/gioi-thieu': {
     title: 'Giới thiệu Cuộn Truyện',
@@ -537,7 +539,7 @@ export function createHomeRoute({
   }
 
   function coverUrl(series = {}) {
-    return series.thumbnailUrl || series.coverThumbnailUrl || series.coverUrl || series.imageUrl || '';
+    return coverImageUrl(series);
   }
 
   function renderInlineTags(series = {}) {
